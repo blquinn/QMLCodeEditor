@@ -1135,6 +1135,49 @@ private slots:
     QTest::keyClick(view.get(), Qt::Key_Home);
     QCOMPARE(editor->cursorPosition(), 16);
   }
+
+  void togglingWrapKeepsTheTopOfTheView() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    QString text;
+    for (int i = 0; i < 400; ++i)
+      text += QStringLiteral("line %1 has several words so that it wraps at narrow widths\n").arg(i);
+    editor->setText(text);
+    const qreal lh = editor->metrics().lineHeight();
+    editor->setContentY(lh * 300);
+    const qsizetype topLine = editor->document()->rope().lineAt(editor->positionAt(0, 1));
+    QCOMPARE(topLine, 300);
+    for (int round = 0; round < 3; ++round) {
+      editor->setWrapMode(CodeEditor::WrapAtViewport);
+      QTRY_COMPARE(editor->wrapping(), false);
+      QTRY_VERIFY(editor->contentHeight() > editor->lineCount() * lh);
+      QCOMPARE(editor->document()->rope().lineAt(editor->positionAt(0, 1)), topLine);
+      editor->setWrapMode(CodeEditor::NoWrap);
+      QTRY_COMPARE(editor->contentHeight(), editor->lineCount() * lh);
+      QCOMPARE(editor->document()->rope().lineAt(editor->positionAt(0, 1)), topLine);
+      QCOMPARE(editor->contentY(), lh * 300);
+    }
+  }
+
+  void noWrapScrollsSidewaysAndWrapDoesNot() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QString(500, u'x'));
+    QTest::keyClick(view.get(), Qt::Key_End);
+    QVERIFY(editor->contentX() > 0);
+    QVERIFY(editor->contentWidth() > editor->width());
+    editor->setWrapMode(CodeEditor::WrapAtViewport);
+    QTRY_COMPARE(editor->contentX(), 0.0);
+    QCOMPARE(editor->contentWidth(), editor->width());
+    // The cursor at the end of the line is on the last row, which scrolling vertically can reach.
+    QTRY_VERIFY(editor->rectForPosition(500).top() > editor->height());
+    editor->ensureCursorVisible();
+    QVERIFY(editor->rectForPosition(500).bottom() <= editor->height() + 0.5);
+    editor->setWrapMode(CodeEditor::NoWrap);
+    QTRY_VERIFY(editor->contentWidth() > editor->width());
+    QTest::keyClick(view.get(), Qt::Key_End);
+    QVERIFY(editor->contentX() > 0);
+  }
 };
 
 QTEST_MAIN(TstCodeEditor)

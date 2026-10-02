@@ -174,6 +174,45 @@ ApplicationWindow {
             }
         }
 
+        // Soft wrap.
+        ToolBar {
+            Layout.fillWidth: true
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 12
+
+                Label { text: qsTr("Wrap") }
+                ComboBox {
+                    model: [qsTr("Off"), qsTr("Window"), qsTr("Column")]
+                    currentIndex: editor.wrapMode
+                    onActivated: (index) => editor.wrapMode = index
+                }
+                SpinBox {
+                    visible: editor.wrapMode === CodeEditor.WrapAtColumn
+                    from: 10; to: 400; value: editor.wrapColumn
+                    onValueModified: editor.wrapColumn = value
+                }
+                CheckBox {
+                    text: qsTr("Words")
+                    checked: editor.wordWrap
+                    onToggled: editor.wordWrap = checked
+                }
+                CheckBox {
+                    text: qsTr("Hanging indent")
+                    checked: editor.wrapIndent
+                    onToggled: editor.wrapIndent = checked
+                }
+                Label { text: qsTr("Extra") }
+                SpinBox {
+                    from: 0; to: 16; value: editor.wrapIndentExtra
+                    onValueModified: editor.wrapIndentExtra = value
+                }
+                Item { Layout.fillWidth: true }
+            }
+        }
+
         // Status.
         ToolBar {
             Layout.fillWidth: true
@@ -183,7 +222,7 @@ ApplicationWindow {
                 anchors.rightMargin: 8
                 Label {
                     text: editor.loading ? qsTr("Loading… %1%").arg(Math.round(editor.loadProgress * 100))
-                                         : statusText
+                                         : editor.wrapping ? qsTr("Wrapping…") : statusText
                     property string statusText: qsTr("Ready")
                     id: statusLabel
                 }
@@ -234,7 +273,7 @@ ApplicationWindow {
         undoLimit: 10000 // keep a long session's history bounded
         anchors.fill: parent
         anchors.rightMargin: vbar.width
-        anchors.bottomMargin: hbar.height
+        anchors.bottomMargin: hbar.visible ? hbar.height : 0
 
         onSaved: (path) => statusLabel.statusText = qsTr("Saved %1").arg(path)
         onSaveFailed: (error) => statusLabel.statusText = qsTr("Save failed: %1").arg(error)
@@ -262,6 +301,8 @@ ApplicationWindow {
     DemoScrollBar {
         id: hbar
         orientation: Qt.Horizontal
+        // Text wrapped to the window never scrolls sideways.
+        visible: editor.wrapMode !== CodeEditor.WrapAtViewport
         anchors { left: parent.left; right: vbar.left; bottom: parent.bottom }
         size: editor.contentWidth > 0 ? Math.min(1, editor.width / editor.contentWidth) : 1
         position: editor.contentWidth > 0 ? editor.contentX / editor.contentWidth : 0

@@ -231,8 +231,7 @@ void CodeEditor::applyWrap() {
   m_layouts.clear();
   m_maxLineWidth = 0;
   m_planDirty = true;
-  updateContentSize();
-  restoreAnchor();
+  updateContentSizeKeepingAnchor();
   const bool wrapping = m_map.estimatedLineCount() > 0;
   if (wrapping != m_wrapping) {
     m_wrapping = wrapping;
@@ -249,6 +248,15 @@ void CodeEditor::captureAnchor() {
   const qsizetype row = qBound<qsizetype>(0, qsizetype(std::floor(m_contentY / m_metrics.lineHeight())), m_map.rowCount() - 1);
   const qce::DisplayRow displayRow = m_map.rowAt(row);
   m_anchor = {displayRow.line, displayRow.startColumn, m_contentY - qreal(row) * m_metrics.lineHeight()};
+}
+
+// The content got a new size because rows moved, not because the user scrolled: where the view was
+// clamped to the new size says nothing about where it should be, the anchor does.
+void CodeEditor::updateContentSizeKeepingAnchor() {
+  m_reanchoring = true;
+  updateContentSize();
+  m_reanchoring = false;
+  restoreAnchor();
 }
 
 void CodeEditor::restoreAnchor() {
@@ -1266,8 +1274,7 @@ void CodeEditor::updatePolish() {
     // Wrapping showed some lines to be taller or shorter than assumed: the text at the top of the
     // view stays where it was and the row number it is on moves.
     m_reanchorPending = false;
-    updateContentSize();
-    restoreAnchor();
+    updateContentSizeKeepingAnchor();
     m_planDirty = true;
   }
   const qsizetype rowCount = m_map.rowCount();

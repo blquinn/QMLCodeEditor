@@ -348,6 +348,7 @@ private:
   // is refined, so contentY is derived from the anchor again whenever they do.
   void captureAnchor();
   void restoreAnchor();
+  void updateContentSizeKeepingAnchor();
   struct ScrollAnchor {
     qsizetype line = 0;
     qsizetype column = 0;
