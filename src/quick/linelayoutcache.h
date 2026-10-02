@@ -17,6 +17,10 @@ struct LineLayout {
   std::unique_ptr<QTextLayout> layout;
   QString text;    // the line as stored; the layout may draw stand-in glyphs (visible whitespace)
   qreal width = 0; // natural width of the line's text
+  // Input-method composition shown in this line (INPUT-05): `preeditLength` units sit at
+  // `preeditColumn` in the laid-out text, which is then longer than `text`.
+  int preeditColumn = 0;
+  int preeditLength = 0;
 };
 
 // LRU cache of line layouts keyed by buffer line (RENDER-03). Only lines near the viewport are ever

@@ -19,6 +19,7 @@
 #include <QtCore/QUrl>
 #include <QtGui/QColor>
 #include <QtGui/QFont>
+#include <QtGui/QTextLayout>
 #include <QtQml/qqmlregistration.h>
 #include <QtQuick/QQuickItem>
 
@@ -153,6 +154,10 @@ public:
   bool cursorVisible() const { return m_cursorVisible; }
   bool hasFocus() const { return m_hasFocus; }
 
+  // Input-method queries: the cursor line as surrounding text, and the cursor rectangle (inside the
+  // composition when there is one) for placing candidate windows.
+  QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
+
   // Item coordinates -> buffer offset (like TextEdit.positionAt), and back: the rectangle of the
   // character cell at `offset` in item coordinates. Both go through the display map.
   Q_INVOKABLE qsizetype positionAt(qreal x, qreal y);
@@ -202,6 +207,7 @@ signals:
 protected:
   void updatePolish() override;
   void keyPressEvent(QKeyEvent *event) override;
+  void inputMethodEvent(QInputMethodEvent *event) override;
   void focusInEvent(QFocusEvent *event) override;
   void focusOutEvent(QFocusEvent *event) override;
   void mousePressEvent(QMouseEvent *event) override;
@@ -224,9 +230,19 @@ private:
   // The unit (word or line) around `offset` as [start, end).
   QPair<qsizetype, qsizetype> unitRangeAt(qsizetype offset, DragUnit unit) const;
   void afterCommand();
+  // Input-method composition (INPUT-05): shown at the anchored spot, never part of the document.
+  bool hasPreedit() const { return m_preeditAnchor != qce::InvalidAnchor; }
+  void clearPreedit();
+  qreal preeditCursorX(const qce::LineLayout &layout) const;
   void setClipboardFromSelections(QClipboard::Mode mode);
   void pasteFrom(QClipboard::Mode mode);
   int m_pendingPastes = 0;
+
+  QString m_preedit;
+  int m_preeditCursor = -1; // position inside the preedit; -1 puts the cursor at its end
+  QList<QTextLayout::FormatRange> m_preeditFormats; // relative to the preedit's start
+  qce::AnchorId m_preeditAnchor = qce::InvalidAnchor;
+  bool m_inImeEvent = false;
 
   // Mouse selection: the unit the gesture selects by, the range first selected (the fixed end of
   // word and line drags), and where the pointer is, for auto-scroll while it is outside.

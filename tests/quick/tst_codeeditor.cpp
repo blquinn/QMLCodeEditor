@@ -744,6 +744,94 @@ private slots:
     QCOMPARE(editor->document()->undoStack().undoSteps(), 2);
   }
 
+  // ---- Input methods ----
+
+  static void sendIme(CodeEditor *editor, const QString &preedit, const QString &commit = {},
+                      int cursor = -1, int replaceStart = 0, int replaceLength = 0) {
+    QList<QInputMethodEvent::Attribute> attributes;
+    if (cursor >= 0)
+      attributes.append({QInputMethodEvent::Cursor, cursor, 1, QVariant()});
+    QInputMethodEvent event(preedit, attributes);
+    event.setCommitString(commit, replaceStart, replaceLength);
+    QCoreApplication::sendEvent(editor, &event);
+  }
+
+  void inputMethodCommitInsertsText() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    QVERIFY(editor->flags() & QQuickItem::ItemAcceptsInputMethod);
+    editor->setText(QStringLiteral("ab"));
+    editor->setCursorPosition(1);
+    sendIme(editor, {}, QStringLiteral("日本"));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("a日本b"));
+    QCOMPARE(editor->cursorPosition(), 3);
+    // A commit can replace text around the cursor (as a dead key or predictive input does).
+    sendIme(editor, {}, QStringLiteral("X"), -1, -2, 2);
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("aXb"));
+    QCOMPARE(editor->cursorPosition(), 2);
+  }
+
+  void preeditIsShownButNotInTheDocument() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("ab\ncd"));
+    editor->setCursorPosition(1);
+    const QRectF before = editor->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const quint64 version = editor->document()->version();
+    sendIme(editor, QStringLiteral("nihao"), {}, 3);
+    QCOMPARE(editor->document()->version(), version);
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("ab\ncd"));
+    QCOMPARE(editor->cursorPosition(), 1);
+    // The candidate window anchors at the cursor inside the composition: 3 cells to the right.
+    const QRectF during = editor->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    QVERIFY(qAbs(during.left() - before.left() - 3 * editor->metrics().cellAdvance()) < 1.0);
+    QCOMPARE(editor->inputMethodQuery(Qt::ImSurroundingText).toString(), QStringLiteral("ab"));
+    QCOMPARE(editor->inputMethodQuery(Qt::ImCursorPosition).toInt(), 1);
+    // It is drawn: the composition's underline puts ink on the cells it covers.
+    const qreal adv = editor->metrics().cellAdvance();
+    QTRY_VERIFY(inkInColumns(view->grabWindow(), adv * 1 + 1, adv * 6 - 1, int(editor->metrics().lineHeight())));
+    // Committing replaces it with real text.
+    sendIme(editor, {}, QStringLiteral("你好"));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("a你好b\ncd"));
+    QCOMPARE(editor->cursorPosition(), 3);
+    QVERIFY(editor->inputMethodQuery(Qt::ImCursorRectangle).toRectF().left() > before.left());
+  }
+
+  void clickingEndsTheComposition() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("abcdef"));
+    editor->setCursorPosition(2);
+    sendIme(editor, QStringLiteral("xyz"));
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 0), 10);
+    // Nothing was committed; the composition is gone and hit-testing is back to plain text.
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("abcdef"));
+    QCOMPARE(editor->cursorPosition(), 0);
+    QCOMPARE(editor->positionAt(editor->metrics().cellAdvance() * 4 + 1, 1), 4);
+  }
+
+  void preeditHitTestingSkipsTheComposition() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("abcdef"));
+    editor->setCursorPosition(2);
+    sendIme(editor, QStringLiteral("XYZ"));
+    const qreal adv = editor->metrics().cellAdvance();
+    QCOMPARE(editor->positionAt(adv * 1 + 1, 1), 1);
+    QCOMPARE(editor->positionAt(adv * 3 + 1, 1), 2);  // inside the composition: before it
+    QCOMPARE(editor->positionAt(adv * 6 + 1, 1), 3);  // "c" is now at cells 5..6
+  }
+
+  void inputMethodIgnoredWhenReadOnly() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("ab"));
+    editor->setReadOnly(true);
+    QVERIFY(!editor->inputMethodQuery(Qt::ImEnabled).toBool());
+    sendIme(editor, QStringLiteral("x"), QStringLiteral("y"));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("ab"));
+  }
+
   void setTextUpdatesLineCount() {
     CodeEditor editor;
     QSignalSpy spy(&editor, &CodeEditor::lineCountChanged);

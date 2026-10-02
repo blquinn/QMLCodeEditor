@@ -5,6 +5,8 @@
 #include <QtConcurrent/QtConcurrentRun>
 #include <QtCore/QFutureWatcher>
 #include <QtGui/QClipboard>
+#include <QtGui/QInputMethod>
+#include <QtGui/QInputMethodEvent>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QStyleHints>
 #include <QtGui/QTextOption>
@@ -15,6 +17,7 @@
 #include <QtCore/QElapsedTimer>
 
 #include <algorithm>
+#include <limits>
 #include <cmath>
 
 // Geometry for movement commands, from the same layouts and metrics the editor draws with.
@@ -61,6 +64,7 @@ private:
 CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setFlag(ItemHasContents);
   setFlag(ItemIsFocusScope);
+  setFlag(ItemAcceptsInputMethod);
   setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
   setCursor(Qt::IBeamCursor);
   m_autoScrollTimer.setInterval(30);
@@ -381,6 +385,127 @@ void CodeEditor::mouseReleaseEvent(QMouseEvent *event) {
 
 void CodeEditor::mouseUngrabEvent() { endDrag(); }
 
+qreal CodeEditor::preeditCursorX(const qce::LineLayout &layout) const {
+  const int inside = m_preeditCursor >= 0 ? qMin<int>(m_preeditCursor, layout.preeditLength) : layout.preeditLength;
+  return layout.layout->lineAt(0).cursorToX(layout.preeditColumn + inside);
+}
+
+void CodeEditor::clearPreedit() {
+  if (!hasPreedit())
+    return;
+  const qce::Rope &rope = m_document.rope();
+  const qsizetype line = rope.lineAt(m_document.anchors().offset(m_preeditAnchor));
+  m_document.anchors().remove(m_preeditAnchor);
+  m_preeditAnchor = qce::InvalidAnchor;
+  m_preedit.clear();
+  m_preeditFormats.clear();
+  m_preeditCursor = -1;
+  m_layouts.invalidate(line, 1, 1);
+  invalidatePlan();
+}
+
+void CodeEditor::inputMethodEvent(QInputMethodEvent *event) {
+  if (m_readOnly || m_document.isLoading()) {
+    event->ignore();
+    return;
+  }
+  m_inImeEvent = true;
+  clearPreedit();
+
+  const QString commit = event->commitString();
+  if (!commit.isEmpty() || event->replacementLength() > 0) {
+    // The replaced text is given relative to the cursor, in characters.
+    if (event->replacementLength() > 0 || event->replacementStart() != 0) {
+      const qsizetype length = m_document.length();
+      const qsizetype from = qBound<qsizetype>(0, cursorPosition() + event->replacementStart(), length);
+      const qsizetype to = qBound<qsizetype>(from, from + event->replacementLength(), length);
+      m_selections.setSingle(from, to);
+    }
+    qce::EditContext ctx = editContext();
+    qce::commands::insertText(ctx, commit, qce::EditKind::Typing);
+  }
+
+  const QString preedit = event->preeditString();
+  if (!preedit.isEmpty()) {
+    m_preedit = preedit;
+    m_preeditAnchor = m_document.anchors().create(cursorPosition(), qce::Gravity::Left);
+    for (const QInputMethodEvent::Attribute &attribute : event->attributes()) {
+      if (attribute.type == QInputMethodEvent::Cursor) {
+        m_preeditCursor = attribute.length > 0 ? attribute.start : -1;
+      } else if (attribute.type == QInputMethodEvent::TextFormat) {
+        const QTextFormat format = qvariant_cast<QTextFormat>(attribute.value);
+        if (format.isCharFormat() && attribute.length > 0)
+          m_preeditFormats.append({attribute.start, attribute.length, format.toCharFormat()});
+      }
+    }
+    if (m_preeditFormats.isEmpty()) { // no styling from the platform: underline it
+      QTextCharFormat underline;
+      underline.setFontUnderline(true);
+      m_preeditFormats.append({0, int(preedit.size()), underline});
+    }
+    std::sort(m_preeditFormats.begin(), m_preeditFormats.end(), [](const auto &a, const auto &b) { return a.start < b.start; });
+    m_layouts.invalidate(m_document.rope().lineAt(cursorPosition()), 1, 1);
+    invalidatePlan();
+  }
+  m_inImeEvent = false;
+  event->accept();
+  afterCommand();
+  QGuiApplication::inputMethod()->update(Qt::ImQueryInput);
+}
+
+QVariant CodeEditor::inputMethodQuery(Qt::InputMethodQuery query) const {
+  constexpr qsizetype kContext = 4096; // how much text around the cursor an input method gets
+  const qce::Rope &rope = m_document.rope();
+  const qsizetype head = cursorPosition();
+  const qce::TextPosition pos = rope.positionAt(head);
+  const qsizetype lineStart = rope.lineStart(pos.line);
+  auto lineText = [&] { return rope.toString(lineStart, rope.lineEnd(pos.line)); };
+  switch (query) {
+  case Qt::ImEnabled:
+    return !m_readOnly;
+  case Qt::ImReadOnly:
+    return m_readOnly;
+  case Qt::ImHints:
+    return int(Qt::ImhNoAutoUppercase | Qt::ImhNoPredictiveText | Qt::ImhMultiLine);
+  case Qt::ImFont:
+    return m_font;
+  case Qt::ImCursorRectangle: {
+    // At the cursor inside the composition when there is one, so candidates sit under what is typed.
+    QRectF rect = const_cast<CodeEditor *>(this)->rectForPosition(head);
+    if (hasPreedit())
+      if (const auto layout = const_cast<CodeEditor *>(this)->layoutForLine(pos.line, m_document.snapshot());
+          layout->preeditLength > 0)
+        rect.moveLeft(preeditCursorX(*layout) - m_contentX);
+    return rect;
+  }
+  case Qt::ImCursorPosition:
+    return int(pos.column);
+  case Qt::ImSurroundingText:
+    return lineText();
+  case Qt::ImAnchorPosition: {
+    const qce::Selection s = m_selections.primary();
+    const qsizetype anchor = qBound(lineStart, s.anchor, rope.lineEnd(pos.line));
+    return int(anchor - lineStart);
+  }
+  case Qt::ImAbsolutePosition:
+    return int(qMin<qsizetype>(head, std::numeric_limits<int>::max()));
+  case Qt::ImTextBeforeCursor: {
+    const qsizetype count = qMin<qsizetype>(kContext, pos.column);
+    return rope.toString(head - count, head);
+  }
+  case Qt::ImTextAfterCursor: {
+    const qsizetype count = qMin<qsizetype>(kContext, rope.lineEnd(pos.line) - head);
+    return rope.toString(head, head + count);
+  }
+  case Qt::ImCurrentSelection: {
+    const qce::Selection s = m_selections.primary();
+    return rope.toString(s.start(), qMin(s.end(), s.start() + kContext));
+  }
+  default:
+    return QQuickItem::inputMethodQuery(query);
+  }
+}
+
 void CodeEditor::undo() {
   qce::EditContext ctx = editContext();
   qce::commands::undo(ctx);
@@ -534,11 +659,18 @@ void CodeEditor::onSelectionsChanged() {
   const bool same = now == m_lastSelection && m_selections.count() == m_lastSelectionCount;
   m_lastSelection = now;
   m_lastSelectionCount = m_selections.count();
+  if (hasPreedit() && !m_inImeEvent) {
+    // The cursor moved under a composition (a click, say): the composition is over.
+    clearPreedit();
+    QGuiApplication::inputMethod()->reset();
+  }
   invalidatePlan();
   if (same)
     return;
   emit selectionChanged();
   restartBlink();
+  if (m_hasFocus)
+    QGuiApplication::inputMethod()->update(Qt::ImCursorRectangle | Qt::ImCursorPosition | Qt::ImSurroundingText | Qt::ImAnchorPosition);
 }
 
 void CodeEditor::setCursorBlinkInterval(int ms) {
@@ -627,10 +759,14 @@ void CodeEditor::wheelEvent(QWheelEvent *event) {
   event->setAccepted(m_contentX != beforeX || m_contentY != beforeY);
 }
 
+// Columns are in the line as stored; a line showing an input-method composition has the preedit
+// text laid out inside it, so columns at or after it shift right.
 qreal CodeEditor::xForColumn(const qce::LineLayout &layout, qsizetype column) const {
-  const QString &text = layout.text;
-  return m_metrics.isSimple(text) ? m_metrics.xForColumn(text, column)
-                                  : layout.layout->lineAt(0).cursorToX(int(column));
+  if (layout.preeditLength == 0 && m_metrics.isSimple(layout.text))
+    return m_metrics.xForColumn(layout.text, column);
+  if (layout.preeditLength > 0 && column >= layout.preeditColumn)
+    column += layout.preeditLength;
+  return layout.layout->lineAt(0).cursorToX(int(column));
 }
 
 // A thin line across each tab's span on the baseline, for the rows being drawn. Capped so a
@@ -643,6 +779,8 @@ void CodeEditor::buildTabMarks() {
     const QString &text = layout.text;
     if (!text.contains(u'\t'))
       continue;
+    if (layout.preeditLength > 0)
+      continue; // tab marks are placed by column; a composition shifts them
     const bool simple = m_metrics.isSimple(text);
     qsizetype cell = 0;
     for (qsizetype i = 0; i < text.size(); ++i) {
@@ -684,7 +822,8 @@ void CodeEditor::buildOverlays() {
     const qce::TextPosition head = rope.positionAt(sel.head);
     const qsizetype headRow = m_map.rowForPosition(head);
     if (const qce::LineLayout *layout = planLayout(headRow)) {
-      const qreal x = xForColumn(*layout, head.column);
+      const qreal x = i == primary && layout->preeditLength > 0 ? preeditCursorX(*layout)
+                                                                  : xForColumn(*layout, head.column);
       m_cursorSpans.append({headRow, x, x + 2});
       if (i == primary && sel.isEmpty())
         m_currentLineSpans.append({headRow, m_contentX, m_contentX + width()});
@@ -707,9 +846,16 @@ void CodeEditor::buildOverlays() {
 }
 
 qsizetype CodeEditor::columnForX(const qce::LineLayout &layout, qreal x) const {
-  return m_metrics.isSimple(layout.text)
-           ? m_metrics.columnForX(layout.text, x)
-           : layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
+  if (layout.preeditLength == 0 && m_metrics.isSimple(layout.text))
+    return m_metrics.columnForX(layout.text, x);
+  qsizetype column = layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
+  if (layout.preeditLength > 0) { // the composition is not part of the text: hits on it land before it
+    if (column >= layout.preeditColumn + layout.preeditLength)
+      column -= layout.preeditLength;
+    else
+      column = qMin<qsizetype>(column, layout.preeditColumn);
+  }
+  return column;
 }
 
 qsizetype CodeEditor::positionAt(qreal x, qreal y) {
@@ -729,9 +875,7 @@ QRectF CodeEditor::rectForPosition(qsizetype offset) {
   const qce::TextPosition position = snapshot.rope().positionAt(offset);
   const qsizetype row = m_map.rowForPosition(position);
   const auto layout = layoutForLine(position.line, snapshot);
-  const QString &text = layout->text;
-  const qreal cursorX = m_metrics.isSimple(text) ? m_metrics.xForColumn(text, position.column)
-                                                 : layout->layout->lineAt(0).cursorToX(int(position.column));
+  const qreal cursorX = xForColumn(*layout, position.column);
   return QRectF(
     cursorX - m_contentX, qreal(row) * m_metrics.lineHeight() - m_contentY, m_metrics.cellAdvance(),
     m_metrics.lineHeight()
@@ -822,6 +966,31 @@ withWhitespaceFormats(const QString &text, QList<QTextLayout::FormatRange> range
   return result;
 }
 
+// Makes room for a composition of `length` units at `column`: ranges after it move right, one that
+// straddles it is split around it, and the composition's own formats are added.
+QList<QTextLayout::FormatRange> withPreeditFormats(
+  const QList<QTextLayout::FormatRange> &ranges, int column, int length,
+  const QList<QTextLayout::FormatRange> &preedit
+) {
+  QList<QTextLayout::FormatRange> out;
+  out.reserve(ranges.size() + preedit.size() + 1);
+  for (QTextLayout::FormatRange r : ranges) {
+    const int end = r.start + r.length;
+    if (end <= column) {
+      out.append(r);
+    } else if (r.start >= column) {
+      r.start += length;
+      out.append(r);
+    } else {
+      out.append({r.start, column - r.start, r.format});
+      out.append({column + length, end - column, r.format});
+    }
+  }
+  out += preedit;
+  std::sort(out.begin(), out.end(), [](const auto &a, const auto &b) { return a.start < b.start; });
+  return out;
+}
+
 } // namespace
 
 std::shared_ptr<qce::LineLayout>
@@ -848,6 +1017,21 @@ CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
     formats = m_theme->formatRanges(spans.first());
   if (m_showWhitespace)
     formats = withWhitespaceFormats(text, std::move(formats), m_theme->whitespace());
+  int preeditColumn = 0, preeditLength = 0;
+  if (hasPreedit()) {
+    const qce::TextPosition at = rope.positionAt(m_document.anchors().offset(m_preeditAnchor));
+    if (at.line == line) {
+      preeditColumn = int(at.column);
+      preeditLength = int(m_preedit.size());
+      layout->setText(display.left(preeditColumn) + m_preedit + display.mid(preeditColumn));
+      QList<QTextLayout::FormatRange> shifted;
+      for (QTextLayout::FormatRange r : std::as_const(m_preeditFormats)) {
+        r.start += preeditColumn;
+        shifted.append(r);
+      }
+      formats = withPreeditFormats(std::move(formats), preeditColumn, preeditLength, shifted);
+    }
+  }
   if (!formats.isEmpty())
     layout->setFormats(formats);
   layout->beginLayout();
@@ -856,7 +1040,10 @@ CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
   textLine.setPosition(QPointF(0, 0));
   const qreal width = textLine.naturalTextWidth();
   layout->endLayout();
-  return m_layouts.insert(line, std::move(layout), width, text);
+  auto result = m_layouts.insert(line, std::move(layout), width, text);
+  result->preeditColumn = preeditColumn;
+  result->preeditLength = preeditLength;
+  return result;
 }
 
 // Lays out the viewport plus a margin of rows on each side. Nothing outside that window is touched,
