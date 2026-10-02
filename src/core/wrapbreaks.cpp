@@ -79,7 +79,8 @@ qsizetype scanWindow(const QString &t, bool atLineEnd, qreal avail, const WrapCo
 }
 
 // The row starting at `rowStart` of a line with `remaining` units left, as a length.
-qsizetype rowLength(const Rope &rope, qsizetype rowStart, qsizetype remaining, qreal avail, const WrapConfig &cfg) {
+qsizetype
+rowLength(const Rope &rope, qsizetype rowStart, qsizetype remaining, qreal avail, const WrapConfig &cfg) {
   qsizetype window = 2048;
   for (;;) {
     const qsizetype n = qMin(remaining, window);

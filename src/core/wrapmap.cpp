@@ -222,7 +222,10 @@ void WrapMap::splice(qsizetype first, qsizetype oldCount, const QList<Entry> &en
     }
   }
   m_blocks.erase(m_blocks.begin() + b0, m_blocks.begin() + b1 + 1);
-  m_blocks.insert(m_blocks.begin() + b0, std::make_move_iterator(replacement.begin()), std::make_move_iterator(replacement.end()));
+  m_blocks.insert(
+    m_blocks.begin() + b0, std::make_move_iterator(replacement.begin()),
+    std::make_move_iterator(replacement.end())
+  );
   compactIfFragmented();
   rebuildIndex();
 }

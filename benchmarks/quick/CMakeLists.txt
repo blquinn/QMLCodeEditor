@@ -16,3 +16,9 @@ qt_add_executable(bench_typing bench_typing.cpp)
 target_link_libraries(bench_typing PRIVATE qce_bench_quick QMLCodeEditor qce_warnings)
 add_test(NAME bench_typing_smoke COMMAND bench_typing --quick --json ${CMAKE_CURRENT_BINARY_DIR}/bench_typing_smoke.json)
 set_tests_properties(bench_typing_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+
+# Soft-wrap benchmark (WRAP-10). Run from a release build on a real display.
+qt_add_executable(bench_wrap bench_wrap.cpp)
+target_link_libraries(bench_wrap PRIVATE qce_bench_quick QMLCodeEditor qce_warnings)
+add_test(NAME bench_wrap_smoke COMMAND bench_wrap --quick --json ${CMAKE_CURRENT_BINARY_DIR}/bench_wrap_smoke.json)
+set_tests_properties(bench_wrap_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")

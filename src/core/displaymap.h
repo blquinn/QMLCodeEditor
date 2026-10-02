@@ -122,8 +122,8 @@ private:
   const TextDocument *m_document;
   FoldMap m_fold;
   bool m_background = true;
-  quint64 m_generation = 1;  // bumped when the config changes, so stale chunks are dropped
-  qsizetype m_cursor = 0;    // where the background looks for the next estimate
+  quint64 m_generation = 1; // bumped when the config changes, so stale chunks are dropped
+  qsizetype m_cursor = 0;   // where the background looks for the next estimate
   QFutureWatcher<ChunkResult> m_watcher;
   bool m_running = false;
   WrapConfig m_config;

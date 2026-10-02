@@ -19,9 +19,9 @@ enum class WrapMode : quint8 {
 // What soft wrap needs to know (ADR 0011). Widths are in the pixels of `measure`.
 struct WrapConfig {
   WrapMode mode = WrapMode::Off;
-  qreal width = 0;   // Viewport mode: the viewport's width
-  int column = 80;   // Column mode
-  bool wordBreak = true;     // break after whitespace when possible, otherwise between characters
+  qreal width = 0;            // Viewport mode: the viewport's width
+  int column = 80;            // Column mode
+  bool wordBreak = true;      // break after whitespace when possible, otherwise between characters
   bool hangingIndent = false; // continuation rows start under the line's indentation
   int extraIndent = 0;        // more columns of continuation indent
   std::shared_ptr<const WrapMeasure> measure;

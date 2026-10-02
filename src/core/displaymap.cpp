@@ -12,9 +12,9 @@ namespace qce {
 
 namespace {
 
-constexpr qsizetype kScanAhead = 64;   // rows scanned beyond what a query needs in a huge line
-constexpr qsizetype kMaxCached = 4096; // lines whose break columns are kept
-constexpr qsizetype kPinnedRows = 64;  // lines with more rows than this are never evicted
+constexpr qsizetype kScanAhead = 64;       // rows scanned beyond what a query needs in a huge line
+constexpr qsizetype kMaxCached = 4096;     // lines whose break columns are kept
+constexpr qsizetype kPinnedRows = 64;      // lines with more rows than this are never evicted
 constexpr qsizetype kEagerUnits = 1 << 18; // text an edit wraps at once; more is left to later
 
 } // namespace
@@ -84,7 +84,10 @@ void DisplayMap::onChanged(const TextChange &change) {
   // past the part of the line the indent is read from.
   constexpr qsizetype kSlack = 1024, kIndentScan = 4096;
   std::optional<LineBreaks> kept;
-  if (oldLines == 1 && newLines == 1 && change.startPos.column > kIndentScan && m_document->rope().lineLength(first) > kHugeLine) {
+  if (
+    oldLines == 1 && newLines == 1 && change.startPos.column > kIndentScan &&
+    m_document->rope().lineLength(first) > kHugeLine
+  ) {
     if (const auto it = m_breaks.find(first); it != m_breaks.end()) {
       kept = it->second;
       while (!kept->starts.isEmpty() && kept->starts.last() + kSlack > change.startPos.column)
@@ -122,8 +125,10 @@ void DisplayMap::onChanged(const TextChange &change) {
       LineBreaks &lb = m_breaks[line];
       lb = {};
       lb.indent = wrapIndent(m_config, rope, rope.lineStart(line), length);
-      wrapRows(rope, rope.lineStart(line), length, m_config, lb.indent, 0, true,
-               std::numeric_limits<qsizetype>::max(), lb.starts);
+      wrapRows(
+        rope, rope.lineStart(line), length, m_config, lb.indent, 0, true,
+        std::numeric_limits<qsizetype>::max(), lb.starts
+      );
       lb.complete = true;
       budget -= length + 1;
       entries.append({quint32(lb.starts.size() + 1), false});
@@ -181,9 +186,11 @@ void DisplayMap::extend(qsizetype line, LineBreaks &lb, qsizetype rows) const {
   const Rope &rope = m_document->rope();
   const qsizetype length = rope.lineLength(line);
   const qsizetype scanned = lb.starts.isEmpty() ? 0 : lb.starts.last();
-  const qsizetype want = rows < 0 ? std::numeric_limits<qsizetype>::max() : qMax<qsizetype>(1, rows - lb.starts.size() + kScanAhead);
-  const qsizetype stopped =
-    wrapRows(rope, rope.lineStart(line), length, m_config, lb.indent, scanned, lb.starts.isEmpty(), want, lb.starts);
+  const qsizetype want = rows < 0 ? std::numeric_limits<qsizetype>::max()
+                                  : qMax<qsizetype>(1, rows - lb.starts.size() + kScanAhead);
+  const qsizetype stopped = wrapRows(
+    rope, rope.lineStart(line), length, m_config, lb.indent, scanned, lb.starts.isEmpty(), want, lb.starts
+  );
   lb.complete = stopped >= length;
   storeRows(line, lb);
 }
@@ -344,20 +351,23 @@ void DisplayMap::pumpBackground() {
       const qsizetype length = rope.lineLength(line);
       const qsizetype scanned = knownStarts.isEmpty() ? 0 : knownStarts.last();
       const qsizetype stopped = wrapRows(
-        rope, rope.lineStart(line), length, config, knownIndent, scanned, knownStarts.isEmpty(), kHugeStepRows,
-        result.hugeStarts
+        rope, rope.lineStart(line), length, config, knownIndent, scanned, knownStarts.isEmpty(),
+        kHugeStepRows, result.hugeStarts
       );
       result.hugeComplete = stopped >= length;
     } else {
       qsizetype units = 0;
-      for (qsizetype l = line; l < lineCount && result.rows.size() < kChunkLines && units < kChunkUnits; ++l) {
+      for (qsizetype l = line; l < lineCount && result.rows.size() < kChunkLines && units < kChunkUnits;
+           ++l) {
         const qsizetype length = rope.lineLength(l);
         if (length > kHugeLine)
           break; // the next chunk takes it on its own
         QList<qsizetype> starts;
         const qsizetype start = rope.lineStart(l);
-        wrapRows(rope, start, length, config, wrapIndent(config, rope, start, length), 0, true,
-                 std::numeric_limits<qsizetype>::max(), starts);
+        wrapRows(
+          rope, start, length, config, wrapIndent(config, rope, start, length), 0, true,
+          std::numeric_limits<qsizetype>::max(), starts
+        );
         result.rows.append(quint32(starts.size() + 1));
         units += length + 1;
       }

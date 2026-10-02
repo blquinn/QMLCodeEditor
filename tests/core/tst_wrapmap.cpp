@@ -32,8 +32,8 @@ QList<qsizetype> wrapLine(const QString &text, const WrapConfig &config) {
 }
 
 QString randomText(QRandomGenerator &rng, int lines, int maxLen) {
-  static const QList<QString> pieces = {u"a"_s, u"b"_s, u"c"_s, u"word"_s, u" "_s, u" "_s, u"  "_s, u"\t"_s,
-                                        u"é"_s, u"é"_s, u"日"_s, u"😀"_s, u"x"_s, u"-"_s};
+  static const QList<QString> pieces = {u"a"_s,  u"b"_s, u"c"_s, u"word"_s, u" "_s,  u" "_s, u"  "_s,
+                                        u"\t"_s, u"é"_s, u"é"_s, u"日"_s,   u"😀"_s, u"x"_s, u"-"_s};
   QString text;
   for (int l = 0; l < lines; ++l) {
     if (l > 0)
@@ -80,7 +80,9 @@ private slots:
     QRandomGenerator rng(7);
     WrapMap map;
     QList<Entry> model;
-    auto randomEntry = [&] { return Entry{quint32(1 + rng.bounded(rng.bounded(10) == 0 ? 50 : 3)), rng.bounded(3) == 0}; };
+    auto randomEntry = [&] {
+      return Entry{quint32(1 + rng.bounded(rng.bounded(10) == 0 ? 50 : 3)), rng.bounded(3) == 0};
+    };
     auto fill = [&](qsizetype n) {
       QList<Entry> out;
       for (qsizetype i = 0; i < n; ++i)
@@ -441,9 +443,19 @@ private slots:
         got[r].line == want[r].line && got[r].startColumn == want[r].startColumn &&
           got[r].endColumn == want[r].endColumn && got[r].rowsInLine == want[r].rowsInLine &&
           qFuzzyCompare(got[r].indent + 1, want[r].indent + 1),
-        qPrintable(u"row %1: got line %2 [%3,%4) rows %5 indent %6; want line %7 [%8,%9) rows %10 indent %11"_s.arg(r)
-                     .arg(got[r].line).arg(got[r].startColumn).arg(got[r].endColumn).arg(got[r].rowsInLine).arg(got[r].indent)
-                     .arg(want[r].line).arg(want[r].startColumn).arg(want[r].endColumn).arg(want[r].rowsInLine).arg(want[r].indent))
+        qPrintable(
+          u"row %1: got line %2 [%3,%4) rows %5 indent %6; want line %7 [%8,%9) rows %10 indent %11"_s.arg(r)
+            .arg(got[r].line)
+            .arg(got[r].startColumn)
+            .arg(got[r].endColumn)
+            .arg(got[r].rowsInLine)
+            .arg(got[r].indent)
+            .arg(want[r].line)
+            .arg(want[r].startColumn)
+            .arg(want[r].endColumn)
+            .arg(want[r].rowsInLine)
+            .arg(want[r].indent)
+        )
       );
   }
 
@@ -586,7 +598,6 @@ private slots:
     QCOMPARE(map.rowCount(), 2);
     QCOMPARE(map.rowAt(0).endColumn, 19);
   }
-
 };
 
 QTEST_GUILESS_MAIN(TstWrapMap)

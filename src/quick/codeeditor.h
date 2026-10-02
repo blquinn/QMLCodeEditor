@@ -217,6 +217,8 @@ public:
     qce::SceneStats scene;    // scene-graph node pool activity, as of the last synced frame
   };
   RenderStats renderStats() const;
+  // Forgets the polish timings so a benchmark scenario reads its own slowest run.
+  void resetPolishStats() { m_polishCalls = m_polishNs = m_polishMaxNs = 0; }
 
   // Replaces the whole text. Convenience for small documents; large ones go through load().
   Q_INVOKABLE void setText(const QString &text);
