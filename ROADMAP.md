@@ -57,25 +57,25 @@ Get a clean, buildable project skeleton before any editor code. See [ADR 0003](d
 
 **Exit criteria:** `cmake --preset debug && cmake --build --preset debug && ctest --preset debug` works from a clean checkout; the demo app launches an empty window; the benchmark harness runs a no-op benchmark and prints timings.
 
-- [~] **INFRA-01** Fix QML module URI mismatch
+- [x] **INFRA-01** Fix QML module URI mismatch — done 2026-10-02 (d94a2e0)
   - `qmldir` declares `me.blq.qmlcodeeditor` but CMake declares `QMLCodeEditor`. Pick one URI, and delete the hand-written `qmldir` (let `qt_add_qml_module` generate it).
-- [ ] **INFRA-02** Clean up scaffold CMake
+- [x] **INFRA-02** Clean up scaffold CMake — done 2026-10-02 (ac8160e)
   - Remove the leftover `MACOSX_BUNDLE`/`WIN32_EXECUTABLE` properties (this is a library, not an app) and the placeholder `CodeEditorControls.qml` / red-rect `paint()`.
-- [ ] **INFRA-03** Set minimum Qt to 6.8 LTS
+- [x] **INFRA-03** Set minimum Qt to 6.8 LTS — done 2026-10-02 (e354a59)
   - `find_package(Qt6 6.8 ...)`; document that development and CI use 6.11. Required for the public `QSGTextNode` API (6.7+) ([ADR 0001](docs/adr/0001-scene-graph-rendering.md)).
-- [ ] **INFRA-04** Source layout: `src/core`, `src/quick`, `src/syntax`, `demo/`, `tests/`, `benchmarks/`, `third_party/`
+- [x] **INFRA-04** Source layout: `src/core`, `src/quick`, `src/syntax`, `demo/`, `tests/`, `benchmarks/`, `third_party/` — done 2026-10-02 (4c3b9df)
   - `core` links only Qt Core/Gui and must build and test without a window system.
-- [ ] **INFRA-05** `CMakePresets.json`
+- [x] **INFRA-05** `CMakePresets.json` — done 2026-10-02 (42ce444)
   - Presets: `debug`, `release`, `asan-ubsan`, `tsan`; matching build and test presets. Tests run with `QT_QPA_PLATFORM=offscreen`.
-- [ ] **INFRA-06** Formatting and warnings
+- [x] **INFRA-06** Formatting and warnings — done 2026-10-02 (a537f81)
   - `.clang-format`, a strict warnings set, and an opt-in `-Werror` option.
-- [ ] **INFRA-07** Qt Test harness wired into `ctest`
+- [x] **INFRA-07** Qt Test harness wired into `ctest` — done 2026-10-02 (619a463)
   - One trivial passing test per module so the plumbing is proven.
-- [ ] **INFRA-08** Benchmark harness skeleton
+- [x] **INFRA-08** Benchmark harness skeleton — done 2026-10-02 (aa44c63)
   - Qt `QBENCHMARK` or a small custom runner; JSON output for tracking over time; helper to generate large synthetic files (many short lines, few long lines, one giant line). A frame-timing hook that records per-frame render and sync cost from a `QQuickWindow`.
-- [ ] **INFRA-09** Demo app skeleton
+- [x] **INFRA-09** Demo app skeleton — done 2026-10-02 (89fabd4)
   - Standalone QML app in `demo/` that links the module and shows an empty editor item.
-- [ ] **INFRA-10** `tools/roadmap.py --check` run in CI/pre-commit
+- [x] **INFRA-10** `tools/roadmap.py --check` run in CI/pre-commit — done 2026-10-02 (b69544c)
 
 ## M1 — Text core
 
