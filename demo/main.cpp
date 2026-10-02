@@ -4,9 +4,12 @@
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <QtQuick/QQuickWindow>
+#include <QtQuickControls2/QQuickStyle>
 
 int main(int argc, char **argv) {
   QGuiApplication app(argc, argv);
+  // The demo's look is fixed (see the palette in Main.qml) rather than following the platform style.
+  QQuickStyle::setStyle(QStringLiteral("Basic"));
   // --smoke: exit 0 after the first presented frame, 1 if none arrives within 10 s (used by ctest).
   // --grab <png>: save a screenshot of the window once it has settled, then exit.
   bool smoke = false;

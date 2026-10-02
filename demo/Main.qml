@@ -11,8 +11,46 @@ ApplicationWindow {
     property url initialFile
     // The file shown, for Save; empty for an unnamed buffer.
     property url currentFile
+    // Chrome colors follow the editor theme; the Basic style (set in main.cpp) draws from this palette
+    // instead of the system's.
+    property bool darkMode: true
 
-    width: 1100
+    palette {
+        window: darkMode ? "#1e1f22" : "#f2f2f2"
+        windowText: darkMode ? "#d4d4d4" : "#202020"
+        base: darkMode ? "#2b2d30" : "#ffffff"
+        text: darkMode ? "#d4d4d4" : "#202020"
+        button: darkMode ? "#3a3d41" : "#e4e4e4"
+        buttonText: darkMode ? "#e0e0e0" : "#202020"
+        highlight: darkMode ? "#3d6fb4" : "#4a89dc"
+        highlightedText: "#ffffff"
+        mid: darkMode ? "#55595e" : "#b0b0b0"
+        dark: darkMode ? "#55595e" : "#909090"
+        light: darkMode ? "#4a4d52" : "#ffffff"
+        placeholderText: darkMode ? "#8a8d91" : "#808080"
+    }
+
+    // A scroll bar with a clearly visible thumb on a track slightly apart from the editor background.
+    component DemoScrollBar: ScrollBar {
+        id: bar
+        implicitWidth: 14
+        implicitHeight: 14
+        policy: ScrollBar.AlwaysOn
+        background: Rectangle {
+            color: window.darkMode ? "#26282b" : "#e6e6e6"
+        }
+        contentItem: Rectangle {
+            implicitWidth: 14
+            implicitHeight: 14
+            radius: 3
+            anchors.margins: 2
+            color: bar.pressed ? (window.darkMode ? "#a8abb0" : "#606060")
+                 : bar.hovered ? (window.darkMode ? "#8c8f94" : "#808080")
+                               : (window.darkMode ? "#6e7277" : "#9a9a9a")
+        }
+    }
+
+    width: 1400
     height: 720
     visible: true
     title: qsTr("QMLCodeEditor demo")
@@ -72,10 +110,12 @@ ApplicationWindow {
                 onToggled: editor.insertSpaces = !checked
             }
             CheckBox {
-                id: darkMode
                 text: qsTr("Dark")
-                checked: true
-                onToggled: editor.theme.applyPreset(checked ? "dark" : "light")
+                checked: window.darkMode
+                onToggled: {
+                    window.darkMode = checked
+                    editor.theme.applyPreset(checked ? "dark" : "light")
+                }
             }
             CheckBox {
                 text: qsTr("Whitespace")
@@ -175,23 +215,21 @@ ApplicationWindow {
         }
     }
 
-    ScrollBar {
+    DemoScrollBar {
         id: vbar
         orientation: Qt.Vertical
         anchors { top: parent.top; right: parent.right; bottom: hbar.top }
         size: editor.contentHeight > 0 ? Math.min(1, editor.height / editor.contentHeight) : 1
         position: editor.contentHeight > 0 ? editor.contentY / editor.contentHeight : 0
-        policy: ScrollBar.AlwaysOn
         onPositionChanged: if (pressed) editor.contentY = position * editor.contentHeight
     }
 
-    ScrollBar {
+    DemoScrollBar {
         id: hbar
         orientation: Qt.Horizontal
         anchors { left: parent.left; right: vbar.left; bottom: parent.bottom }
         size: editor.contentWidth > 0 ? Math.min(1, editor.width / editor.contentWidth) : 1
         position: editor.contentWidth > 0 ? editor.contentX / editor.contentWidth : 0
-        policy: ScrollBar.AlwaysOn
         onPositionChanged: if (pressed) editor.contentX = position * editor.contentWidth
     }
 
