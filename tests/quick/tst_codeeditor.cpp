@@ -1064,6 +1064,59 @@ private slots:
     QVERIFY(editor.wrapIndent());
     QCOMPARE(editor.wrapIndentExtra(), 0);
   }
+
+  void continuationRowsHangUnderTheIndent() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nplain"));
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(10);
+    const qreal cell = editor->metrics().cellAdvance();
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 5); // 10 columns, then 24 more in rows of 6
+    // Row 1 starts at column 10 and is drawn four cells in.
+    QCOMPARE(editor->displayMap().rowAt(1).startColumn, 10);
+    QCOMPARE(editor->rectForPosition(10).left(), 4 * cell);
+    QCOMPARE(editor->rectForPosition(12).left(), 6 * cell);
+    QCOMPARE(editor->rectForPosition(4).left(), 4 * cell); // the first row is not indented
+    // Clicks account for the indent.
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, QPoint(int(6 * cell + 1), int(1.5 * editor->metrics().lineHeight())), 10);
+    QCOMPARE(editor->cursorPosition(), 12);
+    // An unindented line is not shifted.
+    QCOMPARE(editor->rectForPosition(editor->document()->rope().lineStart(1) + 2).left(), 2 * cell);
+
+    editor->setWrapIndent(false);
+    QTRY_COMPARE(editor->rectForPosition(10).left(), 0.0);
+    QCOMPARE(editor->displayMap().rowCountOfLine(0), 4); // full-width continuation rows
+    editor->setWrapIndent(true);
+    editor->setWrapIndentExtra(1);
+    QTRY_COMPARE(editor->rectForPosition(10).left(), 5 * cell); // 4 + 1, still within half a row
+    editor->setWrapIndentExtra(3);
+    QTRY_COMPARE(editor->rectForPosition(10).left(), 5 * cell); // capped at half a row
+  }
+
+  void selectionAndCurrentLineCoverWrappedRows() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("aaaa bbbb cccc dddd\nnext"));
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(5);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 4);
+    editor->setCursorPosition(7);
+    const qreal lh = editor->metrics().lineHeight();
+    // The current line highlight spans all four rows of the line, not the one the cursor is on.
+    auto inkAtRow = [&](int row) {
+      const QImage image = view->grabWindow();
+      return image.pixelColor(190, int((row + 0.5) * lh)) == editor->theme()->currentLine();
+    };
+    QTRY_VERIFY(inkAtRow(0));
+    QVERIFY(inkAtRow(1) && inkAtRow(3));
+    // (row 3 is only partly inside the 100 px item at tiny line heights; the next line is not highlighted)
+    QVERIFY(!inkAtRow(4) || lh * 4.5 >= editor->height());
+    // A selection across a soft break paints the end of the first row and the start of the next.
+    editor->select(3, 8);
+    QTRY_VERIFY(view->grabWindow().pixelColor(int(4.5 * editor->metrics().cellAdvance()), int(0.5 * lh)) == editor->theme()->selection());
+    QVERIFY(view->grabWindow().pixelColor(int(1.5 * editor->metrics().cellAdvance()), int(1.5 * lh)) == editor->theme()->selection());
+  }
 };
 
 QTEST_MAIN(TstCodeEditor)
