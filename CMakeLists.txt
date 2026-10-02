@@ -9,7 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # Minimum Qt is 6.8 LTS (public QSGTextNode API, ADR 0001); development and CI use 6.11.
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick Test)
 qt_standard_project_setup(REQUIRES 6.8)
 
 enable_testing()
@@ -20,3 +20,8 @@ include(QceWarnings)
 add_subdirectory(src/core)
 add_subdirectory(src/quick)
 add_subdirectory(tests)
+
+option(QCE_BUILD_BENCHMARKS "Build the benchmark suite" ON)
+if(QCE_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()

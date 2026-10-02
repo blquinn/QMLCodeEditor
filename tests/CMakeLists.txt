@@ -1,5 +1,3 @@
-find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
-
 # qce_add_test(<name> SOURCES <files...> LIBS <targets...>)
 # Builds a Qt Test executable and registers it with ctest. Tests run offscreen.
 function(qce_add_test name)
