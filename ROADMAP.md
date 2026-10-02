@@ -114,9 +114,9 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Replace the `QQuickPaintedItem` scaffold; `ItemHasContents` set; all scene-graph mutation on the render thread in `updatePaintNode`.
 - [ ] **RENDER-02** Scroll model
   - Owned `contentX/contentY/contentWidth/contentHeight` properties so a QML `ScrollBar` can bind to them; kinetic scrolling friendly; scrolling changes a transform only, with no relayout.
-- [~] **RENDER-03** Viewport virtualization with an LRU line-layout cache
+- [x] **RENDER-03** Viewport virtualization with an LRU line-layout cache — done 2026-10-02 (c20f0f4)
   - Only lines intersecting the viewport (plus a small margin) are laid out; cache keyed by line and invalidated on edit.
-- [ ] **RENDER-04** Pooled `QSGTextNode`s fed by per-line `QTextLayout`
+- [~] **RENDER-04** Pooled `QSGTextNode`s fed by per-line `QTextLayout`
   - Line nodes are reused as lines scroll in and out; no per-frame allocation in steady-state scrolling.
 - [ ] **RENDER-05** Cursor and selection geometry
   - Batched geometry nodes behind and above the text; cursor blink timer.

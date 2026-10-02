@@ -6,17 +6,6 @@
 #include <QtQuick/QSGRectangleNode>
 #include <cmath>
 
-namespace {
-
-// Everything the editor puts in the scene graph hangs off this node, so it is destroyed with the
-// scene graph and never outlives the render thread's resources.
-class EditorRoot : public QSGNode {
-public:
-  QSGRectangleNode *background = nullptr;
-};
-
-} // namespace
-
 CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setFlag(ItemHasContents);
   setFlag(ItemIsFocusScope);
@@ -101,7 +90,7 @@ void CodeEditor::setContentY(qreal y) {
 }
 
 CodeEditor::RenderStats CodeEditor::renderStats() const {
-  return {m_layouts.stats().created, m_layouts.stats().hits, m_layouts.size(), m_plan.size()};
+  return {m_layouts.stats().created, m_layouts.stats().hits, m_layouts.size(), m_plan.size(), m_sceneStats};
 }
 
 void CodeEditor::onThemeChanged() { invalidateLayouts(); }
@@ -185,13 +174,18 @@ void CodeEditor::geometryChange(const QRectF &newGeometry, const QRectF &oldGeom
 }
 
 QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
-  auto *root = static_cast<EditorRoot *>(oldNode);
-  if (!root) {
-    root = new EditorRoot;
-    root->background = window()->createRectangleNode();
-    root->appendChildNode(root->background);
-  }
-  root->background->setRect(boundingRect());
-  root->background->setColor(m_theme->background());
-  return root;
+  auto *scene = static_cast<qce::EditorScene *>(oldNode);
+  if (!scene)
+    scene = new qce::EditorScene(window());
+
+  qce::FrameParams params;
+  params.viewport = boundingRect();
+  params.background = m_theme->background();
+  params.foreground = m_theme->foreground();
+  params.lineHeight = m_metrics.lineHeight();
+  params.contentY = m_contentY;
+  params.rows = &m_plan;
+  scene->sync(params);
+  m_sceneStats = scene->stats();
+  return scene;
 }

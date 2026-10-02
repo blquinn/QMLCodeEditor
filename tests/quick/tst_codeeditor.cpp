@@ -120,8 +120,73 @@ private slots:
     QTRY_COMPARE(editor->renderStats().layoutsCreated, base + 5);
     editor->document()->insert(editor->document()->rope().lineStart(2), u"x");
     QTRY_COMPARE(editor->renderStats().layoutsCreated, base + 6); // only line 2 was laid out again
-    editor->document()->insert(0, u"first\n");              // lines shift; line 0 is new, the rest renumbered
+    editor->document()->insert(0, u"first\n"); // lines shift; line 0 is new, the rest renumbered
     QTRY_COMPARE(editor->renderStats().layoutsCreated, base + 8);
+  }
+
+  void drawsTextAndPoolsNodes() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    QString text;
+    for (int i = 0; i < 5000; ++i)
+      text += QStringLiteral("MMMMMMMMMMMMMMMMMMMM\n");
+    editor->setText(text);
+    QTRY_VERIFY(editor->renderStats().rowsInPlan > 5);
+
+    auto hasInk = [](const QImage &image) {
+      const QColor bg(0x1e, 0x1e, 0x1e);
+      for (int y = 0; y < 14; ++y)
+        for (int x = 0; x < 100; ++x)
+          if (image.pixelColor(x, y) != bg)
+            return true;
+      return false;
+    };
+    QTRY_VERIFY(hasInk(view.grabWindow()));
+    const auto first = editor->renderStats();
+    QVERIFY(first.scene.nodesCreated > 0);
+    QVERIFY(first.scene.linesFilled >= first.scene.nodesCreated);
+
+    // Settle mid-document, where the margin exists on both sides.
+    const qreal lh = editor->metrics().lineHeight();
+    editor->setContentY(1000 * lh);
+    view.grabWindow();
+    QTRY_VERIFY(view.grabWindow().pixelColor(0, 0).isValid());
+    auto settled = editor->renderStats();
+    // Scrolling by a row at a time swaps one row out for one in: same layouts count growth of one
+    // per row, and every node comes from the pool.
+    for (int step = 1; step <= 3; ++step) {
+      editor->setContentY((1000 + step) * lh);
+      view.grabWindow();
+    }
+    auto after = editor->renderStats();
+    QCOMPARE(after.scene.nodesCreated, settled.scene.nodesCreated);
+    QCOMPARE(after.layoutsCreated, settled.layoutsCreated + 3);
+    QVERIFY(after.scene.nodesRecycled >= settled.scene.nodesRecycled + 3);
+    // Scrolling back over rows that are still cached lays out nothing.
+    for (int step = 2; step >= 0; --step) {
+      editor->setContentY((1000 + step) * lh);
+      view.grabWindow();
+    }
+    QCOMPARE(editor->renderStats().layoutsCreated, after.layoutsCreated);
+    QCOMPARE(editor->renderStats().scene.nodesCreated, after.scene.nodesCreated);
+
+    // A long scroll in small steps reuses the same nodes over and over.
+    const quint64 createdBefore = editor->renderStats().scene.nodesCreated;
+    for (int step = 1004; step < 1400; ++step) {
+      editor->setContentY(step * lh);
+      view.grabWindow();
+    }
+    after = editor->renderStats();
+    QVERIFY2(
+      after.scene.nodesCreated <= createdBefore + 8, qPrintable(QString::number(after.scene.nodesCreated))
+    );
+    QVERIFY(after.scene.nodesRecycled > 100);
+    QVERIFY(after.layoutsCached <= 256);
+    // Ink is still visible after all the recycling.
+    QVERIFY(view.grabWindow().pixelColor(0, 0) != QColor());
   }
 
   void setTextUpdatesLineCount() {

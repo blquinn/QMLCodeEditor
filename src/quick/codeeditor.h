@@ -4,6 +4,7 @@
 #include "core/displaymap.h"
 #include "core/highlighter.h"
 #include "core/textdocument.h"
+#include "quick/editorscene.h"
 #include "quick/linelayoutcache.h"
 #include "quick/textmetrics.h"
 #include "quick/theme.h"
@@ -63,6 +64,7 @@ public:
     quint64 layoutCacheHits = 0;
     qsizetype layoutsCached = 0;
     qsizetype rowsInPlan = 0; // rows laid out for the current frame (viewport plus margin)
+    qce::SceneStats scene;    // scene-graph node pool activity, as of the last synced frame
   };
   RenderStats renderStats() const;
 
@@ -91,10 +93,6 @@ private:
 
   // One row of the frame: which row, and the layout to draw it from. Built on the GUI thread in
   // updatePolish(), read by updatePaintNode() while the GUI thread is blocked.
-  struct PlanRow {
-    qsizetype row = 0;
-    std::shared_ptr<qce::LineLayout> layout;
-  };
   std::shared_ptr<qce::LineLayout> layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot);
   void invalidateLayouts();
 
@@ -102,7 +100,8 @@ private:
   qce::DisplayMap m_map{&m_document};
   qce::TextMetrics m_metrics;
   qce::LineLayoutCache m_layouts;
-  QList<PlanRow> m_plan;
+  QList<qce::FramePlanRow> m_plan;
+  qce::SceneStats m_sceneStats; // copied from the scene on the render thread during sync
   qreal m_contentY = 0;
   QFont m_font;
   void onThemeChanged();
