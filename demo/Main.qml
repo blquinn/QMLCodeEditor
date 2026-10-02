@@ -31,14 +31,18 @@ ApplicationWindow {
     }
 
     // A tool button that lights up under the pointer (the Basic style only reacts to presses).
+    // Buttons with nothing to do are dimmed rather than disabled: a disabled item gets no hover events,
+    // and the highlight is still useful feedback.
     component DemoToolButton: ToolButton {
         id: button
+        property bool available: true
+        opacity: available ? 1 : 0.45
         background: Rectangle {
             implicitWidth: 40
             implicitHeight: 40
             color: button.down ? window.palette.highlight
-                 : button.hovered && button.enabled ? (window.darkMode ? "#4d5258" : "#cfd3d8")
-                                                    : "transparent"
+                 : button.hovered ? (window.darkMode ? "#4d5258" : "#cfd3d8")
+                                  : "transparent"
         }
     }
 
@@ -88,17 +92,17 @@ ApplicationWindow {
             }
             DemoToolButton {
                 text: qsTr("Save")
-                enabled: window.currentFile.toString() !== ""
-                onClicked: editor.save(window.currentFile)
+                available: window.currentFile.toString() !== ""
+                onClicked: if (available) editor.save(window.currentFile)
             }
             DemoToolButton {
                 text: qsTr("Undo")
-                enabled: editor.canUndo
+                available: editor.canUndo
                 onClicked: editor.undo()
             }
             DemoToolButton {
                 text: qsTr("Redo")
-                enabled: editor.canRedo
+                available: editor.canRedo
                 onClicked: editor.redo()
             }
             DemoToolButton {
