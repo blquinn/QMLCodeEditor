@@ -4,6 +4,7 @@
 
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGRectangleNode>
+#include <algorithm>
 #include <cmath>
 
 CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
@@ -53,6 +54,23 @@ void CodeEditor::setFont(const QFont &font) {
   invalidateLayouts();
   updateContentSize();
   emit fontChanged();
+}
+
+void CodeEditor::setTabWidth(int columns) {
+  columns = qBound(1, columns, 32);
+  if (columns == m_metrics.tabWidth())
+    return;
+  m_metrics.setTabWidth(columns);
+  invalidateLayouts();
+  emit tabWidthChanged();
+}
+
+void CodeEditor::setShowWhitespace(bool show) {
+  if (show == m_showWhitespace)
+    return;
+  m_showWhitespace = show;
+  invalidateLayouts();
+  emit showWhitespaceChanged();
 }
 
 void CodeEditor::setTheme(qce::Theme *theme) {
@@ -193,9 +211,38 @@ void CodeEditor::wheelEvent(QWheelEvent *event) {
 }
 
 qreal CodeEditor::xForColumn(const qce::LineLayout &layout, qsizetype column) const {
-  const QString &text = layout.layout->text();
+  const QString &text = layout.text;
   return m_metrics.isSimple(text) ? m_metrics.xForColumn(text, column)
                                   : layout.layout->lineAt(0).cursorToX(int(column));
+}
+
+// A thin line across each tab's span on the baseline, for the rows being drawn. Capped so a
+// minified file full of tabs can't make a frame expensive.
+void CodeEditor::buildTabMarks() {
+  constexpr qsizetype kMaxMarks = 4000;
+  const qreal markY = qFloor(m_metrics.ascent() * 0.6);
+  for (const qce::FramePlanRow &planRow : std::as_const(m_plan)) {
+    const qce::LineLayout &layout = *planRow.layout;
+    const QString &text = layout.text;
+    if (!text.contains(u'\t'))
+      continue;
+    const bool simple = m_metrics.isSimple(text);
+    qsizetype cell = 0;
+    for (qsizetype i = 0; i < text.size(); ++i) {
+      const bool tab = text[i] == u'\t';
+      const qsizetype nextCell = cell + (tab ? m_metrics.tabWidth() - cell % m_metrics.tabWidth() : 1);
+      if (tab) {
+        const qreal x0 = simple ? cell * m_metrics.cellAdvance() : layout.layout->lineAt(0).cursorToX(int(i));
+        const qreal x1 =
+          simple ? nextCell * m_metrics.cellAdvance() : layout.layout->lineAt(0).cursorToX(int(i) + 1);
+        if (x1 - x0 > 4)
+          m_markSpans.append({planRow.row, x0 + 2, x1 - 2, markY, 1});
+        if (m_markSpans.size() >= kMaxMarks)
+          return;
+      }
+      cell = nextCell;
+    }
+  }
 }
 
 // Cursor, selection and current-line spans for the rows in the plan. A selection covering the
@@ -203,6 +250,9 @@ qreal CodeEditor::xForColumn(const qce::LineLayout &layout, qsizetype column) co
 void CodeEditor::buildOverlays() {
   m_currentLineSpans.clear();
   m_selectionSpans.clear();
+  m_markSpans.clear();
+  if (m_showWhitespace)
+    buildTabMarks();
   m_hasCursor = false;
   const qce::Rope &rope = m_document.rope();
   auto planLayout = [&](qsizetype row) -> const qce::LineLayout * {
@@ -245,7 +295,7 @@ qsizetype CodeEditor::positionAt(qreal x, qreal y) {
   const qce::TextSnapshot snapshot = m_document.snapshot();
   const qce::Rope &rope = snapshot.rope();
   const auto layout = layoutForLine(displayRow.line, snapshot);
-  const QString &text = layout->layout->text();
+  const QString &text = layout->text;
   const qreal contentX = x + m_contentX;
   const qsizetype column =
     m_metrics.isSimple(text)
@@ -259,7 +309,7 @@ QRectF CodeEditor::rectForPosition(qsizetype offset) {
   const qce::TextPosition position = snapshot.rope().positionAt(offset);
   const qsizetype row = m_map.rowForPosition(position);
   const auto layout = layoutForLine(position.line, snapshot);
-  const QString &text = layout->layout->text();
+  const QString &text = layout->text;
   const qreal cursorX = m_metrics.isSimple(text) ? m_metrics.xForColumn(text, position.column)
                                                  : layout->layout->lineAt(0).cursorToX(int(position.column));
   return QRectF(
@@ -311,6 +361,53 @@ void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
   }
 }
 
+namespace {
+
+// Adds a `color` format to every run of spaces and tabs that the highlighter's ranges (sorted,
+// non-overlapping) don't already style, so indentation and gaps read as dim marks while
+// whitespace inside strings or comments keeps its token color.
+QList<QTextLayout::FormatRange>
+withWhitespaceFormats(const QString &text, QList<QTextLayout::FormatRange> ranges, const QColor &color) {
+  QTextCharFormat format;
+  format.setForeground(color);
+  QList<QTextLayout::FormatRange> result;
+  result.reserve(ranges.size() + 4);
+  qsizetype next = 0; // first range not yet passed
+  qsizetype i = 0;
+  const qsizetype n = text.size();
+  while (i < n) {
+    const QChar c = text[i];
+    if (c != u' ' && c != u'\t') {
+      ++i;
+      continue;
+    }
+    qsizetype j = i;
+    while (j < n && (text[j] == u' ' || text[j] == u'\t'))
+      ++j;
+    // Copy over styled ranges that start before this run ends, then add the uncovered pieces.
+    qsizetype pos = i;
+    while (next < ranges.size() && ranges[next].start < j) {
+      const auto &r = ranges[next];
+      if (r.start + r.length > i) {
+        if (r.start > pos)
+          result.append({int(pos), int(r.start - pos), format});
+        pos = qMax<qsizetype>(pos, r.start + r.length);
+      }
+      result.append(r);
+      ++next;
+    }
+    if (pos < j)
+      result.append({int(pos), int(j - pos), format});
+    i = j;
+  }
+  while (next < ranges.size())
+    result.append(ranges[next++]);
+  std::sort(result.begin(), result.end(), [](const auto &a, const auto &b) { return a.start < b.start; });
+  return result;
+}
+
+} // namespace
+
 std::shared_ptr<qce::LineLayout>
 CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
   if (auto cached = m_layouts.find(line))
@@ -318,22 +415,32 @@ CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
 
   const qce::Rope &rope = snapshot.rope();
   const QString text = rope.toString(rope.lineStart(line), rope.lineEnd(line));
-  auto layout = std::make_unique<QTextLayout>(text, m_metrics.layoutFont());
+  // Visible spaces are drawn as middle dots: the text node doesn't render QTextOption's own marks.
+  // Dot and space share a column in a monospace font, so offsets and positions stay the same.
+  QString display = text;
+  if (m_showWhitespace)
+    display.replace(u' ', u'\u00b7');
+  auto layout = std::make_unique<QTextLayout>(display, m_metrics.layoutFont());
   QTextOption option;
   option.setWrapMode(QTextOption::NoWrap);
   option.setTabStopDistance(m_metrics.tabWidth() * m_metrics.cellAdvance());
   layout->setTextOption(option);
   layout->setCacheEnabled(true);
   const auto spans = m_highlighter->highlightLines(snapshot, line, line);
+  QList<QTextLayout::FormatRange> formats;
   if (!spans.isEmpty())
-    layout->setFormats(m_theme->formatRanges(spans.first()));
+    formats = m_theme->formatRanges(spans.first());
+  if (m_showWhitespace)
+    formats = withWhitespaceFormats(text, std::move(formats), m_theme->whitespace());
+  if (!formats.isEmpty())
+    layout->setFormats(formats);
   layout->beginLayout();
   QTextLine textLine = layout->createLine();
   textLine.setLineWidth(1e9);
   textLine.setPosition(QPointF(0, 0));
   const qreal width = textLine.naturalTextWidth();
   layout->endLayout();
-  return m_layouts.insert(line, std::move(layout), width);
+  return m_layouts.insert(line, std::move(layout), width, text);
 }
 
 // Lays out the viewport plus a margin of rows on each side. Nothing outside that window is touched,
@@ -398,6 +505,8 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.cursorColor = m_theme->cursor();
   params.currentLine = &m_currentLineSpans;
   params.selection = &m_selectionSpans;
+  params.markColor = m_theme->whitespace();
+  params.marks = &m_markSpans;
   params.hasCursor = m_hasCursor;
   params.cursor = m_cursorSpan;
   params.cursorVisible = m_cursorVisible;

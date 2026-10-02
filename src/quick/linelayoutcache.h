@@ -15,6 +15,7 @@ namespace qce {
 struct LineLayout {
   quint64 id = 0;
   std::unique_ptr<QTextLayout> layout;
+  QString text;    // the line as stored; the layout may draw stand-in glyphs (visible whitespace)
   qreal width = 0; // natural width of the line's text
 };
 
@@ -40,7 +41,8 @@ public:
   // Returns the cached layout and marks it most recently used, or null.
   std::shared_ptr<LineLayout> find(qsizetype line);
   // Stores a layout (assigning its id), evicting the oldest entry when full.
-  std::shared_ptr<LineLayout> insert(qsizetype line, std::unique_ptr<QTextLayout> layout, qreal width);
+  std::shared_ptr<LineLayout>
+  insert(qsizetype line, std::unique_ptr<QTextLayout> layout, qreal width, QString text = {});
 
   // Lines [firstLine, firstLine + oldCount) were replaced by newCount lines: drop the replaced
   // ones and renumber everything after.

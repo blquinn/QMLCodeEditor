@@ -40,9 +40,15 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_scroll->appendChildNode(m_backdrop);
   m_scroll->appendChildNode(m_rows);
   m_scroll->appendChildNode(m_cursorFade);
+  // Fixed order gives the stacking: current line, selection, marks, then (above the text) the cursor.
   m_currentLineBatch = std::make_unique<RectBatch>(window);
   m_selectionBatch = std::make_unique<RectBatch>(window);
+  m_markBatch = std::make_unique<RectBatch>(window);
   m_cursorBatch = std::make_unique<RectBatch>(window);
+  m_backdrop->appendChildNode(m_currentLineBatch->node());
+  m_backdrop->appendChildNode(m_selectionBatch->node());
+  m_backdrop->appendChildNode(m_markBatch->node());
+  m_cursorFade->appendChildNode(m_cursorBatch->node());
 }
 
 bool EditorScene::RectBatch::update(const QList<QRectF> &rects, const QColor &color) {
@@ -52,7 +58,7 @@ bool EditorScene::RectBatch::update(const QList<QRectF> &rects, const QColor &co
     delete m_nodes.takeLast();
   while (m_nodes.size() < rects.size()) {
     m_nodes.append(m_window->createRectangleNode());
-    m_group.appendChildNode(m_nodes.last());
+    m_group->appendChildNode(m_nodes.last());
   }
   for (qsizetype i = 0; i < rects.size(); ++i) {
     if (i >= m_rects.size() || rects[i] != m_rects[i])
@@ -68,44 +74,32 @@ bool EditorScene::RectBatch::update(const QList<QRectF> &rects, const QColor &co
 void EditorScene::syncOverlays(const FrameParams &p) {
   const qreal lh = p.lineHeight;
   auto rectFor = [&](const RowSpan &span) {
-    return QRectF(span.x0, double(span.row - m_originRow) * lh, span.x1 - span.x0, lh);
+    return QRectF(
+      span.x0, double(span.row - m_originRow) * lh + span.y, span.x1 - span.x0,
+      span.height < 0 ? lh : span.height
+    );
   };
-  QList<QRectF> currentLine, selection, cursor;
-  if (p.currentLine)
-    for (const RowSpan &span : *p.currentLine)
-      currentLine.append(rectFor(span));
-  if (p.selection)
-    for (const RowSpan &span : *p.selection)
-      selection.append(rectFor(span));
+  auto rects = [&](const QList<RowSpan> *spans) {
+    QList<QRectF> out;
+    if (spans)
+      for (const RowSpan &span : *spans)
+        out.append(rectFor(span));
+    return out;
+  };
+  QList<QRectF> cursor;
   if (p.hasCursor)
     cursor.append(rectFor(p.cursor));
 
-  bool changed = m_currentLineBatch->update(currentLine, p.currentLineColor);
-  changed |= m_selectionBatch->update(selection, p.selectionColor);
+  bool changed = m_currentLineBatch->update(rects(p.currentLine), p.currentLineColor);
+  changed |= m_selectionBatch->update(rects(p.selection), p.selectionColor);
+  changed |= m_markBatch->update(rects(p.marks), p.markColor);
   changed |= m_cursorBatch->update(cursor, p.cursorColor);
   if (changed)
     ++m_stats.overlayUpdates;
-
-  // Batches with nothing to draw stay out of the tree.
-  auto place = [](QSGNode *parent, RectBatch &batch, bool wanted) {
-    QSGNode *node = batch.node();
-    if (wanted && node->parent() != parent)
-      parent->appendChildNode(node);
-    else if (!wanted && node->parent() == parent)
-      parent->removeChildNode(node);
-  };
-  place(m_backdrop, *m_currentLineBatch, !currentLine.isEmpty());
-  place(m_backdrop, *m_selectionBatch, !selection.isEmpty());
-  place(m_cursorFade, *m_cursorBatch, !cursor.isEmpty());
   m_cursorFade->setOpacity(p.cursorVisible ? 1.0 : 0.0);
 }
 
 EditorScene::~EditorScene() {
-  // A batch's group node is a member of the batch, so it must leave the tree before the tree
-  // would try to delete it.
-  for (RectBatch *batch : {m_currentLineBatch.get(), m_selectionBatch.get(), m_cursorBatch.get()})
-    if (QSGNode *parent = batch->node()->parent())
-      parent->removeChildNode(batch->node());
   // Attached items belong to the tree and die with it; pooled ones are ours to delete.
   for (auto &[row, item] : m_active)
     delete item;

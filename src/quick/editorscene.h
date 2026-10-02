@@ -30,6 +30,8 @@ struct RowSpan {
   qsizetype row = 0;
   qreal x0 = 0;
   qreal x1 = 0;
+  qreal y = 0;       // offset below the row's top
+  qreal height = -1; // negative: the full row height
 };
 
 // What the scene needs from the editor for one frame. Built on the GUI thread, consumed in
@@ -49,6 +51,8 @@ struct FrameParams {
   QColor cursorColor;
   const QList<RowSpan> *currentLine = nullptr; // at most one span; empty when a selection exists
   const QList<RowSpan> *selection = nullptr;
+  QColor markColor;
+  const QList<RowSpan> *marks = nullptr; // visible-whitespace marks (tabs), drawn over the selection
   bool hasCursor = false;
   RowSpan cursor;            // x0 is the cursor's x; x1 - x0 its width
   bool cursorVisible = true; // the blink phase; drawn through opacity so a blink costs no geometry
@@ -93,19 +97,17 @@ private:
 
   // A group of same-colored rectangles, one QSGRectangleNode each. Rectangle nodes are drawn
   // natively on every backend (including the software one) and the renderer batches them
-  // because they share a material.
+  // because they share a material. The group node is created here and handed to the scene tree.
   class RectBatch {
   public:
-    explicit RectBatch(QQuickWindow *window) : m_window(window) {
-      m_group.setFlag(QSGNode::OwnedByParent, false);
-    }
-    QSGNode *node() { return &m_group; }
+    explicit RectBatch(QQuickWindow *window) : m_window(window), m_group(new QSGNode) {}
+    QSGNode *node() const { return m_group; }
     // Returns false when nothing changed.
     bool update(const QList<QRectF> &rects, const QColor &color);
 
   private:
     QQuickWindow *m_window;
-    QSGNode m_group;
+    QSGNode *m_group; // owned by its parent in the scene tree
     QList<QSGRectangleNode *> m_nodes;
     QList<QRectF> m_rects;
     QColor m_color;
@@ -122,7 +124,7 @@ private:
   QSGNode *m_backdrop = nullptr;
   QSGNode *m_rows = nullptr;
   QSGOpacityNode *m_cursorFade = nullptr;
-  std::unique_ptr<RectBatch> m_currentLineBatch, m_selectionBatch, m_cursorBatch;
+  std::unique_ptr<RectBatch> m_currentLineBatch, m_selectionBatch, m_markBatch, m_cursorBatch;
   std::unordered_map<qsizetype, Item *> m_active;
   QList<Item *> m_free;
   qsizetype m_originRow = 0;

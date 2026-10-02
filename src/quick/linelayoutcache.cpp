@@ -17,7 +17,7 @@ std::shared_ptr<LineLayout> LineLayoutCache::find(qsizetype line) {
 }
 
 std::shared_ptr<LineLayout>
-LineLayoutCache::insert(qsizetype line, std::unique_ptr<QTextLayout> layout, qreal width) {
+LineLayoutCache::insert(qsizetype line, std::unique_ptr<QTextLayout> layout, qreal width, QString text) {
   if (const auto it = m_index.find(line); it != m_index.end()) {
     m_entries.erase(it->second);
     m_index.erase(it);
@@ -26,6 +26,7 @@ LineLayoutCache::insert(qsizetype line, std::unique_ptr<QTextLayout> layout, qre
   value->id = m_nextId++;
   value->layout = std::move(layout);
   value->width = width;
+  value->text = std::move(text);
   m_entries.push_front({line, value});
   m_index[line] = m_entries.begin();
   ++m_stats.created;

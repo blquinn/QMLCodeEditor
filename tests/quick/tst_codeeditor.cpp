@@ -393,6 +393,71 @@ private slots:
     QVERIFY(editor->cursorVisible());
   }
 
+  // Does any pixel in [x0, x1) of the first row differ from the empty row (background or
+  // current-line highlight)?
+  static bool inkInColumns(const QImage &image, qreal x0, qreal x1, int rowHeight) {
+    const QColor bg(0x1e, 0x1e, 0x1e), currentLine(0x2a, 0x2d, 0x2e); // default dark theme
+    for (int y = 0; y < rowHeight; ++y)
+      for (int x = int(std::ceil(x0)); x < int(std::floor(x1)); ++x)
+        if (const QColor c = image.pixelColor(x, y); c != bg && c != currentLine)
+          return true;
+    return false;
+  }
+
+  void tabsFollowTheCellGrid() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setCursorBlinkInterval(0);
+    editor->setCursorPosition(0);
+    editor->setText(QStringLiteral("\tM"));
+    const int lh = int(editor->metrics().lineHeight());
+    const qreal adv = editor->metrics().cellAdvance();
+    QCOMPARE(editor->tabWidth(), 4);
+    for (int tab : {4, 2, 8}) {
+      editor->setTabWidth(tab);
+      QTRY_VERIFY(inkInColumns(view.grabWindow(), tab * adv + 1, (tab + 1) * adv - 1, lh));
+      const QImage image = view.grabWindow();
+      QVERIFY2(!inkInColumns(image, 1, tab * adv - 1, lh), qPrintable(QString::number(tab)));
+      QCOMPARE(editor->rectForPosition(1).left(), tab * adv);
+      QCOMPARE(editor->positionAt(tab * adv + 1, 1), 1);
+      QCOMPARE(editor->positionAt(tab * adv / 2 - 1, 1), 0);
+    }
+  }
+
+  void whitespaceMarksAreOptionalAndDim() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setCursorBlinkInterval(0);
+    editor->setCursorPosition(0);
+    editor->setText(QStringLiteral("M M"));
+    const int lh = int(editor->metrics().lineHeight());
+    const qreal adv = editor->metrics().cellAdvance();
+    QVERIFY(!editor->showWhitespace());
+    QTRY_VERIFY(!inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
+    editor->setShowWhitespace(true);
+    QTRY_VERIFY(inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
+    // The mark uses the whitespace color, much dimmer than the text.
+    const QImage image = view.grabWindow();
+    int brightest = 0;
+    for (int y = 0; y < lh; ++y)
+      for (int x = int(adv) + 1; x < int(2 * adv) - 1; ++x)
+        brightest = qMax(brightest, image.pixelColor(x, y).red());
+    QVERIFY2(brightest <= 0x60, qPrintable(QString::number(brightest)));
+    // Tabs get a mark across their span.
+    editor->setText(QStringLiteral("\tM"));
+    QTRY_VERIFY(inkInColumns(view.grabWindow(), 1, 4 * adv - 1, lh));
+    editor->setShowWhitespace(false);
+    QTRY_VERIFY(!inkInColumns(view.grabWindow(), 1, 4 * adv - 1, lh));
+    editor->setText(QStringLiteral("M M"));
+    QTRY_VERIFY(!inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
+  }
+
   void setTextUpdatesLineCount() {
     CodeEditor editor;
     QSignalSpy spy(&editor, &CodeEditor::lineCountChanged);

@@ -42,6 +42,10 @@ class CodeEditor : public QQuickItem {
       cursorBlinkIntervalChanged FINAL
   )
   Q_PROPERTY(bool cursorVisible READ cursorVisible NOTIFY cursorVisibleChanged FINAL)
+  Q_PROPERTY(int tabWidth READ tabWidth WRITE setTabWidth NOTIFY tabWidthChanged FINAL)
+  Q_PROPERTY(
+    bool showWhitespace READ showWhitespace WRITE setShowWhitespace NOTIFY showWhitespaceChanged FINAL
+  )
   Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
   Q_PROPERTY(qce::Theme *theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
 public:
@@ -57,6 +61,13 @@ public:
 
   QFont font() const { return m_font; }
   void setFont(const QFont &font);
+
+  // Tab stops every `tabWidth` cells (default 4).
+  int tabWidth() const { return m_metrics.tabWidth(); }
+  void setTabWidth(int columns);
+  // Draws tabs and spaces as visible marks in the theme's whitespace color.
+  bool showWhitespace() const { return m_showWhitespace; }
+  void setShowWhitespace(bool show);
 
   // Never null: the editor owns a dark theme until the host assigns one.
   qce::Theme *theme() const { return m_theme; }
@@ -122,6 +133,8 @@ signals:
   void loadingChanged();
   void loadProgressChanged();
   void fontChanged();
+  void tabWidthChanged();
+  void showWhitespaceChanged();
   void selectionChanged();
   void cursorBlinkIntervalChanged();
   void cursorVisibleChanged();
@@ -155,16 +168,19 @@ private:
   qce::SceneStats m_sceneStats; // copied from the scene on the render thread during sync
   void updateContentSize();
   void buildOverlays();
+  void buildTabMarks();
   void restartBlink();
   qreal xForColumn(const qce::LineLayout &layout, qsizetype column) const;
   void invalidatePlan();
 
   qce::AnchorId m_headAnchor = qce::InvalidAnchor;
   qce::AnchorId m_selectionAnchor = qce::InvalidAnchor;
+  bool m_showWhitespace = false;
   QTimer m_blinkTimer;
   bool m_cursorVisible = true;
   QList<qce::RowSpan> m_currentLineSpans;
   QList<qce::RowSpan> m_selectionSpans;
+  QList<qce::RowSpan> m_markSpans;
   qce::RowSpan m_cursorSpan;
   bool m_hasCursor = false;
   qce::Selection m_lastSelection;

@@ -118,13 +118,13 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Only lines intersecting the viewport (plus a small margin) are laid out; cache keyed by line and invalidated on edit.
 - [x] **RENDER-04** Pooled `QSGTextNode`s fed by per-line `QTextLayout` — done 2026-10-02 (28dd27b)
   - Line nodes are reused as lines scroll in and out; no per-frame allocation in steady-state scrolling.
-- [~] **RENDER-05** Cursor and selection geometry
+- [x] **RENDER-05** Cursor and selection geometry — done 2026-10-02 (97f63ad)
   - Batched geometry nodes behind and above the text; cursor blink timer.
 - [x] **RENDER-06** Theme object — done 2026-10-02 (beb5f5e)
   - Colors for text, background, selection, cursor, current line; token-style table used by highlighting; exposed to QML for light/dark switching.
 - [x] **RENDER-07** Font metrics with a monospace fast path — done 2026-10-02 (f2bfa7d)
   - Cell-grid math for ASCII/monospace runs; falls back to `QTextLayout` measurement for wide chars, emoji, ligatures and mixed fonts ([ADR 0001](docs/adr/0001-scene-graph-rendering.md)).
-- [ ] **RENDER-08** Tabs and whitespace
+- [~] **RENDER-08** Tabs and whitespace
   - Tab stops, optional visible whitespace, configurable tab width.
 - [x] **RENDER-09** `Highlighter` interface with a no-op implementation — done 2026-10-02 (afcbc5a)
   - Produces per-line format ranges for a requested line range; the tree-sitter implementation in M7 plugs in here.
