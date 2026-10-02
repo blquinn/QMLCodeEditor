@@ -147,7 +147,7 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
   - Char, word, line start/end, document start/end, page up/down; grapheme-aware.
 - [x] **INPUT-04** Mouse input — done 2026-10-02 (c2f42e9)
   - Click, drag-select, double-click word, triple-click line, shift-click extend.
-- [ ] **INPUT-05** Input method (IME) support
+- [x] **INPUT-05** Input method (IME) support — done 2026-10-02 (a916a32)
   - `inputMethodQuery` / `inputMethodEvent` with preedit rendering and correct candidate-window placement.
 - [x] **INPUT-06** Clipboard — done 2026-10-02 (c2f42e9)
   - Cut, copy, paste; selection clipboard on Linux; large pastes don't block the UI.
