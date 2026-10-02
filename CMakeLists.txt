@@ -20,6 +20,7 @@ include(QceWarnings)
 add_subdirectory(src/core)
 add_subdirectory(src/quick)
 add_subdirectory(tests)
+add_subdirectory(demo)
 
 option(QCE_BUILD_BENCHMARKS "Build the benchmark suite" ON)
 if(QCE_BUILD_BENCHMARKS)
