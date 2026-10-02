@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(QMLCodeEditor VERSION 0.1 LANGUAGES CXX)
+project(QMLCodeEditor VERSION 0.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,6 +25,11 @@ endif()
 
 add_subdirectory(src/core)
 add_subdirectory(src/quick)
+option(QCE_SYNTAX "Build tree-sitter syntax highlighting (downloads tree-sitter and grammars with CPM)" ON)
+if(QCE_SYNTAX)
+    include(QceTreeSitter)
+    add_subdirectory(src/syntax)
+endif()
 add_subdirectory(tests)
 add_subdirectory(demo)
 

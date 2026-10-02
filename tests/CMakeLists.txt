@@ -10,3 +10,6 @@ endfunction()
 
 add_subdirectory(core)
 add_subdirectory(quick)
+if(QCE_SYNTAX)
+    add_subdirectory(syntax)
+endif()
