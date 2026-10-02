@@ -16,6 +16,11 @@
 - **Input handlers translate events into commands.** An `InputHandler` receives key events and text input with the `EditContext` and an `InputHost` for the things only the item can do (clipboard, scrolling). `DefaultInputHandler` uses `QKeySequence::StandardKey` matching so platform shortcuts are right; a vim handler (M10) implements the same interface.
 - **Selection change signalling is batched.** `SelectionSet::Batch` holds back `changed()` across a multi-step edit and emits once.
 
+- **Focus drives the cursor.** Only a focused editor draws and blinks its cursor, and blinking stops (cursor solid) after 10 s without input, so an idle editor renders no frames at all.
+- **Mouse gestures live in the item.** Click counts (word, line) come from event timestamps and the platform's double-click interval; a press followed by a double-click event with the same timestamp is one click. Dragging selects by character, word or line from the first selected unit, and auto-scrolls on a timer while the pointer is outside.
+- **Clipboard work scales with the selection, not the document.** Ropes are persistent, so copy takes slices synchronously and builds the `QString` on a worker above 1M units; a large paste builds its rope on a worker and lands in a range held by anchors, so edits made meanwhile move it instead of invalidating it. Selecting with the mouse also fills the selection clipboard where the platform has one.
+- **Input-method composition is a layout concern, not a document one.** The preedit is inserted into the laid-out text of its line (anchored, so it follows edits) and is never in the rope; columns at or after it shift in `xForColumn`/`columnForX`, so hit-testing and the cursor rectangle stay consistent. A cursor move under a composition ends it.
+
 ## Consequences
 
 - Multi-cursor (M6) enlarges the set; commands already iterate it. M6 still has to make the per-frame overlay build and anchor churn scale to 10,000 selections (today `set()` recreates every anchor, and `buildOverlays()` walks all selections).

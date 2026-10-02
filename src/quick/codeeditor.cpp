@@ -1,5 +1,6 @@
 #include "codeeditor.h"
 
+#include "core/filesaver.h"
 #include "core/textboundaries.h"
 
 #include <QtConcurrent/QtConcurrentRun>
@@ -185,6 +186,8 @@ void CodeEditor::invalidateLayouts() {
 }
 
 qsizetype CodeEditor::cursorPosition() const { return m_selections.primary().head; }
+qsizetype CodeEditor::cursorLine() const { return m_document.rope().positionAt(cursorPosition()).line; }
+qsizetype CodeEditor::cursorColumn() const { return m_document.rope().positionAt(cursorPosition()).column; }
 qsizetype CodeEditor::selectionStart() const { return m_selections.primary().start(); }
 qsizetype CodeEditor::selectionEnd() const { return m_selections.primary().end(); }
 
@@ -897,6 +900,28 @@ void CodeEditor::load(const QUrl &file) {
   emit loadProgressChanged();
   m_document.load(path);
   emit loadingChanged();
+}
+
+void CodeEditor::save(const QUrl &file) {
+  const QString path = file.isLocalFile() ? file.toLocalFile() : file.toString();
+  struct Outcome {
+    bool ok;
+    QString error;
+  };
+  auto *watcher = new QFutureWatcher<Outcome>(this);
+  connect(watcher, &QFutureWatcher<Outcome>::finished, this, [this, watcher, path] {
+    const Outcome outcome = watcher->result();
+    if (outcome.ok)
+      emit saved(path);
+    else
+      emit saveFailed(outcome.error);
+    watcher->deleteLater();
+  });
+  watcher->setFuture(QtConcurrent::run([rope = m_document.snapshot().rope(), path, format = m_document.format()] {
+    QString error;
+    const bool ok = qce::saveFile(rope, path, format, &error);
+    return Outcome{ok, error};
+  }));
 }
 
 void CodeEditor::onDocumentReset() {

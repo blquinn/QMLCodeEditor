@@ -9,13 +9,21 @@ ApplicationWindow {
 
     // Set from the command line by main.cpp.
     property url initialFile
+    // The file shown, for Save; empty for an unnamed buffer.
+    property url currentFile
 
     width: 1100
     height: 720
     visible: true
     title: qsTr("QMLCodeEditor demo")
 
-    Component.onCompleted: if (initialFile.toString() !== "") editor.load(initialFile)
+    Component.onCompleted: {
+        if (initialFile.toString() !== "") {
+            currentFile = initialFile
+            editor.load(initialFile)
+        }
+        editor.forceActiveFocus()
+    }
 
     header: ToolBar {
         RowLayout {
@@ -27,6 +35,41 @@ ApplicationWindow {
             ToolButton {
                 text: qsTr("Open…")
                 onClicked: openDialog.open()
+            }
+            ToolButton {
+                text: qsTr("Save")
+                enabled: window.currentFile.toString() !== ""
+                onClicked: editor.save(window.currentFile)
+            }
+            ToolButton {
+                text: qsTr("Undo")
+                enabled: editor.canUndo
+                onClicked: editor.undo()
+            }
+            ToolButton {
+                text: qsTr("Redo")
+                enabled: editor.canRedo
+                onClicked: editor.redo()
+            }
+            ToolButton {
+                text: qsTr("Cut")
+                onClicked: editor.cut()
+            }
+            ToolButton {
+                text: qsTr("Copy")
+                onClicked: editor.copy()
+            }
+            ToolButton {
+                text: qsTr("Paste")
+                onClicked: editor.paste()
+            }
+            CheckBox {
+                text: qsTr("Read-only")
+                onToggled: editor.readOnly = checked
+            }
+            CheckBox {
+                text: qsTr("Tabs")
+                onToggled: editor.insertSpaces = !checked
             }
             CheckBox {
                 id: darkMode
@@ -66,9 +109,16 @@ ApplicationWindow {
             anchors.rightMargin: 8
             Label {
                 text: editor.loading ? qsTr("Loading… %1%").arg(Math.round(editor.loadProgress * 100))
-                                     : qsTr("Ready")
+                                     : statusText
+                property string statusText: qsTr("Ready")
+                id: statusLabel
             }
             Item { Layout.fillWidth: true }
+            Label {
+                text: qsTr("Ln %1, Col %2").arg(editor.cursorLine + 1).arg(editor.cursorColumn + 1)
+                      + (editor.selectionEnd > editor.selectionStart
+                         ? qsTr("  (%1 selected)").arg(editor.selectionEnd - editor.selectionStart) : "")
+            }
             Label { text: qsTr("%1 fps").arg(fps.value.toFixed(0)) }
         }
     }
@@ -110,11 +160,16 @@ ApplicationWindow {
         anchors.rightMargin: vbar.width
         anchors.bottomMargin: hbar.height
 
+        onSaved: (path) => statusLabel.statusText = qsTr("Saved %1").arg(path)
+        onSaveFailed: (error) => statusLabel.statusText = qsTr("Save failed: %1").arg(error)
+
         DropArea {
             anchors.fill: parent
             onDropped: (drop) => {
-                if (drop.hasUrls)
+                if (drop.hasUrls) {
+                    window.currentFile = drop.urls[0]
                     editor.load(drop.urls[0])
+                }
             }
         }
     }
@@ -142,6 +197,10 @@ ApplicationWindow {
     FileDialog {
         id: openDialog
         title: qsTr("Open a file")
-        onAccepted: editor.load(selectedFile)
+        onAccepted: {
+            window.currentFile = selectedFile
+            editor.load(selectedFile)
+            editor.forceActiveFocus()
+        }
     }
 }

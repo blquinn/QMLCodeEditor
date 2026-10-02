@@ -832,6 +832,27 @@ private slots:
     QCOMPARE(editor->document()->rope().toString(), QStringLiteral("ab"));
   }
 
+  void savesInTheBackgroundAndReportsPosition() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("one\ntwo"));
+    editor->setCursorPosition(6);
+    QCOMPARE(editor->cursorLine(), 1);
+    QCOMPARE(editor->cursorColumn(), 2);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("out.txt"));
+    QSignalSpy saved(editor, &CodeEditor::saved);
+    editor->save(QUrl::fromLocalFile(path));
+    QTRY_COMPARE(saved.count(), 1);
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("one\ntwo"));
+    QSignalSpy failed(editor, &CodeEditor::saveFailed);
+    editor->save(QUrl::fromLocalFile(dir.filePath(QStringLiteral("missing/dir/out.txt"))));
+    QTRY_COMPARE(failed.count(), 1);
+  }
+
   void setTextUpdatesLineCount() {
     CodeEditor editor;
     QSignalSpy spy(&editor, &CodeEditor::lineCountChanged);

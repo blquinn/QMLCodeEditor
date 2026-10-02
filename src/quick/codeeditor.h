@@ -45,6 +45,8 @@ class CodeEditor : public QQuickItem {
     bool insertSpaces READ insertSpaces WRITE setInsertSpaces NOTIFY insertSpacesChanged FINAL
   )
   Q_PROPERTY(int indentWidth READ indentWidth WRITE setIndentWidth NOTIFY indentWidthChanged FINAL)
+  Q_PROPERTY(qsizetype cursorLine READ cursorLine NOTIFY selectionChanged FINAL)
+  Q_PROPERTY(qsizetype cursorColumn READ cursorColumn NOTIFY selectionChanged FINAL)
   Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged FINAL)
   Q_PROPERTY(bool canUndo READ canUndo NOTIFY canUndoChanged FINAL)
   Q_PROPERTY(bool canRedo READ canRedo NOTIFY canRedoChanged FINAL)
@@ -112,6 +114,9 @@ public:
   qce::SelectionSet *selections() { return &m_selections; }
   qsizetype cursorPosition() const;
   void setCursorPosition(qsizetype offset);
+  // Zero-based line and UTF-16 column of the primary cursor.
+  qsizetype cursorLine() const;
+  qsizetype cursorColumn() const;
   qsizetype selectionStart() const;
   qsizetype selectionEnd() const;
   // Selects [anchor, head] with the cursor at `head`.
@@ -181,6 +186,9 @@ public:
   // Loads a file in the background; the first lines show while the rest is read. Accepts a local
   // file URL or a plain path.
   Q_INVOKABLE void load(const QUrl &file);
+  // Writes the text to `file` in the format it was loaded with, on a worker thread (the text is a
+  // snapshot, so editing can continue). Reports through saved() or saveFailed().
+  Q_INVOKABLE void save(const QUrl &file);
 
 signals:
   void lineCountChanged();
@@ -203,6 +211,8 @@ signals:
   void contentHeightChanged();
   void themeChanged();
   void loadFailed(const QString &error);
+  void saved(const QString &path);
+  void saveFailed(const QString &error);
 
 protected:
   void updatePolish() override;

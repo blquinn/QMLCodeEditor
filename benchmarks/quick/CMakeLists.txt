@@ -10,3 +10,9 @@ qt_add_executable(bench_scroll bench_scroll.cpp)
 target_link_libraries(bench_scroll PRIVATE qce_bench_quick QMLCodeEditor qce_warnings)
 add_test(NAME bench_scroll_smoke COMMAND bench_scroll --quick --json ${CMAKE_CURRENT_BINARY_DIR}/bench_scroll_smoke.json)
 set_tests_properties(bench_scroll_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+
+# Keystroke-to-frame benchmark (INPUT-11). Run from a release build on a real display.
+qt_add_executable(bench_typing bench_typing.cpp)
+target_link_libraries(bench_typing PRIVATE qce_bench_quick QMLCodeEditor qce_warnings)
+add_test(NAME bench_typing_smoke COMMAND bench_typing --quick --json ${CMAKE_CURRENT_BINARY_DIR}/bench_typing_smoke.json)
+set_tests_properties(bench_typing_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
