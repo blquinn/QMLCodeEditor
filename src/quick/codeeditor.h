@@ -3,12 +3,14 @@
 
 #include "core/displaymap.h"
 #include "core/highlighter.h"
+#include "core/selection.h"
 #include "core/textdocument.h"
 #include "quick/editorscene.h"
 #include "quick/linelayoutcache.h"
 #include "quick/textmetrics.h"
 #include "quick/theme.h"
 
+#include <QtCore/QTimer>
 #include <QtCore/QUrl>
 #include <QtGui/QColor>
 #include <QtGui/QFont>
@@ -30,6 +32,16 @@ class CodeEditor : public QQuickItem {
   Q_PROPERTY(qreal contentY READ contentY WRITE setContentY NOTIFY contentYChanged FINAL)
   Q_PROPERTY(qreal contentWidth READ contentWidth NOTIFY contentWidthChanged FINAL)
   Q_PROPERTY(qreal contentHeight READ contentHeight NOTIFY contentHeightChanged FINAL)
+  Q_PROPERTY(
+    qsizetype cursorPosition READ cursorPosition WRITE setCursorPosition NOTIFY selectionChanged FINAL
+  )
+  Q_PROPERTY(qsizetype selectionStart READ selectionStart NOTIFY selectionChanged FINAL)
+  Q_PROPERTY(qsizetype selectionEnd READ selectionEnd NOTIFY selectionChanged FINAL)
+  Q_PROPERTY(
+    int cursorBlinkInterval READ cursorBlinkInterval WRITE setCursorBlinkInterval NOTIFY
+      cursorBlinkIntervalChanged FINAL
+  )
+  Q_PROPERTY(bool cursorVisible READ cursorVisible NOTIFY cursorVisibleChanged FINAL)
   Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
   Q_PROPERTY(qce::Theme *theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
 public:
@@ -71,6 +83,19 @@ public:
   qreal contentWidth() const { return m_contentWidth; }
   qreal contentHeight() const { return m_contentHeight; }
 
+  // Interim single cursor and selection (RENDER-05); INPUT-01 replaces them with the SelectionSet.
+  // Both ends are anchors, so they follow edits. cursorPosition is the head of the selection.
+  qsizetype cursorPosition() const;
+  void setCursorPosition(qsizetype offset);
+  qsizetype selectionStart() const;
+  qsizetype selectionEnd() const;
+  // Selects [anchor, head] with the cursor at `head`.
+  Q_INVOKABLE void select(qsizetype anchor, qsizetype head);
+  // Time in ms between blink phases; 0 keeps the cursor solid. Any cursor movement shows it.
+  int cursorBlinkInterval() const { return m_blinkTimer.interval(); }
+  void setCursorBlinkInterval(int ms);
+  bool cursorVisible() const { return m_cursorVisible; }
+
   // Item coordinates -> buffer offset (like TextEdit.positionAt), and back: the rectangle of the
   // character cell at `offset` in item coordinates. Both go through the display map.
   Q_INVOKABLE qsizetype positionAt(qreal x, qreal y);
@@ -97,6 +122,9 @@ signals:
   void loadingChanged();
   void loadProgressChanged();
   void fontChanged();
+  void selectionChanged();
+  void cursorBlinkIntervalChanged();
+  void cursorVisibleChanged();
   void contentXChanged();
   void contentYChanged();
   void contentWidthChanged();
@@ -126,7 +154,20 @@ private:
   QList<qce::FramePlanRow> m_plan;
   qce::SceneStats m_sceneStats; // copied from the scene on the render thread during sync
   void updateContentSize();
+  void buildOverlays();
+  void restartBlink();
+  qreal xForColumn(const qce::LineLayout &layout, qsizetype column) const;
   void invalidatePlan();
+
+  qce::AnchorId m_headAnchor = qce::InvalidAnchor;
+  qce::AnchorId m_selectionAnchor = qce::InvalidAnchor;
+  QTimer m_blinkTimer;
+  bool m_cursorVisible = true;
+  QList<qce::RowSpan> m_currentLineSpans;
+  QList<qce::RowSpan> m_selectionSpans;
+  qce::RowSpan m_cursorSpan;
+  bool m_hasCursor = false;
+  qce::Selection m_lastSelection;
 
   qreal m_contentX = 0;
   qreal m_contentY = 0;

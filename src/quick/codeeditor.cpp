@@ -16,6 +16,16 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
 
   m_highlighter = m_nullHighlighter = new qce::NullHighlighter(this);
 
+  m_headAnchor = m_document.anchors().create(0, qce::Gravity::Right);
+  m_selectionAnchor = m_document.anchors().create(0, qce::Gravity::Right);
+  m_blinkTimer.setInterval(530);
+  connect(&m_blinkTimer, &QTimer::timeout, this, [this] {
+    m_cursorVisible = !m_cursorVisible;
+    emit cursorVisibleChanged();
+    update();
+  });
+  m_blinkTimer.start();
+
   connect(&m_document, &qce::TextDocument::textReset, this, &CodeEditor::onDocumentReset);
   connect(&m_document, &qce::TextDocument::changed, this, &CodeEditor::onDocumentChanged);
   connect(&m_document, &qce::TextDocument::loadProgress, this, [this](qint64 done, qint64 total) {
@@ -88,13 +98,61 @@ void CodeEditor::invalidateLayouts() {
   invalidatePlan();
 }
 
+qsizetype CodeEditor::cursorPosition() const { return m_document.anchors().offset(m_headAnchor); }
+qsizetype CodeEditor::selectionStart() const {
+  return qMin(cursorPosition(), m_document.anchors().offset(m_selectionAnchor));
+}
+qsizetype CodeEditor::selectionEnd() const {
+  return qMax(cursorPosition(), m_document.anchors().offset(m_selectionAnchor));
+}
+
+void CodeEditor::setCursorPosition(qsizetype offset) { select(offset, offset); }
+
+void CodeEditor::select(qsizetype anchor, qsizetype head) {
+  const qce::Rope &rope = m_document.rope();
+  anchor = rope.snapToCodePoint(qBound<qsizetype>(0, anchor, rope.length()));
+  head = rope.snapToCodePoint(qBound<qsizetype>(0, head, rope.length()));
+  if (anchor == m_document.anchors().offset(m_selectionAnchor) && head == cursorPosition())
+    return;
+  // Anchors can't be moved, so replace them.
+  m_document.anchors().remove(m_selectionAnchor);
+  m_document.anchors().remove(m_headAnchor);
+  m_selectionAnchor = m_document.anchors().create(anchor, qce::Gravity::Right);
+  m_headAnchor = m_document.anchors().create(head, qce::Gravity::Right);
+  m_lastSelection = {anchor, head};
+  emit selectionChanged();
+  restartBlink();
+  invalidatePlan();
+}
+
+void CodeEditor::setCursorBlinkInterval(int ms) {
+  ms = qMax(0, ms);
+  if (ms == cursorBlinkInterval())
+    return;
+  m_blinkTimer.setInterval(ms);
+  emit cursorBlinkIntervalChanged();
+  restartBlink();
+}
+
+// Shows the cursor and restarts the blink phase, so it never vanishes right after it moved.
+void CodeEditor::restartBlink() {
+  if (!m_cursorVisible) {
+    m_cursorVisible = true;
+    emit cursorVisibleChanged();
+  }
+  if (m_blinkTimer.interval() > 0)
+    m_blinkTimer.start();
+  else
+    m_blinkTimer.stop();
+}
+
 void CodeEditor::setContentX(qreal x) {
   x = qBound<qreal>(0, x, qMax<qreal>(0, m_contentWidth - width()));
   if (x == m_contentX)
     return;
   m_contentX = x;
   emit contentXChanged();
-  update();
+  invalidatePlan(); // the current-line highlight spans the visible columns
 }
 
 void CodeEditor::setContentY(qreal y) {
@@ -132,6 +190,51 @@ void CodeEditor::wheelEvent(QWheelEvent *event) {
   setContentX(m_contentX - delta.x());
   setContentY(m_contentY - delta.y());
   event->setAccepted(m_contentX != beforeX || m_contentY != beforeY);
+}
+
+qreal CodeEditor::xForColumn(const qce::LineLayout &layout, qsizetype column) const {
+  const QString &text = layout.layout->text();
+  return m_metrics.isSimple(text) ? m_metrics.xForColumn(text, column)
+                                  : layout.layout->lineAt(0).cursorToX(int(column));
+}
+
+// Cursor, selection and current-line spans for the rows in the plan. A selection covering the
+// whole of a huge document still only produces spans for the rows being drawn.
+void CodeEditor::buildOverlays() {
+  m_currentLineSpans.clear();
+  m_selectionSpans.clear();
+  m_hasCursor = false;
+  const qce::Rope &rope = m_document.rope();
+  auto planLayout = [&](qsizetype row) -> const qce::LineLayout * {
+    return row >= m_planFirst && row <= m_planLast ? m_plan[row - m_planFirst].layout.get() : nullptr;
+  };
+  const qreal cell = m_metrics.cellAdvance();
+
+  const qce::TextPosition head = rope.positionAt(cursorPosition());
+  const qsizetype headRow = m_map.rowForPosition(head);
+  if (const qce::LineLayout *layout = planLayout(headRow)) {
+    const qreal x = xForColumn(*layout, head.column);
+    m_cursorSpan = {headRow, x, x + 2};
+    m_hasCursor = true;
+  }
+
+  if (selectionStart() == selectionEnd()) {
+    if (planLayout(headRow))
+      m_currentLineSpans.append({headRow, m_contentX, m_contentX + width()});
+    return;
+  }
+  const qce::TextPosition start = rope.positionAt(selectionStart());
+  const qce::TextPosition end = rope.positionAt(selectionEnd());
+  const qsizetype startRow = m_map.rowForPosition(start);
+  const qsizetype endRow = m_map.rowForPosition(end);
+  for (qsizetype row = qMax(startRow, m_planFirst); row <= qMin(endRow, m_planLast); ++row) {
+    const qce::LineLayout *layout = planLayout(row);
+    const qreal x0 = row == startRow ? xForColumn(*layout, start.column) : 0;
+    // Rows the selection continues past include their line break as one cell.
+    const qreal x1 = row == endRow ? xForColumn(*layout, end.column) : layout->width + cell;
+    if (x1 > x0)
+      m_selectionSpans.append({row, x0, x1});
+  }
 }
 
 qsizetype CodeEditor::positionAt(qreal x, qreal y) {
@@ -199,6 +302,13 @@ void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
   }
   updateContentSize();
   invalidatePlan();
+  // Edits move the anchors; tell listeners when the cursor or selection ended up elsewhere.
+  const qce::Selection now{m_document.anchors().offset(m_selectionAnchor), cursorPosition()};
+  if (now != m_lastSelection) {
+    m_lastSelection = now;
+    emit selectionChanged();
+    restartBlink();
+  }
 }
 
 std::shared_ptr<qce::LineLayout>
@@ -256,6 +366,7 @@ void CodeEditor::updatePolish() {
   m_planFirst = firstRow;
   m_planLast = lastRow;
   m_planDirty = false;
+  buildOverlays();
   m_maxLineWidth = widest;
   updateContentSize();
   update();
@@ -282,6 +393,14 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.contentX = m_contentX;
   params.contentY = m_contentY;
   params.rows = &m_plan;
+  params.currentLineColor = m_theme->currentLine();
+  params.selectionColor = m_theme->selection();
+  params.cursorColor = m_theme->cursor();
+  params.currentLine = &m_currentLineSpans;
+  params.selection = &m_selectionSpans;
+  params.hasCursor = m_hasCursor;
+  params.cursor = m_cursorSpan;
+  params.cursorVisible = m_cursorVisible;
   scene->sync(params);
   m_sceneStats = scene->stats();
   return scene;

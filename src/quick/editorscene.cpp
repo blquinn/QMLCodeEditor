@@ -3,6 +3,7 @@
 #include <QtGui/QMatrix4x4>
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGGeometry>
+#include <QtQuick/QSGOpacityNode>
 #include <QtQuick/QSGRectangleNode>
 #include <QtQuick/QSGTextNode>
 
@@ -32,9 +33,79 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
 
   m_scroll = new QSGTransformNode;
   m_clip->appendChildNode(m_scroll);
+
+  m_backdrop = new QSGNode;
+  m_rows = new QSGNode;
+  m_cursorFade = new QSGOpacityNode;
+  m_scroll->appendChildNode(m_backdrop);
+  m_scroll->appendChildNode(m_rows);
+  m_scroll->appendChildNode(m_cursorFade);
+  m_currentLineBatch = std::make_unique<RectBatch>(window);
+  m_selectionBatch = std::make_unique<RectBatch>(window);
+  m_cursorBatch = std::make_unique<RectBatch>(window);
+}
+
+bool EditorScene::RectBatch::update(const QList<QRectF> &rects, const QColor &color) {
+  if (rects == m_rects && color == m_color)
+    return false;
+  while (m_nodes.size() > rects.size())
+    delete m_nodes.takeLast();
+  while (m_nodes.size() < rects.size()) {
+    m_nodes.append(m_window->createRectangleNode());
+    m_group.appendChildNode(m_nodes.last());
+  }
+  for (qsizetype i = 0; i < rects.size(); ++i) {
+    if (i >= m_rects.size() || rects[i] != m_rects[i])
+      m_nodes[i]->setRect(rects[i]);
+    if (color != m_color || i >= m_rects.size())
+      m_nodes[i]->setColor(color);
+  }
+  m_rects = rects;
+  m_color = color;
+  return true;
+}
+
+void EditorScene::syncOverlays(const FrameParams &p) {
+  const qreal lh = p.lineHeight;
+  auto rectFor = [&](const RowSpan &span) {
+    return QRectF(span.x0, double(span.row - m_originRow) * lh, span.x1 - span.x0, lh);
+  };
+  QList<QRectF> currentLine, selection, cursor;
+  if (p.currentLine)
+    for (const RowSpan &span : *p.currentLine)
+      currentLine.append(rectFor(span));
+  if (p.selection)
+    for (const RowSpan &span : *p.selection)
+      selection.append(rectFor(span));
+  if (p.hasCursor)
+    cursor.append(rectFor(p.cursor));
+
+  bool changed = m_currentLineBatch->update(currentLine, p.currentLineColor);
+  changed |= m_selectionBatch->update(selection, p.selectionColor);
+  changed |= m_cursorBatch->update(cursor, p.cursorColor);
+  if (changed)
+    ++m_stats.overlayUpdates;
+
+  // Batches with nothing to draw stay out of the tree.
+  auto place = [](QSGNode *parent, RectBatch &batch, bool wanted) {
+    QSGNode *node = batch.node();
+    if (wanted && node->parent() != parent)
+      parent->appendChildNode(node);
+    else if (!wanted && node->parent() == parent)
+      parent->removeChildNode(node);
+  };
+  place(m_backdrop, *m_currentLineBatch, !currentLine.isEmpty());
+  place(m_backdrop, *m_selectionBatch, !selection.isEmpty());
+  place(m_cursorFade, *m_cursorBatch, !cursor.isEmpty());
+  m_cursorFade->setOpacity(p.cursorVisible ? 1.0 : 0.0);
 }
 
 EditorScene::~EditorScene() {
+  // A batch's group node is a member of the batch, so it must leave the tree before the tree
+  // would try to delete it.
+  for (RectBatch *batch : {m_currentLineBatch.get(), m_selectionBatch.get(), m_cursorBatch.get()})
+    if (QSGNode *parent = batch->node()->parent())
+      parent->removeChildNode(batch->node());
   // Attached items belong to the tree and die with it; pooled ones are ours to delete.
   for (auto &[row, item] : m_active)
     delete item;
@@ -57,14 +128,14 @@ EditorScene::Item *EditorScene::acquire() {
     ++m_stats.nodesCreated;
   }
   if (!item->attached) {
-    m_scroll->appendChildNode(item->transform);
+    m_rows->appendChildNode(item->transform);
     item->attached = true;
   }
   return item;
 }
 
 void EditorScene::release(Item *item) {
-  m_scroll->removeChildNode(item->transform);
+  m_rows->removeChildNode(item->transform);
   item->attached = false;
   item->row = -1;
   item->layoutId = 0;
@@ -94,6 +165,7 @@ void EditorScene::sync(const FrameParams &p) {
     for (auto &[row, item] : m_active)
       release(item);
     m_active.clear();
+    syncOverlays(p);
     return;
   }
   const qsizetype firstRow = rows.first().row;
@@ -149,6 +221,8 @@ void EditorScene::sync(const FrameParams &p) {
       ++m_stats.linesFilled;
     }
   }
+
+  syncOverlays(p);
 }
 
 } // namespace qce

@@ -112,13 +112,13 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
 
 - [x] **RENDER-01** `CodeEditor` as a `QQuickItem` using `updatePaintNode` — done 2026-10-02 (c958c32)
   - Replace the `QQuickPaintedItem` scaffold; `ItemHasContents` set; all scene-graph mutation on the render thread in `updatePaintNode`.
-- [~] **RENDER-02** Scroll model
+- [x] **RENDER-02** Scroll model — done 2026-10-02 (29b22d2)
   - Owned `contentX/contentY/contentWidth/contentHeight` properties so a QML `ScrollBar` can bind to them; kinetic scrolling friendly; scrolling changes a transform only, with no relayout.
 - [x] **RENDER-03** Viewport virtualization with an LRU line-layout cache — done 2026-10-02 (c20f0f4)
   - Only lines intersecting the viewport (plus a small margin) are laid out; cache keyed by line and invalidated on edit.
 - [x] **RENDER-04** Pooled `QSGTextNode`s fed by per-line `QTextLayout` — done 2026-10-02 (28dd27b)
   - Line nodes are reused as lines scroll in and out; no per-frame allocation in steady-state scrolling.
-- [ ] **RENDER-05** Cursor and selection geometry
+- [~] **RENDER-05** Cursor and selection geometry
   - Batched geometry nodes behind and above the text; cursor blink timer.
 - [x] **RENDER-06** Theme object — done 2026-10-02 (beb5f5e)
   - Colors for text, background, selection, cursor, current line; token-style table used by highlighting; exposed to QML for light/dark switching.

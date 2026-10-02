@@ -28,7 +28,7 @@ private slots:
     QVERIFY(editor->flags().testFlag(QQuickItem::ItemHasContents));
     const QImage image = view.grabWindow();
     QVERIFY(!image.isNull());
-    QCOMPARE(image.pixelColor(10, 10), QColor(0x1e, 0x1e, 0x1e));
+    QCOMPARE(image.pixelColor(10, 90), QColor(0x1e, 0x1e, 0x1e));
   }
 
   void themeSwitchRepaints() {
@@ -42,11 +42,11 @@ private slots:
     light.assign(*std::unique_ptr<qce::Theme>(qce::Theme::createLight()));
     editor->setTheme(&light);
     QCOMPARE(editor->theme(), &light);
-    QTRY_COMPARE(view.grabWindow().pixelColor(10, 10), QColor(0xff, 0xff, 0xff));
+    QTRY_COMPARE(view.grabWindow().pixelColor(10, 90), QColor(0xff, 0xff, 0xff));
     light.setProperty("background", QColor(0x10, 0x20, 0x30));
-    QTRY_COMPARE(view.grabWindow().pixelColor(10, 10), QColor(0x10, 0x20, 0x30));
+    QTRY_COMPARE(view.grabWindow().pixelColor(10, 90), QColor(0x10, 0x20, 0x30));
     editor->setTheme(nullptr); // back to the owned default
-    QTRY_COMPARE(view.grabWindow().pixelColor(10, 10), QColor(0x1e, 0x1e, 0x1e));
+    QTRY_COMPARE(view.grabWindow().pixelColor(10, 90), QColor(0x1e, 0x1e, 0x1e));
   }
 
   void themeMapsSpansToFormats() {
@@ -293,6 +293,104 @@ private slots:
     const QRectF row3 = editor->rectForPosition(editor->document()->rope().lineStart(3));
     QCOMPARE(row3.top(), 0.0);
     QVERIFY(before.top() > 0);
+  }
+
+  void selectionCursorAndCurrentLineGeometry() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setCursorBlinkInterval(0);
+    editor->setText(QStringLiteral("MMMMMMMMMM\nMMMMMMMMMM\nMMMMMMMMMM"));
+    QTRY_VERIFY(editor->renderStats().rowsInPlan >= 3);
+    const qreal lh = editor->metrics().lineHeight();
+    const qreal adv = editor->metrics().cellAdvance();
+    const auto *theme = editor->theme();
+    // Sample along the bottom of a row, below the glyph bodies of 'M'.
+    auto pixel = [&](qreal x, int row) {
+      return view.grabWindow().pixelColor(int(x), int((row + 1) * lh) - 1);
+    };
+
+    // No selection: the cursor line is highlighted, and the cursor is a 2px bar at its column.
+    editor->setCursorPosition(4);
+    QTRY_COMPARE(pixel(150, 0), theme->currentLine());
+    QCOMPARE(pixel(150, 1), theme->background());
+    QCOMPARE(pixel(adv * 4 + 1, 0), theme->cursor());
+    QCOMPARE(pixel(adv * 2, 0), theme->currentLine());
+
+    // A selection replaces the line highlight and covers exactly its cells.
+    editor->select(2, 5);
+    QTRY_COMPARE(pixel(adv * 3 + 1, 0), theme->selection());
+    QCOMPARE(pixel(adv * 1 + 1, 0), theme->background());
+    QCOMPARE(pixel(adv * 6, 0), theme->background());
+    QCOMPARE(editor->selectionStart(), 2);
+    QCOMPARE(editor->selectionEnd(), 5);
+    QCOMPARE(editor->cursorPosition(), 5);
+
+    // Across lines: the first row is selected to its end (line break included), the middle row
+    // fully, the last row up to the end column.
+    editor->select(8, editor->document()->rope().lineStart(2) + 3);
+    QTRY_COMPARE(pixel(adv * 10 + 1, 0), theme->selection()); // the line break cell
+    QCOMPARE(pixel(adv * 5, 1), theme->selection());
+    QCOMPARE(pixel(adv * 2, 2), theme->selection());
+    QCOMPARE(pixel(adv * 4, 2), theme->background());
+    QCOMPARE(pixel(adv * 7, 0), theme->background());
+  }
+
+  void selectionFollowsEdits() {
+    CodeEditor editor;
+    editor.setText(QStringLiteral("0123456789"));
+    editor.select(2, 5);
+    QSignalSpy spy(&editor, &CodeEditor::selectionChanged);
+    editor.document()->insert(0, u"ZZ");
+    QCOMPARE(editor.selectionStart(), 4);
+    QCOMPARE(editor.selectionEnd(), 7);
+    QCOMPARE(spy.count(), 1);
+    editor.document()->insert(editor.selectionEnd(), u"!"); // typing at the head moves the cursor on
+    QCOMPARE(editor.cursorPosition(), 8);
+    // Offsets are clamped and never land inside a surrogate pair.
+    editor.setText(QStringLiteral("a\U0001F600b"));
+    editor.setCursorPosition(2);
+    QCOMPARE(editor.cursorPosition(), 1);
+    editor.setCursorPosition(999);
+    QCOMPARE(editor.cursorPosition(), 4);
+  }
+
+  void cursorBlinks() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setText(QStringLiteral("MMMMMMMMMM"));
+    editor->setCursorPosition(4);
+    editor->setCursorBlinkInterval(30);
+    const qreal lh = editor->metrics().lineHeight();
+    const qreal adv = editor->metrics().cellAdvance();
+    QSignalSpy spy(editor, &CodeEditor::cursorVisibleChanged);
+    QTRY_VERIFY(spy.count() >= 2);
+    // Each phase is a repaint of the same scene: no layouts, no nodes.
+    const auto before = editor->renderStats();
+    bool sawShown = false, sawHidden = false;
+    for (int i = 0; i < 60 && !(sawShown && sawHidden); ++i) {
+      const bool visible = editor->cursorVisible();
+      const QColor c = view.grabWindow().pixelColor(int(adv * 4 + 1), int(lh) - 1);
+      // The phase may flip between reading it and rendering, so only count matching samples.
+      if (visible == editor->cursorVisible()) {
+        if (visible && c == editor->theme()->cursor())
+          sawShown = true;
+        if (!visible && c != editor->theme()->cursor())
+          sawHidden = true;
+      }
+      QTest::qWait(10);
+    }
+    QVERIFY(sawShown);
+    QVERIFY(sawHidden);
+    QCOMPARE(editor->renderStats().layoutsCreated, before.layoutsCreated);
+    QCOMPARE(editor->renderStats().scene.nodesCreated, before.scene.nodesCreated);
+    editor->setCursorBlinkInterval(0);
+    QVERIFY(editor->cursorVisible());
   }
 
   void setTextUpdatesLineCount() {
