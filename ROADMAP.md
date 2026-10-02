@@ -181,7 +181,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [x] **WRAP-07** Visual-row cursor movement — done 2026-10-02 (950c5b3)
   - Up/down move by display row with a sticky goal X; Home/End go to row start/end (second press goes to line start/end).
 - [x] **WRAP-08** Wrap toggle at runtime and horizontal scrolling in no-wrap mode — done 2026-10-02 (d674891)
-- [~] **WRAP-09** Very long lines wrap without stalling
+- [x] **WRAP-09** Very long lines wrap without stalling — done 2026-10-02 (88235dd)
   - A 5 MB single line wraps incrementally and stays responsive.
 - [ ] **WRAP-10** Wrap benchmarks
   - Wrap/unwrap/resize timing on generated large files.
