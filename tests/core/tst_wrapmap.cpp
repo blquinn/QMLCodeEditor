@@ -429,6 +429,10 @@ private slots:
     DisplayMap expected(&fresh);
     expected.setBackgroundWrapping(false);
     expected.setWrapConfig(config);
+    // Rows report their line's row count exactly once the line is wrapped to its end.
+    for (const DisplayMap *m : {&expected, &map})
+      for (qsizetype line = 0; line < doc.rope().lineCount(); ++line)
+        m->rowForPosition({line, doc.rope().lineLength(line)});
     const QList<DisplayRow> want = allRows(expected);
     const QList<DisplayRow> got = allRows(map);
     QCOMPARE(got.size(), want.size());
@@ -437,7 +441,9 @@ private slots:
         got[r].line == want[r].line && got[r].startColumn == want[r].startColumn &&
           got[r].endColumn == want[r].endColumn && got[r].rowsInLine == want[r].rowsInLine &&
           qFuzzyCompare(got[r].indent + 1, want[r].indent + 1),
-        qPrintable(u"row %1"_s.arg(r))
+        qPrintable(u"row %1: got line %2 [%3,%4) rows %5 indent %6; want line %7 [%8,%9) rows %10 indent %11"_s.arg(r)
+                     .arg(got[r].line).arg(got[r].startColumn).arg(got[r].endColumn).arg(got[r].rowsInLine).arg(got[r].indent)
+                     .arg(want[r].line).arg(want[r].startColumn).arg(want[r].endColumn).arg(want[r].rowsInLine).arg(want[r].indent))
       );
   }
 
@@ -486,6 +492,85 @@ private slots:
     map.setWrapConfig(gridConfig(20));
     QTRY_COMPARE_WITH_TIMEOUT(map.estimatedLineCount(), 0, 20000);
     expectSameRows(map, doc, gridConfig(20));
+  }
+
+  // ---- Huge lines ------------------------------------------------------------------------------
+
+  static QString hugeText(int words, const QString &suffix = {}) {
+    QString text;
+    text.reserve(words * 6);
+    for (int i = 0; i < words; ++i)
+      text += u"word%1 "_s.arg(i % 10);
+    return text + suffix;
+  }
+
+  void hugeLineIsWrappedOnlyAsFarAsAsked() {
+    const QString text = hugeText(100000); // 600,000 units on one line
+    TextDocument doc;
+    doc.setText(text);
+    DisplayMap map(&doc);
+    map.setBackgroundWrapping(false);
+    const WrapConfig config = gridConfig(80);
+    map.setWrapConfig(config);
+    QElapsedTimer timer;
+    timer.start();
+    const DisplayRow top = map.rowAt(0);
+    QVERIFY2(timer.elapsed() < 200, qPrintable(QString::number(timer.elapsed())));
+    QCOMPARE(top.startColumn, 0);
+    QVERIFY(top.endColumn <= 80);
+    QVERIFY(!top.isLast());
+    // Still an estimate, with a sensible count: the whole line is about 600000 / 78 rows.
+    QCOMPARE(map.estimatedLineCount(), 1);
+    QVERIFY(map.rowCount() > 6000 && map.rowCount() < 9000);
+    // Rows further down are found by scanning further, and agree with wrapping the line in one go.
+    const QList<qsizetype> whole = wrapLine(text, config);
+    const DisplayRow row = map.rowAt(500);
+    QCOMPARE(row.startColumn, whole[499]);
+    QCOMPARE(row.endColumn, whole[500]);
+    QCOMPARE(map.estimatedLineCount(), 1);
+    // The end of the line settles the count.
+    QCOMPARE(map.rowForPosition({0, text.size()}), whole.size());
+    QCOMPARE(map.estimatedLineCount(), 0);
+    QCOMPARE(map.rowCount(), whole.size() + 1);
+    QVERIFY(map.rowAt(map.rowCount() - 1).isLast());
+  }
+
+  void hugeLineConvergesInTheBackground() {
+    const QString text = hugeText(120000) + u"\nsecond line"_s;
+    TextDocument doc;
+    doc.setText(text);
+    DisplayMap map(&doc);
+    const WrapConfig config = gridConfig(60, true, true);
+    map.setWrapConfig(config);
+    QTRY_COMPARE_WITH_TIMEOUT(map.estimatedLineCount(), 0, 30000);
+    expectSameRows(map, doc, config);
+  }
+
+  void editsInAHugeLineKeepTheRowsBeforeThem() {
+    const QString text = hugeText(100000);
+    TextDocument doc;
+    doc.setText(text);
+    DisplayMap map(&doc);
+    map.setBackgroundWrapping(false);
+    const WrapConfig config = gridConfig(70, true);
+    map.setWrapConfig(config);
+    map.rowForPosition({0, text.size()}); // wrap all of it
+    QCOMPARE(map.estimatedLineCount(), 0);
+    // An edit far from the start leaves the line an estimate...
+    doc.insert(400000, u"XXXXXXXXXXXXXXXXXXXX"_s);
+    QCOMPARE(map.estimatedLineCount(), 1);
+    // ...whose first rows are still known: asking for one near the top doesn't scan the rest.
+    const DisplayRow top = map.rowAt(10);
+    QVERIFY(top.endColumn < 1000);
+    QCOMPARE(map.estimatedLineCount(), 1);
+    // Wrapped to the end it is what wrapping the new text from scratch gives.
+    map.rowForPosition({0, doc.length()});
+    QCOMPARE(map.estimatedLineCount(), 0);
+    expectSameRows(map, doc, config);
+    // Editing near the start loses everything after it, but stays correct.
+    doc.insert(10, u"Y"_s);
+    map.rowForPosition({0, doc.length()}); // rows report their line's count exactly only once it is known
+    expectSameRows(map, doc, config);
   }
 
   void turningWrapOffRestoresIdentity() {

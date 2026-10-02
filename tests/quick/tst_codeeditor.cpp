@@ -1178,6 +1178,36 @@ private slots:
     QTest::keyClick(view.get(), Qt::Key_End);
     QVERIFY(editor->contentX() > 0);
   }
+
+  void aFiveMegabyteLineWrapsWithoutStalling() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    QString text;
+    text.reserve(5 * 1024 * 1024);
+    while (text.size() < 5 * 1024 * 1024)
+      text += QStringLiteral("some words of varying lengths, punctuation; and numbers 12345 ");
+    editor->setText(text);
+    QCOMPARE(editor->lineCount(), 1);
+    editor->setWrapMode(CodeEditor::WrapAtViewport);
+    QTRY_VERIFY(editor->displayMap().wrapEnabled());
+    QTRY_VERIFY(editor->renderStats().rowsInPlan > 0 && editor->displayMap().rowCount() > 1000);
+    // The rows in view came from wrapping the beginning of the line only; nothing waited for the rest.
+    QVERIFY2(editor->renderStats().polishMaxNs < 300'000'000ull, qPrintable(QString::number(editor->renderStats().polishMaxNs)));
+    QVERIFY(editor->wrapping());
+    // The view scrolls, types and clicks while the rest is wrapped in the background.
+    editor->setContentY(editor->metrics().lineHeight() * 1000);
+    editor->setCursorPosition(editor->positionAt(10, 10));
+    QTest::keyClick(view.get(), Qt::Key_X);
+    QCOMPARE(editor->document()->length(), text.size() + 1);
+    QTRY_COMPARE_WITH_TIMEOUT(editor->wrapping(), false, 60000);
+    const qsizetype rows = editor->displayMap().rowCountOfLine(0);
+    QVERIFY(rows > 1000);
+    QCOMPARE(editor->contentHeight(), rows * editor->metrics().lineHeight());
+    // And it ends where it should: the last row ends the line.
+    const qce::DisplayRow last = editor->displayMap().rowAt(rows - 1);
+    QVERIFY(last.isLast());
+    QCOMPARE(last.endColumn, editor->document()->length());
+  }
 };
 
 QTEST_MAIN(TstCodeEditor)
