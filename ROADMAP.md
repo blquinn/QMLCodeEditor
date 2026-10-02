@@ -83,25 +83,25 @@ The rope, anchors, change events, undo and file I/O. Pure Qt Core, fully unit-te
 
 **Exit criteria:** load a 100 MB file in under 500 ms to first usable snapshot; 1M random edits keep line/column lookups under 1 µs median; property tests against a `QString` reference model pass; undo/redo round-trips arbitrary edit sequences.
 
-- [ ] **CORE-01** Persistent B-tree rope of UTF-16 chunks
+- [x] **CORE-01** Persistent B-tree rope of UTF-16 chunks — done 2026-10-02 (2dc81d8)
   - Immutable, refcounted nodes; ~1–4 KB leaves; each node summarizes UTF-16 length and newline count. Insert, delete, replace and slice are O(log n).
-- [ ] **CORE-02** O(1) snapshots
+- [x] **CORE-02** O(1) snapshots — done 2026-10-02 (d200fe5)
   - Cheap read-only copies safe to use from other threads (tree-sitter, search).
-- [ ] **CORE-03** Position conversions
+- [x] **CORE-03** Position conversions — done 2026-10-02 (8bf2fe5)
   - offset ↔ (line, column) in O(log n); line start/length queries; surrogate pairs never split by the API.
-- [ ] **CORE-04** Grapheme and word boundaries
+- [x] **CORE-04** Grapheme and word boundaries — done 2026-10-02 (14c7820)
   - Next/previous grapheme (via `QTextBoundaryFinder`, with an ASCII fast path) and word-boundary helpers used by movement and vim.
-- [ ] **CORE-05** Change events
+- [x] **CORE-05** Change events — done 2026-10-02 (5f98032)
   - Each edit emits old range, new range and inserted text length, shaped to feed both tree-sitter `TSInputEdit` and LSP `TextDocumentContentChangeEvent` without translation.
-- [ ] **CORE-06** Anchors
+- [x] **CORE-06** Anchors — done 2026-10-02 (3dff7dc)
   - Offsets that track edits with configurable left/right gravity; the basis for diagnostics, marks, folds and cursors ([ADR 0006](docs/adr/0006-anchored-decorations.md)).
-- [ ] **CORE-07** Undo/redo
+- [x] **CORE-07** Undo/redo — done 2026-10-02 (3178797)
   - Transactions with grouping rules; restores the selection set before/after.
-- [ ] **CORE-08** File loading
+- [x] **CORE-08** File loading — done 2026-10-02 (c4e1c5d)
   - mmap, encoding detection (UTF-8 / UTF-16 / BOM), line-ending detection with CRLF preserved; progressive load so the first snapshot is usable before the whole file is read.
-- [ ] **CORE-09** File saving
+- [x] **CORE-09** File saving — done 2026-10-02 (7011e80)
   - Atomic write; original line endings and encoding preserved.
-- [ ] **CORE-10** Tests and benchmarks for the above
+- [x] **CORE-10** Tests and benchmarks for the above — done 2026-10-02 (6445d89)
   - Randomized differential tests against a `QString` model; load and edit benchmarks in the harness.
 
 ## M2 — Rendering MVP
