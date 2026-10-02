@@ -1,9 +1,13 @@
 #ifndef QCE_THEME_H
 #define QCE_THEME_H
 
+#include "core/highlighter.h"
+
 #include <QtCore/QObject>
 #include <QtCore/QVariantMap>
 #include <QtGui/QColor>
+#include <QtGui/QTextCharFormat>
+#include <QtGui/QTextLayout>
 #include <QtQml/qqmlregistration.h>
 
 namespace qce {
@@ -40,6 +44,12 @@ public:
   QVariantMap tokenStyles() const { return m_tokenStyles; }
   void setTokenStyles(const QVariantMap &styles);
 
+  // Character format for a token style; the default style (and any style the theme doesn't list)
+  // is the foreground color.
+  QTextCharFormat charFormat(qce::TokenStyle style) const;
+  // Layout format ranges for spans of one line; Default spans are skipped.
+  QList<QTextLayout::FormatRange> formatRanges(const QList<qce::HighlightSpan> &spans) const;
+
   // Copies every value from `other` (one changed() signal).
   void assign(const Theme &other);
 
@@ -54,7 +64,10 @@ private:
   QColor m_cursor{0xae, 0xaf, 0xad};
   QColor m_currentLine{0x2a, 0x2d, 0x2e};
   QColor m_whitespace{0x40, 0x40, 0x40};
+  void rebuildFormats();
+
   QVariantMap m_tokenStyles;
+  QTextCharFormat m_formats[size_t(qce::TokenStyle::Count)];
 };
 
 } // namespace qce

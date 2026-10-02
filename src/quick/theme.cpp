@@ -1,5 +1,7 @@
 #include "theme.h"
 
+using namespace Qt::StringLiterals;
+
 namespace qce {
 
 namespace {
@@ -12,7 +14,41 @@ QVariantMap style(const char *color, bool bold = false, bool italic = false) {
 }
 } // namespace
 
-Theme::Theme(QObject *parent) : QObject(parent) {}
+Theme::Theme(QObject *parent) : QObject(parent) {
+  rebuildFormats();
+  // Any property change (including MEMBER writes from QML) can affect the cached formats.
+  connect(this, &Theme::changed, this, &Theme::rebuildFormats);
+}
+
+void Theme::rebuildFormats() {
+  for (size_t i = 0; i < size_t(TokenStyle::Count); ++i) {
+    QTextCharFormat format;
+    format.setForeground(m_foreground);
+    const QVariantMap entry = m_tokenStyles.value(tokenStyleName(TokenStyle(i))).toMap();
+    if (const QColor color = entry.value("color"_L1).value<QColor>(); color.isValid())
+      format.setForeground(color);
+    if (entry.value("bold"_L1).toBool())
+      format.setFontWeight(QFont::Bold);
+    if (entry.value("italic"_L1).toBool())
+      format.setFontItalic(true);
+    m_formats[i] = format;
+  }
+}
+
+QTextCharFormat Theme::charFormat(TokenStyle style) const {
+  return m_formats[qMin(size_t(style), size_t(TokenStyle::Count) - 1)];
+}
+
+QList<QTextLayout::FormatRange> Theme::formatRanges(const QList<HighlightSpan> &spans) const {
+  QList<QTextLayout::FormatRange> ranges;
+  ranges.reserve(spans.size());
+  for (const HighlightSpan &span : spans) {
+    if (span.style == TokenStyle::Default || span.length <= 0)
+      continue;
+    ranges.append({int(span.start), int(span.length), charFormat(span.style)});
+  }
+  return ranges;
+}
 
 void Theme::setTokenStyles(const QVariantMap &styles) {
   if (m_tokenStyles == styles)
@@ -48,6 +84,7 @@ Theme *Theme::createDark(QObject *parent) {
     {"punctuation", style("#d4d4d4")},
     {"preprocessor", style("#c586c0")}
   };
+  t->rebuildFormats();
   return t;
 }
 
@@ -72,6 +109,7 @@ Theme *Theme::createLight(QObject *parent) {
     {"punctuation", style("#1f1f1f")},
     {"preprocessor", style("#af00db")}
   };
+  t->rebuildFormats();
   return t;
 }
 

@@ -23,6 +23,8 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   m_ownedTheme = m_theme = qce::Theme::createDark(this);
   connect(m_theme, &qce::Theme::changed, this, &CodeEditor::onThemeChanged);
 
+  m_highlighter = m_nullHighlighter = new qce::NullHighlighter(this);
+
   connect(&m_document, &qce::TextDocument::textReset, this, &CodeEditor::onDocumentReset);
   connect(&m_document, &qce::TextDocument::changed, this, &CodeEditor::onDocumentChanged);
   connect(&m_document, &qce::TextDocument::loadProgress, this, [this](qint64 done, qint64 total) {
@@ -61,6 +63,19 @@ void CodeEditor::setTheme(qce::Theme *theme) {
   emit themeChanged();
   onThemeChanged();
 }
+
+void CodeEditor::setHighlighter(qce::Highlighter *highlighter) {
+  if (!highlighter)
+    highlighter = m_nullHighlighter;
+  if (highlighter == m_highlighter)
+    return;
+  disconnect(m_highlighter, &qce::Highlighter::invalidated, this, &CodeEditor::onHighlightInvalidated);
+  m_highlighter = highlighter;
+  connect(m_highlighter, &qce::Highlighter::invalidated, this, &CodeEditor::onHighlightInvalidated);
+  onHighlightInvalidated(qce::Highlighter::AllLines, qce::Highlighter::AllLines);
+}
+
+void CodeEditor::onHighlightInvalidated(qsizetype, qsizetype) { update(); }
 
 void CodeEditor::onThemeChanged() { update(); }
 

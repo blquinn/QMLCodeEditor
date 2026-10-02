@@ -49,6 +49,40 @@ private slots:
     QTRY_COMPARE(view.grabWindow().pixelColor(10, 10), QColor(0x1e, 0x1e, 0x1e));
   }
 
+  void themeMapsSpansToFormats() {
+    std::unique_ptr<qce::Theme> theme(qce::Theme::createDark());
+    using qce::HighlightSpan;
+    using qce::TokenStyle;
+    const auto ranges = theme->formatRanges(
+      {{0, 3, TokenStyle::Keyword}, {4, 2, TokenStyle::Default}, {7, 5, TokenStyle::Comment}}
+    );
+    QCOMPARE(ranges.size(), 2);
+    QCOMPARE(ranges[0].start, 0);
+    QCOMPARE(ranges[0].length, 3);
+    QCOMPARE(ranges[0].format.foreground().color(), QColor(QStringLiteral("#569cd6")));
+    QVERIFY(ranges[1].format.fontItalic());
+    QCOMPARE(theme->charFormat(TokenStyle::Default).foreground().color(), theme->foreground());
+    // Changing the foreground reaches styles the theme doesn't list.
+    theme->setProperty("foreground", QColor(Qt::red));
+    QCOMPARE(theme->charFormat(TokenStyle::Default).foreground().color(), QColor(Qt::red));
+  }
+
+  void highlighterInvalidationRepaints() {
+    struct Fake : qce::Highlighter {
+      QList<QList<qce::HighlightSpan>>
+      highlightLines(const qce::TextSnapshot &, qsizetype, qsizetype) override {
+        return {};
+      }
+    } fake;
+    CodeEditor editor;
+    QVERIFY(editor.highlighter());
+    editor.setHighlighter(&fake);
+    QCOMPARE(editor.highlighter(), &fake);
+    emit fake.invalidated(0, 3); // must not crash with an item that has no window
+    editor.setHighlighter(nullptr);
+    QVERIFY(editor.highlighter() != &fake);
+  }
+
   void setTextUpdatesLineCount() {
     CodeEditor editor;
     QSignalSpy spy(&editor, &CodeEditor::lineCountChanged);

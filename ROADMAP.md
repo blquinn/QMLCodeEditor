@@ -122,11 +122,11 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Batched geometry nodes behind and above the text; cursor blink timer.
 - [x] **RENDER-06** Theme object — done 2026-10-02 (beb5f5e)
   - Colors for text, background, selection, cursor, current line; token-style table used by highlighting; exposed to QML for light/dark switching.
-- [~] **RENDER-07** Font metrics with a monospace fast path
+- [x] **RENDER-07** Font metrics with a monospace fast path — done 2026-10-02 (f2bfa7d)
   - Cell-grid math for ASCII/monospace runs; falls back to `QTextLayout` measurement for wide chars, emoji, ligatures and mixed fonts ([ADR 0001](docs/adr/0001-scene-graph-rendering.md)).
 - [ ] **RENDER-08** Tabs and whitespace
   - Tab stops, optional visible whitespace, configurable tab width.
-- [ ] **RENDER-09** `Highlighter` interface with a no-op implementation
+- [~] **RENDER-09** `Highlighter` interface with a no-op implementation
   - Produces per-line format ranges for a requested line range; the tree-sitter implementation in M7 plugs in here.
 - [ ] **RENDER-10** Demo app opens files
   - File dialog / command-line path / drag-and-drop in `demo/`.
