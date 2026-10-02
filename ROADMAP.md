@@ -114,7 +114,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Replace the `QQuickPaintedItem` scaffold; `ItemHasContents` set; all scene-graph mutation on the render thread in `updatePaintNode`.
 - [ ] **RENDER-02** Scroll model
   - Owned `contentX/contentY/contentWidth/contentHeight` properties so a QML `ScrollBar` can bind to them; kinetic scrolling friendly; scrolling changes a transform only, with no relayout.
-- [ ] **RENDER-03** Viewport virtualization with an LRU line-layout cache
+- [~] **RENDER-03** Viewport virtualization with an LRU line-layout cache
   - Only lines intersecting the viewport (plus a small margin) are laid out; cache keyed by line and invalidated on edit.
 - [ ] **RENDER-04** Pooled `QSGTextNode`s fed by per-line `QTextLayout`
   - Line nodes are reused as lines scroll in and out; no per-frame allocation in steady-state scrolling.
@@ -126,7 +126,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Cell-grid math for ASCII/monospace runs; falls back to `QTextLayout` measurement for wide chars, emoji, ligatures and mixed fonts ([ADR 0001](docs/adr/0001-scene-graph-rendering.md)).
 - [ ] **RENDER-08** Tabs and whitespace
   - Tab stops, optional visible whitespace, configurable tab width.
-- [~] **RENDER-09** `Highlighter` interface with a no-op implementation
+- [x] **RENDER-09** `Highlighter` interface with a no-op implementation — done 2026-10-02 (afcbc5a)
   - Produces per-line format ranges for a requested line range; the tree-sitter implementation in M7 plugs in here.
 - [ ] **RENDER-10** Demo app opens files
   - File dialog / command-line path / drag-and-drop in `demo/`.

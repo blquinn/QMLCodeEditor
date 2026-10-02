@@ -10,6 +10,7 @@ qt_add_library(qce_core STATIC
     textboundaries.h textboundaries.cpp
     selection.h undostack.h undostack.cpp
     highlighter.h highlighter.cpp
+    displaymap.h displaymap.cpp
 )
 add_library(QMLCodeEditor::Core ALIAS qce_core)
 

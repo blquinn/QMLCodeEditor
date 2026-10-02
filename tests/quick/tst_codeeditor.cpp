@@ -83,6 +83,47 @@ private slots:
     QVERIFY(editor.highlighter() != &fake);
   }
 
+  void layoutsOnlyForViewportOfHugeDocument() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    QString text;
+    text.reserve(10'000'000);
+    for (int i = 0; i < 1'000'000; ++i)
+      text += QStringLiteral("line number %1\n").arg(i);
+    editor->setText(text);
+    QCOMPARE(editor->lineCount(), 1'000'001);
+    QTRY_VERIFY(editor->renderStats().rowsInPlan > 5); // past the startup frame
+    const auto stats = editor->renderStats();
+    const qsizetype visible = qsizetype(std::ceil(editor->height() / editor->metrics().lineHeight())) + 1;
+    QVERIFY2(stats.rowsInPlan <= visible * 2 + 12, qPrintable(QString::number(stats.rowsInPlan)));
+    QCOMPARE(qsizetype(stats.layoutsCreated), stats.rowsInPlan + 1); // plus the empty startup line
+
+    // Jump to the middle: a different window, same bounded work.
+    editor->setContentY(500'000 * editor->metrics().lineHeight());
+    QTRY_VERIFY(editor->renderStats().layoutsCreated > stats.layoutsCreated);
+    QVERIFY(editor->renderStats().rowsInPlan <= visible * 2 + 12);
+    QVERIFY(editor->renderStats().layoutsCached <= 256);
+  }
+
+  void editInvalidatesOnlyAffectedLayouts() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    QTRY_VERIFY(editor->renderStats().layoutsCreated > 0); // the empty document's one line
+    const quint64 base = editor->renderStats().layoutsCreated;
+    editor->setText(QStringLiteral("a\nb\nc\nd\ne"));
+    QTRY_COMPARE(editor->renderStats().layoutsCreated, base + 5);
+    editor->document()->insert(editor->document()->rope().lineStart(2), u"x");
+    QTRY_COMPARE(editor->renderStats().layoutsCreated, base + 6); // only line 2 was laid out again
+    editor->document()->insert(0, u"first\n");              // lines shift; line 0 is new, the rest renumbered
+    QTRY_COMPARE(editor->renderStats().layoutsCreated, base + 8);
+  }
+
   void setTextUpdatesLineCount() {
     CodeEditor editor;
     QSignalSpy spy(&editor, &CodeEditor::lineCountChanged);
