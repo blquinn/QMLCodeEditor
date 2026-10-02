@@ -170,7 +170,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - All rendering, hit-testing and scrolling go through the map; nothing else assumes one buffer line equals one row.
 - [x] **WRAP-02** `WrapMap` with a row-count summary tree — done 2026-10-02 (3126d94)
   - O(log n) buffer line ↔ display row; buffer position ↔ (row, x).
-- [~] **WRAP-03** Incremental re-wrap on edit
+- [x] **WRAP-03** Incremental re-wrap on edit — done 2026-10-02 (2d6db3e)
   - Only affected lines are re-wrapped; row count deltas propagate through the summary tree.
 - [ ] **WRAP-04** Re-wrap on resize
   - Viewport lines first, remainder in the background; scroll position anchored to the top visible buffer position so content doesn't jump.
