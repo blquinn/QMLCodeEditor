@@ -91,6 +91,7 @@ private:
     qsizetype row = -1;
     quint64 layoutId = 0;
     qsizetype originRow = 0; // origin the transform was computed against
+    qreal lineHeight = 0;    // row height the transform was computed with
     bool attached = false;
   };
 

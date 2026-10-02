@@ -467,6 +467,36 @@ private slots:
     QTRY_VERIFY(!inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
   }
 
+  void fontSizeChangeMovesRows() {
+    QQuickView view(&m_engine, nullptr);
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setCursorBlinkInterval(0);
+    editor->setText(QStringLiteral("\nMM"));
+    editor->setCursorPosition(0); // the cursor bar sits in column 0 of row 0, away from the ink checked
+    auto inkInRows = [](const QImage &image, qreal x0, qreal x1, int y0, int y1) {
+      const QColor bg(0x1e, 0x1e, 0x1e), currentLine(0x2a, 0x2d, 0x2e);
+      for (int y = y0; y < y1; ++y)
+        for (int x = int(std::ceil(x0)); x < int(std::floor(x1)); ++x)
+          if (const QColor c = image.pixelColor(x, y); c != bg && c != currentLine)
+            return true;
+      return false;
+    };
+    const qreal adv = editor->metrics().cellAdvance();
+    QTRY_VERIFY(inkInRows(view.grabWindow(), adv + 1, 2 * adv - 1, 0, int(2 * editor->metrics().lineHeight())));
+
+    // Rows already on screen must follow the new line height, not keep their old offsets.
+    QFont font = editor->font();
+    font.setPointSizeF(font.pointSizeF() * 2);
+    editor->setFont(font);
+    const int lh = int(editor->metrics().lineHeight());
+    const qreal adv2 = editor->metrics().cellAdvance();
+    QTRY_VERIFY(inkInRows(view.grabWindow(), adv2 + 1, 2 * adv2 - 1, lh, 2 * lh));
+    QVERIFY(!inkInRows(view.grabWindow(), adv2 + 1, 2 * adv2 - 1, 0, lh));
+  }
+
   // ---- Editing (M3) ----
 
 private:

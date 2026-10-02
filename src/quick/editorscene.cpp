@@ -195,11 +195,12 @@ void EditorScene::sync(const FrameParams &p) {
       m_active.emplace(planRow.row, item);
     }
 
-    if (item->originRow != m_originRow || item->layoutId == 0) {
+    if (item->originRow != m_originRow || item->lineHeight != p.lineHeight || item->layoutId == 0) {
       QMatrix4x4 m;
       m.translate(0, float(double(planRow.row - m_originRow) * p.lineHeight));
       item->transform->setMatrix(m);
       item->originRow = m_originRow;
+      item->lineHeight = p.lineHeight;
       ++m_stats.matrixUpdates;
     }
 
