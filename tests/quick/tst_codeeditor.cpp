@@ -1117,6 +1117,24 @@ private slots:
     QTRY_VERIFY(view->grabWindow().pixelColor(int(4.5 * editor->metrics().cellAdvance()), int(0.5 * lh)) == editor->theme()->selection());
     QVERIFY(view->grabWindow().pixelColor(int(1.5 * editor->metrics().cellAdvance()), int(1.5 * lh)) == editor->theme()->selection());
   }
+
+  void homeAndEndUseWrappedRows() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("hello world foo bar"));
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(10);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 3);
+    editor->setCursorPosition(8); // in "world"
+    QTest::keyClick(view.get(), Qt::Key_Home);
+    QCOMPARE(editor->cursorPosition(), 6);
+    QTest::keyClick(view.get(), Qt::Key_End);
+    QCOMPARE(editor->cursorPosition(), 15); // before the space that ends the row
+    QTest::keyClick(view.get(), Qt::Key_End);
+    QCOMPARE(editor->cursorPosition(), 19);
+    QTest::keyClick(view.get(), Qt::Key_Home);
+    QCOMPARE(editor->cursorPosition(), 16);
+  }
 };
 
 QTEST_MAIN(TstCodeEditor)

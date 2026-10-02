@@ -35,6 +35,8 @@ enum class Movement : quint8 {
   WordRight,
   LineStart, // first non-blank, then column 0 when already there
   LineEnd,
+  RowStart, // like LineStart on the first row of a line; on a wrapped row the row's start, then LineStart
+  RowEnd,   // the end of a wrapped row (just before the break), then LineEnd; LineEnd on the last row
   DocStart,
   DocEnd,
   RowUp, // by display row, keeping the goal x

@@ -328,6 +328,32 @@ bool move(EditContext &ctx, Movement movement, bool extend) {
     case Movement::LineEnd:
       head = rope.lineEnd(rope.lineAt(s.head));
       break;
+    case Movement::RowStart: {
+      const TextPosition pos = rope.positionAt(s.head);
+      if (ctx.map) {
+        const DisplayRow row = ctx.map->rowAt(ctx.map->rowForPosition(pos));
+        if (!row.isFirst() && pos.column != row.startColumn) {
+          head = rope.lineStart(pos.line) + row.startColumn; // the first press stays on the row
+          break;
+        }
+      }
+      const qsizetype indent = firstNonBlank(rope, pos.line);
+      head = s.head == indent ? rope.lineStart(pos.line) : indent;
+      break;
+    }
+    case Movement::RowEnd: {
+      const TextPosition pos = rope.positionAt(s.head);
+      head = rope.lineEnd(pos.line);
+      if (ctx.map) {
+        const DisplayRow row = ctx.map->rowAt(ctx.map->rowForPosition(pos));
+        // The end of a row that continues is the last place a cursor can be on it; once there, End
+        // goes on to the end of the line.
+        const qsizetype rowEnd = rope.snapToCodePoint(rope.lineStart(pos.line) + row.lastCursorColumn());
+        if (!row.isLast() && s.head != rowEnd)
+          head = rowEnd;
+      }
+      break;
+    }
     case Movement::DocStart:
       head = 0;
       break;

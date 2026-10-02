@@ -22,7 +22,7 @@ struct Fixture {
   TextDocument doc;
   SelectionSet sel{&doc};
   DisplayMap map{&doc};
-  GridCursorLayout layout{&doc, 4, 3};
+  GridCursorLayout layout{&doc, 4, 3, &map};
   EditContext ctx{doc, sel, {}, &map, &layout};
   DefaultInputHandler handler;
   Host host;
@@ -210,6 +210,104 @@ private slots:
     f.key(Qt::Key_PageUp);
     QCOMPARE(f.cursor().head, 0);
     QCOMPARE(f.host.scrolled, 0);
+  }
+
+  // ---- Wrapped rows (WRAP-07) ----
+
+  static WrapConfig wrapAt(int column, bool word = false) {
+    WrapConfig c;
+    c.mode = WrapMode::Column;
+    c.column = column;
+    c.wordBreak = word;
+    c.measure = std::make_shared<GridWrapMeasure>(4);
+    return c;
+  }
+
+  void upAndDownMoveByWrappedRowsAndKeepTheGoal() {
+    Fixture f(u"abcdefghijklmnopqrstuvwxyz\nshort\nabcdefghijklmnopqrstuvwxyz"_s);
+    f.map.setWrapConfig(wrapAt(10)); // line 0 rows: [0,10) [10,20) [20,26)
+    f.sel.setSingle(7);
+    f.key(Qt::Key_Down);
+    QCOMPARE(f.cursor().head, 17);
+    f.key(Qt::Key_Down);
+    QCOMPARE(f.cursor().head, 26); // the last row is shorter than the goal column
+    f.key(Qt::Key_Down);
+    QCOMPARE(f.cursor().head, 27 + 5); // "short"
+    f.key(Qt::Key_Down);
+    QCOMPARE(f.cursor().head, 33 + 7); // the goal column survived two short rows
+    f.key(Qt::Key_Up);
+    f.key(Qt::Key_Up);
+    QCOMPARE(f.cursor().head, 26);
+    f.key(Qt::Key_Up);
+    QCOMPARE(f.cursor().head, 17);
+    f.key(Qt::Key_Up);
+    QCOMPARE(f.cursor().head, 7);
+    f.key(Qt::Key_Up);
+    QCOMPARE(f.cursor().head, 0); // above the first row: the start
+  }
+
+  void goalColumnCountsTheHangingIndent() {
+    Fixture f(u"    abcdefghijklmnopqrstuvwxyz\nabcdefghijklmnopqrstuvwxyz"_s);
+    WrapConfig config = wrapAt(10);
+    config.hangingIndent = true; // continuation rows start 4 cells in and hold 6 characters
+    f.map.setWrapConfig(config);
+    f.sel.setSingle(6); // row 0, cell 6
+    f.key(Qt::Key_Down);
+    QCOMPARE(f.cursor().head, 10 + 2); // row 1 starts at column 10 at cell 4, so cell 6 is two in
+    f.key(Qt::Key_Down);
+    QCOMPARE(f.cursor().head, 16 + 2);
+  }
+
+  void homeAndEndGoToRowEdgesFirst() {
+    Fixture f(u"abcdefghijklmnopqrstuvwxyz"_s);
+    f.map.setWrapConfig(wrapAt(10)); // rows [0,10) [10,20) [20,26)
+    f.sel.setSingle(15);
+    f.key(Qt::Key_Home);
+    QCOMPARE(f.cursor().head, 10);
+    f.key(Qt::Key_Home);
+    QCOMPARE(f.cursor().head, 0); // second press: the line
+    f.sel.setSingle(12);
+    f.key(Qt::Key_End);
+    QCOMPARE(f.cursor().head, 19); // the last place on the row; the break itself is on the next one
+    f.key(Qt::Key_End);
+    QCOMPARE(f.cursor().head, 26);
+    f.key(Qt::Key_End);
+    QCOMPARE(f.cursor().head, 26);
+    f.key(Qt::Key_Home);
+    QCOMPARE(f.cursor().head, 20);
+    // Selecting with the same keys.
+    f.sel.setSingle(12);
+    f.key(Qt::Key_End, Qt::ShiftModifier);
+    QCOMPARE(f.cursor(), (Selection{12, 19}));
+    f.key(Qt::Key_Home, Qt::ShiftModifier);
+    QCOMPARE(f.cursor(), (Selection{12, 10}));
+  }
+
+  void homeOnTheFirstRowIsStillSmart() {
+    Fixture f(u"    abcdefghijklmnopqrstuvwxyz"_s);
+    f.map.setWrapConfig(wrapAt(10));
+    f.sel.setSingle(8);
+    f.key(Qt::Key_Home);
+    QCOMPARE(f.cursor().head, 4);
+    f.key(Qt::Key_Home);
+    QCOMPARE(f.cursor().head, 0);
+  }
+
+  void wordWrappedRowsEndBeforeTheirTrailingSpace() {
+    Fixture f(u"hello world foo bar"_s);
+    f.map.setWrapConfig(wrapAt(10, true)); // rows "hello " "world foo " "bar"
+    f.sel.setSingle(2);
+    f.key(Qt::Key_End);
+    QCOMPARE(f.cursor().head, 5);
+  }
+
+  void pageMovesByWrappedRows() {
+    Fixture f(u"abcdefghijklmnopqrstuvwxyz\nnext line"_s);
+    f.map.setWrapConfig(wrapAt(10));
+    f.sel.setSingle(0);
+    f.key(Qt::Key_PageDown); // 3 rows: lands on the first row of line 1
+    QCOMPARE(f.cursor().head, 27);
+    QCOMPARE(f.host.scrolled, 3);
   }
 
   void movementEndsTypingRun() {
