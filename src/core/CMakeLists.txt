@@ -1,6 +1,7 @@
 # Text core: Qt Core only, must build and test without a window system (ADR 0003).
 qt_add_library(qce_core STATIC
     qcecore.h qcecore.cpp
+    rope.h rope.cpp
 )
 add_library(QMLCodeEditor::Core ALIAS qce_core)
 
