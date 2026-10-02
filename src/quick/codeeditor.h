@@ -47,6 +47,7 @@ class CodeEditor : public QQuickItem {
   Q_PROPERTY(int indentWidth READ indentWidth WRITE setIndentWidth NOTIFY indentWidthChanged FINAL)
   Q_PROPERTY(qsizetype cursorLine READ cursorLine NOTIFY selectionChanged FINAL)
   Q_PROPERTY(qsizetype cursorColumn READ cursorColumn NOTIFY selectionChanged FINAL)
+  Q_PROPERTY(int undoLimit READ undoLimit WRITE setUndoLimit NOTIFY undoLimitChanged FINAL)
   Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged FINAL)
   Q_PROPERTY(bool canUndo READ canUndo NOTIFY canUndoChanged FINAL)
   Q_PROPERTY(bool canRedo READ canRedo NOTIFY canRedoChanged FINAL)
@@ -131,6 +132,9 @@ public:
   void setIndentWidth(int columns);
   bool readOnly() const { return m_readOnly; }
   void setReadOnly(bool readOnly);
+  // Most undo steps kept; the oldest are dropped beyond it. 0 (the default) keeps them all.
+  int undoLimit() const { return m_undoLimit; }
+  void setUndoLimit(int steps);
   bool canUndo() const { return m_canUndo; }
   bool canRedo() const { return m_canRedo; }
 
@@ -201,6 +205,7 @@ signals:
   void cursorBlinkIntervalChanged();
   void cursorVisibleChanged();
   void readOnlyChanged();
+  void undoLimitChanged();
   void insertSpacesChanged();
   void indentWidthChanged();
   void canUndoChanged();
@@ -296,6 +301,7 @@ private:
   qce::DefaultInputHandler m_defaultHandler;
   qce::InputHandler *m_handler = &m_defaultHandler;
   bool m_readOnly = false;
+  int m_undoLimit = 0;
   bool m_insertSpaces = true;
   int m_indentWidth = 4;
   bool m_canUndo = false;

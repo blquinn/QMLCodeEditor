@@ -220,6 +220,16 @@ void CodeEditor::setIndentWidth(int columns) {
   emit indentWidthChanged();
 }
 
+void CodeEditor::setUndoLimit(int steps) {
+  steps = qMax(0, steps);
+  if (steps == m_undoLimit)
+    return;
+  m_undoLimit = steps;
+  m_document.undoStack().setLimit(steps);
+  updateUndoState();
+  emit undoLimitChanged();
+}
+
 void CodeEditor::setReadOnly(bool readOnly) {
   if (readOnly == m_readOnly)
     return;

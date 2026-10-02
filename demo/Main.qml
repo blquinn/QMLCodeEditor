@@ -156,6 +156,7 @@ ApplicationWindow {
     CodeEditor {
         id: editor
         objectName: "editor"
+        undoLimit: 10000 // keep a long session's history bounded
         anchors.fill: parent
         anchors.rightMargin: vbar.width
         anchors.bottomMargin: hbar.height

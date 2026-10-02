@@ -853,6 +853,17 @@ private slots:
     QTRY_COMPARE(failed.count(), 1);
   }
 
+  void undoLimitDropsOldestSteps() {
+    CodeEditor editor;
+    QCOMPARE(editor.undoLimit(), 0);
+    editor.setUndoLimit(3);
+    for (int i = 0; i < 10; ++i) {
+      editor.insert(QStringLiteral("x"));
+      editor.document()->breakUndoCoalescing();
+    }
+    QCOMPARE(editor.document()->undoStack().undoSteps(), 3);
+  }
+
   void setTextUpdatesLineCount() {
     CodeEditor editor;
     QSignalSpy spy(&editor, &CodeEditor::lineCountChanged);
