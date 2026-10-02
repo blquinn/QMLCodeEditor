@@ -141,9 +141,9 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
 
 - [x] **INPUT-01** `SelectionSet` and command layer — done 2026-10-02 (2a2495d)
   - Every mutation is a command applied to a selection set that always exists (a single cursor is a set of one) ([ADR 0005](docs/adr/0005-commands-and-selections.md)).
-- [ ] **INPUT-02** Swappable `InputHandler` interface plus the default handler
+- [x] **INPUT-02** Swappable `InputHandler` interface plus the default handler — done 2026-10-02 (492badd)
   - Maps key events to commands; vim (M10) is a second implementation.
-- [ ] **INPUT-03** Cursor movement
+- [x] **INPUT-03** Cursor movement — done 2026-10-02 (492badd)
   - Char, word, line start/end, document start/end, page up/down; grapheme-aware.
 - [ ] **INPUT-04** Mouse input
   - Click, drag-select, double-click word, triple-click line, shift-click extend.
@@ -151,8 +151,8 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
   - `inputMethodQuery` / `inputMethodEvent` with preedit rendering and correct candidate-window placement.
 - [ ] **INPUT-06** Clipboard
   - Cut, copy, paste; selection clipboard on Linux; large pastes don't block the UI.
-- [ ] **INPUT-07** Scroll-to-cursor and cursor-visibility behavior
-- [ ] **INPUT-08** Undo/redo wired to commands
+- [x] **INPUT-07** Scroll-to-cursor and cursor-visibility behavior — done 2026-10-02 (492badd)
+- [x] **INPUT-08** Undo/redo wired to commands — done 2026-10-02 (492badd)
   - Keyboard shortcuts; typing is coalesced into sensible undo groups.
 - [ ] **INPUT-09** Basic auto-indent
   - Newline keeps indentation; tab/shift-tab indent selections.
