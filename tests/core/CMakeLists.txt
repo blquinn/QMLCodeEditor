@@ -5,3 +5,4 @@ qce_add_test(tst_snapshot SOURCES tst_snapshot.cpp testutil.h LIBS QMLCodeEditor
 qce_add_test(tst_textdocument SOURCES tst_textdocument.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_anchors SOURCES tst_anchors.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_undo SOURCES tst_undo.cpp testutil.h LIBS QMLCodeEditor::Core)
+qce_add_test(tst_boundaries SOURCES tst_boundaries.cpp testutil.h LIBS QMLCodeEditor::Core)
