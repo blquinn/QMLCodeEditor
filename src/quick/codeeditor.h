@@ -15,6 +15,7 @@
 #include "quick/theme.h"
 
 #include <QtCore/QTimer>
+#include <QtGui/QClipboard>
 #include <QtCore/QUrl>
 #include <QtGui/QColor>
 #include <QtGui/QFont>
@@ -198,6 +199,11 @@ signals:
 protected:
   void updatePolish() override;
   void keyPressEvent(QKeyEvent *event) override;
+  void mousePressEvent(QMouseEvent *event) override;
+  void mouseDoubleClickEvent(QMouseEvent *event) override;
+  void mouseMoveEvent(QMouseEvent *event) override;
+  void mouseReleaseEvent(QMouseEvent *event) override;
+  void mouseUngrabEvent() override;
   void wheelEvent(QWheelEvent *event) override;
   QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
   void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
@@ -205,7 +211,29 @@ protected:
 private:
   class EditorLayout;
   class EditorHost;
+  enum class DragUnit : quint8 { Char, Word, Line };
+  void handlePress(QMouseEvent *event, bool doubleClick);
+  void updateDrag();
+  void endDrag();
+  void autoScrollDrag();
+  // The unit (word or line) around `offset` as [start, end).
+  QPair<qsizetype, qsizetype> unitRangeAt(qsizetype offset, DragUnit unit) const;
   void afterCommand();
+  void setClipboardFromSelections(QClipboard::Mode mode);
+  void pasteFrom(QClipboard::Mode mode);
+  int m_pendingPastes = 0;
+
+  // Mouse selection: the unit the gesture selects by, the range first selected (the fixed end of
+  // word and line drags), and where the pointer is, for auto-scroll while it is outside.
+  bool m_dragging = false;
+  DragUnit m_dragUnit = DragUnit::Char;
+  qsizetype m_dragAnchor = 0;
+  QPair<qsizetype, qsizetype> m_dragInitial;
+  QPointF m_dragPos;
+  QTimer m_autoScrollTimer;
+  int m_clickCount = 0;
+  ulong m_lastClickTime = 0;
+  QPointF m_lastClickPos;
   void updateUndoState();
   qsizetype columnForX(const qce::LineLayout &layout, qreal x) const;
   void onDocumentReset();

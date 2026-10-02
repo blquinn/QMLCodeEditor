@@ -25,19 +25,27 @@ bool applyReplacements(
     if (after)
       result.append({start + (*after)[i].anchor, start + (*after)[i].head});
     else
-      result.append({start + r.text.size(), start + r.text.size()});
-    shift += r.text.size() - (r.end - r.start);
+      result.append({start + r.insertedLength(), start + r.insertedLength()});
+    shift += r.insertedLength() - (r.end - r.start);
   }
   const int newPrimary = primary >= 0 ? primary : int(result.size()) - 1;
 
   SelectionSet::Batch batch(ctx.selections);
   if (replacements.size() == 1) {
     const Replacement &r = replacements.first();
-    doc.replace(r.start, r.end, r.text, {kind, before, result});
+    if (r.rope)
+      doc.replace(r.start, r.end, *r.rope, {kind, before, result});
+    else
+      doc.replace(r.start, r.end, r.text, {kind, before, result});
   } else {
     doc.beginEditGroup(before);
-    for (qsizetype i = replacements.size() - 1; i >= 0; --i)
-      doc.replace(replacements[i].start, replacements[i].end, replacements[i].text);
+    for (qsizetype i = replacements.size() - 1; i >= 0; --i) {
+      const Replacement &r = replacements[i];
+      if (r.rope)
+        doc.replace(r.start, r.end, *r.rope);
+      else
+        doc.replace(r.start, r.end, r.text);
+    }
     doc.endEditGroup(result);
   }
   ctx.selections.set(result, newPrimary);

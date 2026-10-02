@@ -1,8 +1,14 @@
 #include "codeeditor.h"
 
+#include "core/textboundaries.h"
+
+#include <QtConcurrent/QtConcurrentRun>
+#include <QtCore/QFutureWatcher>
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
+#include <QtGui/QStyleHints>
 #include <QtGui/QTextOption>
+#include <QtCore/QPointF>
 
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGRectangleNode>
@@ -55,6 +61,10 @@ private:
 CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setFlag(ItemHasContents);
   setFlag(ItemIsFocusScope);
+  setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
+  setCursor(Qt::IBeamCursor);
+  m_autoScrollTimer.setInterval(30);
+  connect(&m_autoScrollTimer, &QTimer::timeout, this, &CodeEditor::autoScrollDrag);
   m_cursorLayout = std::make_unique<EditorLayout>(this);
   m_host = std::make_unique<EditorHost>(this);
   m_font = qce::TextMetrics::defaultMonospaceFont();
@@ -238,6 +248,131 @@ void CodeEditor::keyPressEvent(QKeyEvent *event) {
   QQuickItem::keyPressEvent(event);
 }
 
+QPair<qsizetype, qsizetype> CodeEditor::unitRangeAt(qsizetype offset, DragUnit unit) const {
+  const qce::Rope &rope = m_document.rope();
+  if (unit == DragUnit::Word)
+    return qce::TextBoundaries(rope).wordRangeAt(offset);
+  if (unit == DragUnit::Line) {
+    const qsizetype line = rope.lineAt(offset);
+    // The line break goes with the line, so a triple-click selects what Delete would remove.
+    return {rope.lineStart(line), line + 1 < rope.lineCount() ? rope.lineStart(line + 1) : rope.length()};
+  }
+  return {offset, offset};
+}
+
+void CodeEditor::handlePress(QMouseEvent *event, bool doubleClick) {
+  forceActiveFocus(Qt::MouseFocusReason);
+  const qsizetype offset = positionAt(event->position().x(), event->position().y());
+  if (event->button() == Qt::MiddleButton) {
+    // Middle click pastes the selection clipboard where it was clicked (X11/Wayland convention).
+    if (QGuiApplication::clipboard()->supportsSelection() && !m_readOnly) {
+      m_selections.setSingle(offset);
+      pasteFrom(QClipboard::Selection);
+    }
+    event->accept();
+    return;
+  }
+  if (event->button() != Qt::LeftButton) {
+    event->ignore();
+    return;
+  }
+
+  // Repeated clicks close together in time and space select a word, then a line.
+  const QStyleHints *hints = QGuiApplication::styleHints();
+  const bool repeated = m_clickCount > 0 && event->timestamp() - m_lastClickTime <= ulong(hints->mouseDoubleClickInterval()) &&
+                        (event->position() - m_lastClickPos).manhattanLength() <= hints->mouseDoubleClickDistance();
+  // Some platforms deliver the second press of a double click as a press followed by a
+  // double-click event with the same timestamp; that is one click, counted once.
+  const bool sameClick = doubleClick && m_clickCount > 0 && event->timestamp() == m_lastClickTime;
+  if (!sameClick)
+    m_clickCount = repeated ? qMin(m_clickCount + 1, 3) : 1;
+  if (doubleClick)
+    m_clickCount = qMax(m_clickCount, 2);
+  m_lastClickTime = event->timestamp();
+  m_lastClickPos = event->position();
+
+  m_document.breakUndoCoalescing();
+  m_dragging = true;
+  m_dragUnit = m_clickCount == 1 ? DragUnit::Char : m_clickCount == 2 ? DragUnit::Word : DragUnit::Line;
+  if (m_dragUnit == DragUnit::Char) {
+    if (event->modifiers() & Qt::ShiftModifier) {
+      m_dragAnchor = m_selections.primary().anchor; // extends the selection from where it began
+    } else {
+      m_dragAnchor = offset;
+    }
+    m_dragInitial = {m_dragAnchor, m_dragAnchor};
+    m_selections.setSingle(m_dragAnchor, offset);
+  } else {
+    m_dragInitial = unitRangeAt(offset, m_dragUnit);
+    m_dragAnchor = m_dragInitial.first;
+    m_selections.setSingle(m_dragInitial.first, m_dragInitial.second);
+  }
+  m_dragPos = event->position();
+  event->accept();
+}
+
+void CodeEditor::mousePressEvent(QMouseEvent *event) { handlePress(event, false); }
+void CodeEditor::mouseDoubleClickEvent(QMouseEvent *event) { handlePress(event, true); }
+
+// Extends the drag selection to the pointer. Word and line drags grow by whole units on whichever
+// side of the first unit the pointer is.
+void CodeEditor::updateDrag() {
+  const qsizetype offset = positionAt(m_dragPos.x(), m_dragPos.y());
+  if (m_dragUnit == DragUnit::Char) {
+    m_selections.setSingle(m_dragAnchor, offset);
+  } else {
+    const auto unit = unitRangeAt(offset, m_dragUnit);
+    if (offset < m_dragInitial.first)
+      m_selections.setSingle(m_dragInitial.second, unit.first);
+    else
+      m_selections.setSingle(m_dragInitial.first, unit.second);
+  }
+  ensureCursorVisible();
+}
+
+void CodeEditor::mouseMoveEvent(QMouseEvent *event) {
+  if (!m_dragging) {
+    event->ignore();
+    return;
+  }
+  m_dragPos = event->position();
+  updateDrag();
+  const bool outside = !boundingRect().contains(m_dragPos);
+  if (outside && !m_autoScrollTimer.isActive())
+    m_autoScrollTimer.start();
+  else if (!outside)
+    m_autoScrollTimer.stop();
+  event->accept();
+}
+
+// While the pointer is held outside the item the view keeps scrolling, faster the farther out it is.
+void CodeEditor::autoScrollDrag() {
+  const qreal dx = m_dragPos.x() < 0 ? m_dragPos.x() : m_dragPos.x() > width() ? m_dragPos.x() - width() : 0;
+  const qreal dy = m_dragPos.y() < 0 ? m_dragPos.y() : m_dragPos.y() > height() ? m_dragPos.y() - height() : 0;
+  setContentX(m_contentX + dx * 0.5 + (dx > 0 ? 1 : dx < 0 ? -1 : 0));
+  setContentY(m_contentY + dy * 0.5 + (dy > 0 ? 1 : dy < 0 ? -1 : 0));
+  // Over the edge the pointer's row is the one at the edge; positionAt clamps beyond the content.
+  updateDrag();
+}
+
+void CodeEditor::endDrag() {
+  m_dragging = false;
+  m_autoScrollTimer.stop();
+}
+
+void CodeEditor::mouseReleaseEvent(QMouseEvent *event) {
+  if (m_dragging && event->button() == Qt::LeftButton) {
+    endDrag();
+    // Selecting text makes it the primary selection, ready for a middle click elsewhere.
+    setClipboardFromSelections(QClipboard::Selection);
+    event->accept();
+    return;
+  }
+  event->ignore();
+}
+
+void CodeEditor::mouseUngrabEvent() { endDrag(); }
+
 void CodeEditor::undo() {
   qce::EditContext ctx = editContext();
   qce::commands::undo(ctx);
@@ -262,16 +397,57 @@ void CodeEditor::insert(const QString &text) {
   afterCommand();
 }
 
-// Selected text of every selection, joined by line breaks.
-void CodeEditor::copy() {
-  const qce::Rope &rope = m_document.rope();
-  QStringList parts;
-  for (int i = 0; i < m_selections.count(); ++i)
-    if (const qce::Selection s = m_selections.at(i); !s.isEmpty())
-      parts.append(rope.toString(s.start(), s.end()));
-  if (!parts.isEmpty())
-    QGuiApplication::clipboard()->setText(parts.join(u'\n'));
+namespace {
+
+// Above this many UTF-16 units clipboard text is built or consumed off the GUI thread.
+constexpr qsizetype kLargeClipboard = 1 << 20;
+
+QString joinSlices(const QList<qce::Rope> &slices) {
+  QString out;
+  qsizetype total = std::max<qsizetype>(0, slices.size() - 1);
+  for (const qce::Rope &r : slices)
+    total += r.length();
+  out.reserve(total);
+  for (qsizetype i = 0; i < slices.size(); ++i) {
+    if (i > 0)
+      out += u'\n';
+    out += slices[i].toString();
+  }
+  return out;
 }
+
+} // namespace
+
+// The text of every non-empty selection, joined by line breaks. Ropes are persistent, so taking the
+// slices is cheap whatever their size; turning them into a QString (the expensive part of copying
+// a huge selection) happens on a worker.
+void CodeEditor::setClipboardFromSelections(QClipboard::Mode mode) {
+  const qce::Rope &rope = m_document.rope();
+  QList<qce::Rope> slices;
+  qsizetype total = 0;
+  for (int i = 0; i < m_selections.count(); ++i)
+    if (const qce::Selection s = m_selections.at(i); !s.isEmpty()) {
+      slices.append(rope.slice(s.start(), s.end()));
+      total += s.end() - s.start();
+    }
+  if (slices.isEmpty())
+    return;
+  QClipboard *clipboard = QGuiApplication::clipboard();
+  if (mode == QClipboard::Selection && !clipboard->supportsSelection())
+    return;
+  if (total < kLargeClipboard) {
+    clipboard->setText(joinSlices(slices), mode);
+    return;
+  }
+  auto *watcher = new QFutureWatcher<QString>(this);
+  connect(watcher, &QFutureWatcher<QString>::finished, this, [watcher, mode] {
+    QGuiApplication::clipboard()->setText(watcher->result(), mode);
+    watcher->deleteLater();
+  });
+  watcher->setFuture(QtConcurrent::run([slices] { return joinSlices(slices); }));
+}
+
+void CodeEditor::copy() { setClipboardFromSelections(QClipboard::Clipboard); }
 
 void CodeEditor::cut() {
   if (m_readOnly)
@@ -282,13 +458,43 @@ void CodeEditor::cut() {
   afterCommand();
 }
 
-void CodeEditor::paste() {
-  const QString text = QGuiApplication::clipboard()->text();
+void CodeEditor::paste() { pasteFrom(QClipboard::Clipboard); }
+
+void CodeEditor::pasteFrom(QClipboard::Mode mode) {
+  if (m_readOnly || m_document.isLoading())
+    return;
+  const QString text = QGuiApplication::clipboard()->text(mode);
   if (text.isEmpty())
     return;
-  qce::EditContext ctx = editContext();
-  qce::commands::insertText(ctx, text, qce::EditKind::Other);
-  afterCommand();
+  if (text.size() < kLargeClipboard || m_selections.count() != 1) {
+    qce::EditContext ctx = editContext();
+    qce::commands::insertText(ctx, text, qce::EditKind::Other);
+    afterCommand();
+    return;
+  }
+
+  // A big paste: build the rope on a worker. The target range is held by anchors, so edits made in
+  // the meantime move it instead of invalidating it.
+  const qce::Selection target = m_selections.primary();
+  qce::AnchorSet &anchors = m_document.anchors();
+  const qce::AnchorId start = anchors.create(target.start(), qce::Gravity::Left);
+  const qce::AnchorId end = anchors.create(target.end(), qce::Gravity::Right);
+  ++m_pendingPastes;
+  auto *watcher = new QFutureWatcher<qce::Rope>(this);
+  connect(watcher, &QFutureWatcher<qce::Rope>::finished, this, [this, watcher, start, end] {
+    qce::AnchorSet &anchors = m_document.anchors();
+    const qsizetype from = anchors.offset(start), to = anchors.offset(end);
+    anchors.remove(start);
+    anchors.remove(end);
+    --m_pendingPastes;
+    if (!m_readOnly && !m_document.isLoading()) {
+      qce::EditContext ctx = editContext();
+      qce::commands::applyReplacements(ctx, {{from, to, watcher->result()}}, qce::EditKind::Other);
+      afterCommand();
+    }
+    watcher->deleteLater();
+  });
+  watcher->setFuture(QtConcurrent::run([text] { return qce::Rope::fromString(text); }));
 }
 
 void CodeEditor::ensureCursorVisible() {

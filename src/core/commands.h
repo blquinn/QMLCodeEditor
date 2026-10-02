@@ -6,6 +6,8 @@
 #include "core/selectionset.h"
 #include "core/textdocument.h"
 
+#include <optional>
+
 namespace qce {
 
 // Editor behaviour that commands depend on; the host sets it from its properties.
@@ -80,9 +82,16 @@ bool redo(EditContext &ctx);
 
 // One edit of a batch: [start, end) becomes `text`.
 struct Replacement {
+  Replacement(qsizetype start, qsizetype end, QString text = {})
+      : start(start), end(end), text(std::move(text)) {}
+  Replacement(qsizetype start, qsizetype end, Rope rope) : start(start), end(end), rope(std::move(rope)) {}
+
   qsizetype start = 0;
   qsizetype end = 0;
   QString text;
+  // When set it is inserted instead of `text`: a big paste built off the GUI thread.
+  std::optional<Rope> rope;
+  qsizetype insertedLength() const { return rope ? rope->length() : text.size(); }
 };
 // The engine under the commands, for ones that live elsewhere (clipboard, indent). `replacements`
 // must be sorted and non-overlapping. Afterwards each replacement's selection is a cursor at the end

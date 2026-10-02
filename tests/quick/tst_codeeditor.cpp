@@ -582,6 +582,133 @@ private slots:
     QCOMPARE(editor->selectionEnd(), 6);
   }
 
+  void largePasteAndCopyRunOffTheGuiThread() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    const QString big = QString(1500000, u'x') + QStringLiteral("\nend");
+    QGuiApplication::clipboard()->setText(big);
+    editor->setText(QStringLiteral("[]"));
+    editor->setCursorPosition(1);
+    editor->paste();
+    // The paste lands when the worker is done; meanwhile typing moves the target range along.
+    editor->document()->insert(0, u"<");
+    QTRY_COMPARE(editor->document()->length(), big.size() + 3);
+    const QString text = editor->document()->rope().toString();
+    QVERIFY(text.startsWith(QStringLiteral("<[x")));
+    QVERIFY(text.endsWith(QStringLiteral("end]")));
+    QVERIFY(editor->canUndo());
+    // Copy goes through a worker too.
+    QGuiApplication::clipboard()->clear();
+    editor->selectAll();
+    editor->copy();
+    QTRY_COMPARE(QGuiApplication::clipboard()->text().size(), big.size() + 3);
+  }
+
+  // The pixel at the middle of the character cell `column` on `row`, in window coordinates.
+  static QPoint cellPoint(CodeEditor *editor, int row, int column, bool left = false) {
+    const auto &m = editor->metrics();
+    // Offsets round to the nearest boundary, so aim at the boundary itself for exact columns.
+    return QPoint(int(column * m.cellAdvance() + (left ? 0 : 0) + 1), int((row + 0.5) * m.lineHeight()));
+  }
+
+  void clickPlacesCursorAndDragSelects() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("hello world\nsecond line"));
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 4), 10);
+    QCOMPARE(editor->cursorPosition(), 4);
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 1, 3), 10);
+    QCOMPARE(editor->cursorPosition(), 12 + 3);
+    QCOMPARE(editor->selectionStart(), editor->selectionEnd());
+
+    QTest::mousePress(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 2), 10);
+    QTest::mouseMove(view.get(), cellPoint(editor, 1, 5));
+    QTest::mouseRelease(view.get(), Qt::LeftButton, {}, cellPoint(editor, 1, 5), 10);
+    QCOMPARE(editor->selectionStart(), 2);
+    QCOMPARE(editor->selectionEnd(), 12 + 5);
+    QCOMPARE(editor->cursorPosition(), 12 + 5); // the head follows the pointer
+
+    // Dragging backwards keeps the anchor and flips the head.
+    QTest::mousePress(view.get(), Qt::LeftButton, {}, cellPoint(editor, 1, 5), 10);
+    QTest::mouseMove(view.get(), cellPoint(editor, 0, 1));
+    QTest::mouseRelease(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 1), 10);
+    QCOMPARE(editor->cursorPosition(), 1);
+    QCOMPARE(editor->selectionEnd(), 12 + 5);
+  }
+
+  void shiftClickExtends() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("0123456789"));
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 2), 10);
+    QTest::mouseClick(view.get(), Qt::LeftButton, Qt::ShiftModifier, cellPoint(editor, 0, 7), 10);
+    QCOMPARE(editor->selectionStart(), 2);
+    QCOMPARE(editor->selectionEnd(), 7);
+    QTest::mouseClick(view.get(), Qt::LeftButton, Qt::ShiftModifier, cellPoint(editor, 0, 0), 10);
+    QCOMPARE(editor->selectionStart(), 0);
+    QCOMPARE(editor->selectionEnd(), 2); // the anchor stays where the first click put it
+  }
+
+  void doubleClickSelectsWordTripleClickLine() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("foo bar_baz qux\nnext"));
+    const QPoint p = cellPoint(editor, 0, 6);
+    QTest::mouseDClick(view.get(), Qt::LeftButton, {}, p, 10); // press, release, double-click press, release
+    QCOMPARE(editor->selectionStart(), 4);
+    QCOMPARE(editor->selectionEnd(), 11);
+    // A third click quickly after selects the whole line, including its break.
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, p, 10);
+    QCOMPARE(editor->selectionStart(), 0);
+    QCOMPARE(editor->selectionEnd(), 16);
+  }
+
+  void wordDragGrowsByWords() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("aaa bbb ccc ddd"));
+    const QPoint p = cellPoint(editor, 0, 5);
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, p, 10);
+    QTest::mousePress(view.get(), Qt::LeftButton, {}, p, 10); // a second quick press counts as a double click
+    QCOMPARE(editor->selectionStart(), 4);
+    QCOMPARE(editor->selectionEnd(), 7);
+    QTest::mouseMove(view.get(), cellPoint(editor, 0, 13));
+    QCOMPARE(editor->selectionStart(), 4);
+    QCOMPARE(editor->selectionEnd(), 15); // grown to the end of "ddd"
+    QTest::mouseMove(view.get(), cellPoint(editor, 0, 1));
+    QCOMPARE(editor->cursorPosition(), 0); // and backwards to the start of "aaa", keeping "bbb"
+    QCOMPARE(editor->selectionEnd(), 7);
+    QTest::mouseRelease(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 1), 10);
+  }
+
+  void clickFocusesAndBreaksTypingRun() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("ab"));
+    typeText(view.get(), "x");
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 3), 10);
+    typeText(view.get(), "y");
+    QCOMPARE(editor->document()->undoStack().undoSteps(), 2);
+  }
+
+  void dragOutsideAutoScrolls() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    QString text;
+    for (int i = 0; i < 300; ++i)
+      text += QStringLiteral("line %1\n").arg(i);
+    editor->setText(text);
+    QTest::mousePress(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 1), 10);
+    QTest::mouseMove(view.get(), QPoint(10, int(editor->height()) + 30));
+    QTRY_VERIFY(editor->contentY() > 100);
+    const qsizetype head = editor->cursorPosition();
+    QTRY_VERIFY(editor->cursorPosition() > head);
+    QTest::mouseRelease(view.get(), Qt::LeftButton, {}, QPoint(10, int(editor->height()) + 30), 10);
+    const qreal y = editor->contentY();
+    QTest::qWait(100);
+    QCOMPARE(editor->contentY(), y); // releasing stops the scrolling
+  }
+
   void setTextUpdatesLineCount() {
     CodeEditor editor;
     QSignalSpy spy(&editor, &CodeEditor::lineCountChanged);
