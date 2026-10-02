@@ -1,5 +1,7 @@
 #include "codeeditor.h"
 
+#include <QtGui/QClipboard>
+#include <QtGui/QGuiApplication>
 #include <QtGui/QTextOption>
 
 #include <QtQuick/QQuickWindow>
@@ -9,9 +11,52 @@
 #include <algorithm>
 #include <cmath>
 
+// Geometry for movement commands, from the same layouts and metrics the editor draws with.
+class CodeEditor::EditorLayout final : public qce::CursorLayout {
+public:
+  explicit EditorLayout(CodeEditor *editor) : m_editor(editor) {}
+
+  qreal xForOffset(qsizetype offset) const override {
+    const qce::TextSnapshot snapshot = m_editor->m_document.snapshot();
+    const qce::TextPosition pos = snapshot.rope().positionAt(offset);
+    return m_editor->xForColumn(*m_editor->layoutForLine(pos.line, snapshot), pos.column);
+  }
+  qsizetype offsetForX(const qce::DisplayRow &row, qreal x) const override {
+    const qce::TextSnapshot snapshot = m_editor->m_document.snapshot();
+    const qsizetype column = qBound(
+      row.startColumn, m_editor->columnForX(*m_editor->layoutForLine(row.line, snapshot), x), row.endColumn
+    );
+    const qce::Rope &rope = snapshot.rope();
+    return rope.snapToCodePoint(rope.offsetAt({row.line, column}));
+  }
+  qsizetype pageRows() const override {
+    // Leave one row of context, like most editors.
+    return qMax<qsizetype>(1, qsizetype(m_editor->height() / m_editor->m_metrics.lineHeight()) - 1);
+  }
+
+private:
+  CodeEditor *m_editor;
+};
+
+class CodeEditor::EditorHost final : public qce::InputHost {
+public:
+  explicit EditorHost(CodeEditor *editor) : m_editor(editor) {}
+  void copy() override { m_editor->copy(); }
+  void cut() override { m_editor->cut(); }
+  void paste() override { m_editor->paste(); }
+  void scrollRows(qsizetype rows) override {
+    m_editor->setContentY(m_editor->m_contentY + qreal(rows) * m_editor->m_metrics.lineHeight());
+  }
+
+private:
+  CodeEditor *m_editor;
+};
+
 CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setFlag(ItemHasContents);
   setFlag(ItemIsFocusScope);
+  m_cursorLayout = std::make_unique<EditorLayout>(this);
+  m_host = std::make_unique<EditorHost>(this);
   m_font = qce::TextMetrics::defaultMonospaceFont();
   m_metrics.setFont(m_font);
   m_ownedTheme = m_theme = qce::Theme::createDark(this);
@@ -129,7 +174,128 @@ void CodeEditor::select(qsizetype anchor, qsizetype head) {
 }
 
 qce::EditContext CodeEditor::editContext() {
-  return {m_document, m_selections, {true, m_metrics.tabWidth(), m_metrics.tabWidth()}};
+  return {
+    m_document, m_selections, {true, m_metrics.tabWidth(), m_metrics.tabWidth(), m_readOnly}, &m_map,
+    m_cursorLayout.get()
+  };
+}
+
+void CodeEditor::setReadOnly(bool readOnly) {
+  if (readOnly == m_readOnly)
+    return;
+  m_readOnly = readOnly;
+  emit readOnlyChanged();
+}
+
+void CodeEditor::setInputHandler(qce::InputHandler *handler) {
+  if (!handler)
+    handler = &m_defaultHandler;
+  if (handler == m_handler)
+    return;
+  m_handler->reset();
+  m_handler = handler;
+}
+
+void CodeEditor::updateUndoState() {
+  if (const bool can = m_document.canUndo(); can != m_canUndo) {
+    m_canUndo = can;
+    emit canUndoChanged();
+  }
+  if (const bool can = m_document.canRedo(); can != m_canRedo) {
+    m_canRedo = can;
+    emit canRedoChanged();
+  }
+}
+
+// Housekeeping after anything the user did to the text or selections.
+void CodeEditor::afterCommand() {
+  updateUndoState();
+  ensureCursorVisible();
+}
+
+void CodeEditor::keyPressEvent(QKeyEvent *event) {
+  qce::EditContext ctx = editContext();
+  if (m_handler->keyPress(event, ctx, *m_host)) {
+    event->accept();
+    afterCommand();
+    return;
+  }
+  QQuickItem::keyPressEvent(event);
+}
+
+void CodeEditor::undo() {
+  qce::EditContext ctx = editContext();
+  qce::commands::undo(ctx);
+  afterCommand();
+}
+
+void CodeEditor::redo() {
+  qce::EditContext ctx = editContext();
+  qce::commands::redo(ctx);
+  afterCommand();
+}
+
+void CodeEditor::selectAll() {
+  qce::EditContext ctx = editContext();
+  qce::commands::selectAll(ctx);
+  afterCommand();
+}
+
+void CodeEditor::insert(const QString &text) {
+  qce::EditContext ctx = editContext();
+  qce::commands::insertText(ctx, text, qce::EditKind::Other);
+  afterCommand();
+}
+
+// Selected text of every selection, joined by line breaks.
+void CodeEditor::copy() {
+  const qce::Rope &rope = m_document.rope();
+  QStringList parts;
+  for (int i = 0; i < m_selections.count(); ++i)
+    if (const qce::Selection s = m_selections.at(i); !s.isEmpty())
+      parts.append(rope.toString(s.start(), s.end()));
+  if (!parts.isEmpty())
+    QGuiApplication::clipboard()->setText(parts.join(u'\n'));
+}
+
+void CodeEditor::cut() {
+  if (m_readOnly)
+    return;
+  copy();
+  qce::EditContext ctx = editContext();
+  qce::commands::deleteSelection(ctx);
+  afterCommand();
+}
+
+void CodeEditor::paste() {
+  const QString text = QGuiApplication::clipboard()->text();
+  if (text.isEmpty())
+    return;
+  qce::EditContext ctx = editContext();
+  qce::commands::insertText(ctx, text, qce::EditKind::Other);
+  afterCommand();
+}
+
+void CodeEditor::ensureCursorVisible() {
+  const qce::TextSnapshot snapshot = m_document.snapshot();
+  const qce::TextPosition pos = snapshot.rope().positionAt(cursorPosition());
+  const auto layout = layoutForLine(pos.line, snapshot);
+  if (layout->width > m_maxLineWidth) {
+    m_maxLineWidth = layout->width;
+    updateContentSize();
+  }
+  const qreal lineHeight = m_metrics.lineHeight();
+  const qreal top = qreal(m_map.rowForPosition(pos)) * lineHeight;
+  if (top < m_contentY)
+    setContentY(top);
+  else if (top + lineHeight > m_contentY + height())
+    setContentY(top + lineHeight - height());
+  const qreal x = xForColumn(*layout, pos.column);
+  const qreal margin = 2 * m_metrics.cellAdvance();
+  if (x - margin < m_contentX)
+    setContentX(x - margin);
+  else if (x + margin + m_metrics.cellAdvance() > m_contentX + width())
+    setContentX(x + margin + m_metrics.cellAdvance() - width());
 }
 
 // Selections moved: by a command, by select(), or because an edit shifted their anchors. The
@@ -292,6 +458,12 @@ void CodeEditor::buildOverlays() {
   }
 }
 
+qsizetype CodeEditor::columnForX(const qce::LineLayout &layout, qreal x) const {
+  return m_metrics.isSimple(layout.text)
+           ? m_metrics.columnForX(layout.text, x)
+           : layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
+}
+
 qsizetype CodeEditor::positionAt(qreal x, qreal y) {
   const qsizetype row = qBound<qsizetype>(
     0, qsizetype(std::floor((y + m_contentY) / m_metrics.lineHeight())), m_map.rowCount() - 1
@@ -300,12 +472,7 @@ qsizetype CodeEditor::positionAt(qreal x, qreal y) {
   const qce::TextSnapshot snapshot = m_document.snapshot();
   const qce::Rope &rope = snapshot.rope();
   const auto layout = layoutForLine(displayRow.line, snapshot);
-  const QString &text = layout->text;
-  const qreal contentX = x + m_contentX;
-  const qsizetype column =
-    m_metrics.isSimple(text)
-      ? m_metrics.columnForX(text, contentX)
-      : layout->layout->lineAt(0).xToCursor(contentX, QTextLine::CursorBetweenCharacters);
+  const qsizetype column = columnForX(*layout, x + m_contentX);
   return rope.snapToCodePoint(rope.offsetAt({displayRow.line, column}));
 }
 
@@ -341,6 +508,7 @@ void CodeEditor::load(const QUrl &file) {
 }
 
 void CodeEditor::onDocumentReset() {
+  updateUndoState();
   m_lastLineCount = lineCount();
   m_layouts.clear();
   m_maxLineWidth = 0;
@@ -358,6 +526,7 @@ void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
   }
   updateContentSize();
   invalidatePlan();
+  updateUndoState();
 }
 
 namespace {

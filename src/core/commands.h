@@ -1,6 +1,8 @@
 #ifndef QCE_COMMANDS_H
 #define QCE_COMMANDS_H
 
+#include "core/cursorlayout.h"
+#include "core/displaymap.h"
 #include "core/selectionset.h"
 #include "core/textdocument.h"
 
@@ -11,6 +13,7 @@ struct EditorSettings {
   bool insertSpaces = true; // Tab inserts spaces rather than a tab character
   int indentWidth = 4;
   int tabWidth = 4;
+  bool readOnly = false;
 };
 
 // What a command acts on (ADR 0005): the document, the selections that always exist, and settings.
@@ -18,6 +21,24 @@ struct EditContext {
   TextDocument &document;
   SelectionSet &selections;
   EditorSettings settings;
+  // Needed by vertical movement; those commands do nothing without them.
+  const DisplayMap *map = nullptr;
+  const CursorLayout *layout = nullptr;
+};
+
+enum class Movement : quint8 {
+  CharLeft,
+  CharRight,
+  WordLeft,
+  WordRight,
+  LineStart, // first non-blank, then column 0 when already there
+  LineEnd,
+  DocStart,
+  DocEnd,
+  RowUp, // by display row, keeping the goal x
+  RowDown,
+  PageUp,
+  PageDown,
 };
 
 // Commands are the only code that edits the buffer on the user's behalf. Each applies to every
@@ -34,7 +55,18 @@ bool deleteForward(EditContext &ctx);
 // Removes the selected text (cut without the clipboard); empty selections are left alone.
 bool deleteSelection(EditContext &ctx);
 
+// Enter: replaces the selections with a line break.
+bool newline(EditContext &ctx);
+
+// Backspace and Delete for whole words.
+bool deleteWordBackward(EditContext &ctx);
+bool deleteWordForward(EditContext &ctx);
+
 bool selectAll(EditContext &ctx);
+// Moves every selection's head; with `extend` the anchors stay put. Without it a non-empty
+// selection moved by character collapses to its edge in the direction of travel. Movement does not
+// touch the text and ends the current typing run for undo.
+bool move(EditContext &ctx, Movement movement, bool extend = false);
 
 // Undo and redo restore the selections recorded with the step.
 bool undo(EditContext &ctx);

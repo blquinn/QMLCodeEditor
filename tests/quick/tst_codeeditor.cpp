@@ -1,3 +1,4 @@
+#include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlComponent>
 #include <QtQml/QQmlEngine>
@@ -462,6 +463,123 @@ private slots:
     editor->setText(QStringLiteral("M M"));
     editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
     QTRY_VERIFY(!inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
+  }
+
+  // ---- Editing (M3) ----
+
+private:
+  static void typeText(QWindow *window, const char *text) {
+    for (const char *c = text; *c; ++c)
+      QTest::keyClick(window, *c);
+  }
+  // A shown, focused editor to send key events to.
+  struct Shown {
+    std::unique_ptr<QQuickView> view;
+    CodeEditor *editor = nullptr;
+  };
+  Shown showEditor() {
+    Shown shown;
+    shown.view = std::make_unique<QQuickView>(&m_engine, nullptr);
+    shown.view->setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    shown.view->show();
+    if (!QTest::qWaitForWindowExposed(shown.view.get()))
+      return {};
+    shown.editor = qobject_cast<CodeEditor *>(shown.view->rootObject());
+    shown.editor->forceActiveFocus();
+    shown.editor->setCursorBlinkInterval(0);
+    return shown;
+  }
+
+private slots:
+  void typesAndDeletes() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    typeText(view.get(), "hello");
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("hello"));
+    QCOMPARE(editor->cursorPosition(), 5);
+    QTest::keyClick(view.get(), Qt::Key_Backspace);
+    QTest::keyClick(view.get(), Qt::Key_Return);
+    typeText(view.get(), "x");
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("hell\nx"));
+    QCOMPARE(editor->lineCount(), 2);
+    QTest::keyClick(view.get(), Qt::Key_Home, Qt::ControlModifier);
+    QTest::keyClick(view.get(), Qt::Key_Delete);
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("ell\nx"));
+  }
+
+  void undoRedoAndState() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    QVERIFY(!editor->canUndo());
+    QSignalSpy undoSpy(editor, &CodeEditor::canUndoChanged);
+    typeText(view.get(), "abc");
+    QVERIFY(editor->canUndo());
+    QCOMPARE(undoSpy.count(), 1);
+    QTest::keyClick(view.get(), Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(editor->document()->rope().toString(), QString());
+    QVERIFY(!editor->canUndo());
+    QVERIFY(editor->canRedo());
+    QTest::keyClick(view.get(), Qt::Key_Z, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("abc"));
+    QCOMPARE(editor->cursorPosition(), 3);
+  }
+
+  void readOnlyRefusesUserEdits() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("abc"));
+    editor->setReadOnly(true);
+    typeText(view.get(), "x");
+    QTest::keyClick(view.get(), Qt::Key_Delete);
+    editor->insert(QStringLiteral("y"));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("abc"));
+    QTest::keyClick(view.get(), Qt::Key_Right);
+    QCOMPARE(editor->cursorPosition(), 1);
+  }
+
+  void cursorScrollsIntoView() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    QString text;
+    for (int i = 0; i < 200; ++i)
+      text += QStringLiteral("line %1\n").arg(i);
+    editor->setText(text);
+    QCOMPARE(editor->contentY(), 0.0);
+    QTest::keyClick(view.get(), Qt::Key_End, Qt::ControlModifier);
+    const qreal lh = editor->metrics().lineHeight();
+    QCOMPARE(editor->contentY(), editor->contentHeight() - editor->height());
+    QVERIFY(editor->rectForPosition(editor->cursorPosition()).bottom() <= editor->height() + 0.5);
+    // Scrolling away by hand is not undone until the next command.
+    editor->setContentY(0);
+    QCOMPARE(editor->contentY(), 0.0);
+    QTest::keyClick(view.get(), Qt::Key_Up);
+    QVERIFY(editor->contentY() > 0);
+    QTest::keyClick(view.get(), Qt::Key_Home, Qt::ControlModifier);
+    QCOMPARE(editor->contentY(), 0.0);
+    // Page down moves the cursor and the view together.
+    QTest::keyClick(view.get(), Qt::Key_PageDown);
+    const qreal rowOnScreen = editor->rectForPosition(editor->cursorPosition()).top();
+    QVERIFY(editor->contentY() > 0);
+    QVERIFY(rowOnScreen >= 0 && rowOnScreen < lh * 2);
+  }
+
+  void clipboardRoundTrip() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("hello world"));
+    editor->select(0, 5);
+    editor->copy();
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("hello"));
+    editor->setCursorPosition(11);
+    editor->paste();
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("hello worldhello"));
+    editor->select(0, 6);
+    editor->cut();
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("hello "));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("worldhello"));
+    QTest::keyClick(view.get(), Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("hello worldhello"));
+    QCOMPARE(editor->selectionEnd(), 6);
   }
 
   void setTextUpdatesLineCount() {

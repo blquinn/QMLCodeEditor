@@ -4,6 +4,8 @@
 #include "core/displaymap.h"
 #include "core/highlighter.h"
 #include "core/commands.h"
+#include "core/cursorlayout.h"
+#include "core/inputhandler.h"
 #include "core/selection.h"
 #include "core/selectionset.h"
 #include "core/textdocument.h"
@@ -37,6 +39,9 @@ class CodeEditor : public QQuickItem {
   Q_PROPERTY(
     qsizetype cursorPosition READ cursorPosition WRITE setCursorPosition NOTIFY selectionChanged FINAL
   )
+  Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged FINAL)
+  Q_PROPERTY(bool canUndo READ canUndo NOTIFY canUndoChanged FINAL)
+  Q_PROPERTY(bool canRedo READ canRedo NOTIFY canRedoChanged FINAL)
   Q_PROPERTY(qsizetype selectionStart READ selectionStart NOTIFY selectionChanged FINAL)
   Q_PROPERTY(qsizetype selectionEnd READ selectionEnd NOTIFY selectionChanged FINAL)
   Q_PROPERTY(
@@ -105,6 +110,30 @@ public:
   qsizetype selectionEnd() const;
   // Selects [anchor, head] with the cursor at `head`.
   Q_INVOKABLE void select(qsizetype anchor, qsizetype head);
+  // Edits from the user (keys, paste, input methods) are refused while read-only; the document API
+  // and setText()/load() still work.
+  bool readOnly() const { return m_readOnly; }
+  void setReadOnly(bool readOnly);
+  bool canUndo() const { return m_canUndo; }
+  bool canRedo() const { return m_canRedo; }
+
+  // The handler that turns key events into commands (ADR 0010). Never null: the default keymap
+  // until the host sets another; passing nullptr restores it. The editor does not take ownership.
+  qce::InputHandler *inputHandler() const { return m_handler; }
+  void setInputHandler(qce::InputHandler *handler);
+
+  // Commands for hosts and menus. Each scrolls the cursor into view.
+  Q_INVOKABLE void undo();
+  Q_INVOKABLE void redo();
+  Q_INVOKABLE void selectAll();
+  Q_INVOKABLE void copy();
+  Q_INVOKABLE void cut();
+  Q_INVOKABLE void paste();
+  // Replaces every selection with `text`.
+  Q_INVOKABLE void insert(const QString &text);
+  // Scrolls the minimum distance that shows the primary cursor.
+  Q_INVOKABLE void ensureCursorVisible();
+
   // Time in ms between blink phases; 0 keeps the cursor solid. Any cursor movement shows it.
   int cursorBlinkInterval() const { return m_blinkTimer.interval(); }
   void setCursorBlinkInterval(int ms);
@@ -144,6 +173,9 @@ signals:
   void selectionChanged();
   void cursorBlinkIntervalChanged();
   void cursorVisibleChanged();
+  void readOnlyChanged();
+  void canUndoChanged();
+  void canRedoChanged();
   void contentXChanged();
   void contentYChanged();
   void contentWidthChanged();
@@ -153,11 +185,17 @@ signals:
 
 protected:
   void updatePolish() override;
+  void keyPressEvent(QKeyEvent *event) override;
   void wheelEvent(QWheelEvent *event) override;
   QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
   void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
 private:
+  class EditorLayout;
+  class EditorHost;
+  void afterCommand();
+  void updateUndoState();
+  qsizetype columnForX(const qce::LineLayout &layout, qreal x) const;
   void onDocumentReset();
   void onDocumentChanged(const qce::TextChange &change);
 
@@ -182,6 +220,13 @@ private:
   void invalidatePlan();
 
   qce::EditContext editContext();
+  std::unique_ptr<EditorLayout> m_cursorLayout;
+  std::unique_ptr<EditorHost> m_host;
+  qce::DefaultInputHandler m_defaultHandler;
+  qce::InputHandler *m_handler = &m_defaultHandler;
+  bool m_readOnly = false;
+  bool m_canUndo = false;
+  bool m_canRedo = false;
   void onSelectionsChanged();
   bool m_showWhitespace = false;
   QTimer m_blinkTimer;

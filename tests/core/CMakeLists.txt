@@ -11,3 +11,4 @@ qce_add_test(tst_highlighter SOURCES tst_highlighter.cpp LIBS QMLCodeEditor::Cor
 qce_add_test(tst_displaymap SOURCES tst_displaymap.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_selectionset SOURCES tst_selectionset.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_commands SOURCES tst_commands.cpp testutil.h LIBS QMLCodeEditor::Core)
+qce_add_test(tst_input SOURCES tst_input.cpp LIBS QMLCodeEditor::Core)
