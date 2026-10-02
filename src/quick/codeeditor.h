@@ -3,7 +3,9 @@
 
 #include "core/displaymap.h"
 #include "core/highlighter.h"
+#include "core/commands.h"
 #include "core/selection.h"
+#include "core/selectionset.h"
 #include "core/textdocument.h"
 #include "quick/editorscene.h"
 #include "quick/linelayoutcache.h"
@@ -94,8 +96,9 @@ public:
   qreal contentWidth() const { return m_contentWidth; }
   qreal contentHeight() const { return m_contentHeight; }
 
-  // Interim single cursor and selection (RENDER-05); INPUT-01 replaces them with the SelectionSet.
-  // Both ends are anchors, so they follow edits. cursorPosition is the head of the selection.
+  // The selections (ADR 0005). cursorPosition/selectionStart/selectionEnd describe the primary one;
+  // cursorPosition is its head. They follow edits.
+  qce::SelectionSet *selections() { return &m_selections; }
   qsizetype cursorPosition() const;
   void setCursorPosition(qsizetype offset);
   qsizetype selectionStart() const;
@@ -165,6 +168,7 @@ private:
 
   qce::TextDocument m_document;
   qce::DisplayMap m_map{&m_document};
+  qce::SelectionSet m_selections{&m_document};
   qce::TextMetrics m_metrics;
   qce::LineLayoutCache m_layouts;
   QList<qce::FramePlanRow> m_plan;
@@ -177,17 +181,17 @@ private:
   qreal xForColumn(const qce::LineLayout &layout, qsizetype column) const;
   void invalidatePlan();
 
-  qce::AnchorId m_headAnchor = qce::InvalidAnchor;
-  qce::AnchorId m_selectionAnchor = qce::InvalidAnchor;
+  qce::EditContext editContext();
+  void onSelectionsChanged();
   bool m_showWhitespace = false;
   QTimer m_blinkTimer;
   bool m_cursorVisible = true;
   QList<qce::RowSpan> m_currentLineSpans;
   QList<qce::RowSpan> m_selectionSpans;
   QList<qce::RowSpan> m_markSpans;
-  qce::RowSpan m_cursorSpan;
-  bool m_hasCursor = false;
+  QList<qce::RowSpan> m_cursorSpans;
   qce::Selection m_lastSelection;
+  int m_lastSelectionCount = 1;
 
   qreal m_contentX = 0;
   qreal m_contentY = 0;

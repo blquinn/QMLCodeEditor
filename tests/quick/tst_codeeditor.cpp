@@ -415,8 +415,8 @@ private slots:
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
     editor->setCursorBlinkInterval(0);
-    editor->setCursorPosition(0);
     editor->setText(QStringLiteral("\tM"));
+    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
     const int lh = int(editor->metrics().lineHeight());
     const qreal adv = editor->metrics().cellAdvance();
     QCOMPARE(editor->tabWidth(), 4);
@@ -438,8 +438,8 @@ private slots:
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
     editor->setCursorBlinkInterval(0);
-    editor->setCursorPosition(0);
     editor->setText(QStringLiteral("M M"));
+    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
     const int lh = int(editor->metrics().lineHeight());
     const qreal adv = editor->metrics().cellAdvance();
     QVERIFY(!editor->showWhitespace());
@@ -455,10 +455,12 @@ private slots:
     QVERIFY2(brightest <= 0x60, qPrintable(QString::number(brightest)));
     // Tabs get a mark across their span.
     editor->setText(QStringLiteral("\tM"));
+    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
     QTRY_VERIFY(inkInColumns(view.grabWindow(), 1, 4 * adv - 1, lh));
     editor->setShowWhitespace(false);
     QTRY_VERIFY(!inkInColumns(view.grabWindow(), 1, 4 * adv - 1, lh));
     editor->setText(QStringLiteral("M M"));
+    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
     QTRY_VERIFY(!inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
   }
 

@@ -139,7 +139,7 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
 
 **Exit criteria:** type, delete, paste, undo/redo, select with mouse and keyboard, and compose text via IME in the demo app; keystroke-to-frame under 8 ms on a 100 MB file.
 
-- [ ] **INPUT-01** `SelectionSet` and command layer
+- [x] **INPUT-01** `SelectionSet` and command layer — done 2026-10-02 (HASH)
   - Every mutation is a command applied to a selection set that always exists (a single cursor is a set of one) ([ADR 0005](docs/adr/0005-commands-and-selections.md)).
 - [ ] **INPUT-02** Swappable `InputHandler` interface plus the default handler
   - Maps key events to commands; vim (M10) is a second implementation.
@@ -157,6 +157,8 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
 - [ ] **INPUT-09** Basic auto-indent
   - Newline keeps indentation; tab/shift-tab indent selections.
 - [ ] **INPUT-10** Focus handling and cursor blink
+- [ ] **INPUT-11** Keystroke-to-frame benchmark
+  - `bench_typing`: typing, Enter, Backspace, paste and undo on the generated 100 MB file; event-to-frame latency median/p95/max; JSON result committed; ctest smoke variant.
 
 ## M4 — Display map & soft wrap
 

@@ -8,7 +8,8 @@ qt_add_library(qce_core STATIC
     fileformat.h fileloader.h fileloader.cpp
     filesaver.h filesaver.cpp
     textboundaries.h textboundaries.cpp
-    selection.h undostack.h undostack.cpp
+    selection.h selectionset.h selectionset.cpp commands.h commands.cpp
+    undostack.h undostack.cpp
     highlighter.h highlighter.cpp
     displaymap.h displaymap.cpp
 )

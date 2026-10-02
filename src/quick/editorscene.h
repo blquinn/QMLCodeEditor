@@ -53,8 +53,7 @@ struct FrameParams {
   const QList<RowSpan> *selection = nullptr;
   QColor markColor;
   const QList<RowSpan> *marks = nullptr; // visible-whitespace marks (tabs), drawn over the selection
-  bool hasCursor = false;
-  RowSpan cursor;            // x0 is the cursor's x; x1 - x0 its width
+  const QList<RowSpan> *cursors = nullptr; // x0 is a cursor's x; x1 - x0 its width
   bool cursorVisible = true; // the blink phase; drawn through opacity so a blink costs no geometry
 };
 

@@ -86,14 +86,10 @@ void EditorScene::syncOverlays(const FrameParams &p) {
         out.append(rectFor(span));
     return out;
   };
-  QList<QRectF> cursor;
-  if (p.hasCursor)
-    cursor.append(rectFor(p.cursor));
-
   bool changed = m_currentLineBatch->update(rects(p.currentLine), p.currentLineColor);
   changed |= m_selectionBatch->update(rects(p.selection), p.selectionColor);
   changed |= m_markBatch->update(rects(p.marks), p.markColor);
-  changed |= m_cursorBatch->update(cursor, p.cursorColor);
+  changed |= m_cursorBatch->update(rects(p.cursors), p.cursorColor);
   if (changed)
     ++m_stats.overlayUpdates;
   m_cursorFade->setOpacity(p.cursorVisible ? 1.0 : 0.0);

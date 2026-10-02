@@ -9,3 +9,5 @@ qce_add_test(tst_boundaries SOURCES tst_boundaries.cpp testutil.h LIBS QMLCodeEd
 qce_add_test(tst_fileio SOURCES tst_fileio.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_highlighter SOURCES tst_highlighter.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_displaymap SOURCES tst_displaymap.cpp LIBS QMLCodeEditor::Core)
+qce_add_test(tst_selectionset SOURCES tst_selectionset.cpp LIBS QMLCodeEditor::Core)
+qce_add_test(tst_commands SOURCES tst_commands.cpp testutil.h LIBS QMLCodeEditor::Core)

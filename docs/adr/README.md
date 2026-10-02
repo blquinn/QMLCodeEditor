@@ -13,6 +13,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0007](0007-text-core-conventions.md) | Text core conventions: line breaks, offsets and code points | Accepted |
 | [0008](0008-edit-boundaries-and-rope-balance.md) | Edit boundaries and rope balance in practice | Accepted |
 | [0009](0009-rendering-pipeline.md) | Rendering pipeline: polish builds a frame plan, sync reconciles pooled nodes | Accepted |
+| [0010](0010-command-layer.md) | Command layer, selection set and input handlers | Accepted |
 
 ## Adding one
 
