@@ -8,5 +8,5 @@ qt_add_qml_module(QMLCodeEditor
 
 target_compile_definitions(QMLCodeEditor
     PRIVATE $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:QT_QML_DEBUG>)
-target_link_libraries(QMLCodeEditor PUBLIC QMLCodeEditor::Core PRIVATE Qt6::Quick)
+target_link_libraries(QMLCodeEditor PUBLIC QMLCodeEditor::Core PRIVATE Qt6::Quick qce_warnings)
 target_include_directories(QMLCodeEditor PUBLIC ${PROJECT_SOURCE_DIR}/src)

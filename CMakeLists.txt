@@ -14,5 +14,8 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 enable_testing()
 
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+include(QceWarnings)
+
 add_subdirectory(src/core)
 add_subdirectory(src/quick)
