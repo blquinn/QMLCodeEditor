@@ -200,6 +200,12 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - Hosts attach icons/colors per line (git change bars, breakpoints, diagnostics); batched into the scene graph.
 - [ ] **GUTTER-05** Gutter interaction
   - Click/drag selects lines; click signal for hosts (e.g. toggling breakpoints).
+- [ ] **GUTTER-06** QML delegate column
+  - `DelegateColumn` instantiates a host-supplied delegate per visible row, pooled and reused as rows scroll; delegates never exist for rows outside the frame plan.
+- [ ] **GUTTER-07** Change-marker column
+  - `ChangeColumn` marks lines edited since load/save with anchored ranges; cleared on text reset and save.
+- [ ] **GUTTER-08** Gutter benchmark and ADR
+  - Scroll with the gutter on, wrap on and off, and relative numbers while the cursor moves; ADR 0012 records the design.
 
 ## M6 — Multi-cursor
 
