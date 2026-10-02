@@ -1,5 +1,7 @@
 #include "theme.h"
 
+#include <memory>
+
 using namespace Qt::StringLiterals;
 
 namespace qce {
@@ -67,6 +69,13 @@ void Theme::assign(const Theme &o) {
   m_whitespace = o.m_whitespace;
   m_tokenStyles = o.m_tokenStyles;
   emit changed();
+}
+
+void Theme::applyPreset(const QString &name) {
+  const std::unique_ptr<Theme> preset(
+    name.compare("light"_L1, Qt::CaseInsensitive) == 0 ? createLight() : createDark()
+  );
+  assign(*preset);
 }
 
 Theme *Theme::createDark(QObject *parent) {

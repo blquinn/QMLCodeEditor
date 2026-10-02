@@ -1,36 +1,58 @@
+#include <QtCore/QDir>
 #include <QtCore/QTimer>
+#include <QtCore/QUrl>
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlApplicationEngine>
 #include <QtQuick/QQuickWindow>
 
-int main(int argc, char **argv)
-{
-    QGuiApplication app(argc, argv);
-    // --smoke: exit 0 after the first presented frame, 1 if none arrives within 10 s (used by ctest).
-    const bool smoke = app.arguments().contains(QStringLiteral("--smoke"));
+int main(int argc, char **argv) {
+  QGuiApplication app(argc, argv);
+  // --smoke: exit 0 after the first presented frame, 1 if none arrives within 10 s (used by ctest).
+  // --grab <png>: save a screenshot of the window once it has settled, then exit.
+  bool smoke = false;
+  QString grabPath;
+  QUrl initialFile; // the first argument that isn't an option is a file to open
+  const QStringList args = app.arguments();
+  for (int i = 1; i < args.size(); ++i) {
+    if (args[i] == QLatin1String("--smoke"))
+      smoke = true;
+    else if (args[i] == QLatin1String("--grab") && i + 1 < args.size())
+      grabPath = args[++i];
+    else if (!args[i].startsWith(QLatin1Char('-')) && initialFile.isEmpty())
+      initialFile = QUrl::fromLocalFile(QDir::current().absoluteFilePath(args[i]));
+  }
 
-    QQmlApplicationEngine engine;
-    int exitCode = 0;
+  QQmlApplicationEngine engine;
+  engine.setInitialProperties({{QStringLiteral("initialFile"), initialFile}});
+  int exitCode = 0;
+  QObject::connect(
+    &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [&] { QCoreApplication::exit(1); },
+    Qt::QueuedConnection
+  );
+  engine.loadFromModule("Demo", "Main");
+
+  const auto windows = engine.rootObjects();
+  auto *window = windows.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(windows.first());
+  if ((smoke || !grabPath.isEmpty()) && !window) {
+    qWarning("demo: Main.qml did not create a window");
+    return 1;
+  }
+  if (smoke) {
     QObject::connect(
-        &engine, &QQmlApplicationEngine::objectCreationFailed, &app, [&] { QCoreApplication::exit(1); },
-        Qt::QueuedConnection);
-    engine.loadFromModule("Demo", "Main");
-
-    if (smoke) {
-        const auto windows = engine.rootObjects();
-        auto *window = windows.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(windows.first());
-        if (!window) {
-            qWarning("demo: Main.qml did not create a window");
-            return 1;
-        }
-        QObject::connect(window, &QQuickWindow::frameSwapped, &app, [] { QCoreApplication::exit(0); },
-                         Qt::QueuedConnection);
-        QTimer::singleShot(10'000, &app, [&] {
-            qWarning("demo --smoke: no frame within 10 s");
-            exitCode = 1;
-            QCoreApplication::exit(1);
-        });
-    }
-    const int rc = app.exec();
-    return rc ? rc : exitCode;
+      window, &QQuickWindow::frameSwapped, &app, [] { QCoreApplication::exit(0); }, Qt::QueuedConnection
+    );
+    QTimer::singleShot(10'000, &app, [&] {
+      qWarning("demo --smoke: no frame within 10 s");
+      exitCode = 1;
+      QCoreApplication::exit(1);
+    });
+  }
+  if (!grabPath.isEmpty()) {
+    QTimer::singleShot(1500, &app, [&] {
+      exitCode = window->grabWindow().save(grabPath) ? 0 : 1;
+      QCoreApplication::exit(exitCode);
+    });
+  }
+  const int rc = app.exec();
+  return rc ? rc : exitCode;
 }

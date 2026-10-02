@@ -50,6 +50,9 @@ public:
   // Layout format ranges for spans of one line; Default spans are skipped.
   QList<QTextLayout::FormatRange> formatRanges(const QList<qce::HighlightSpan> &spans) const;
 
+  // Loads the built-in "dark" or "light" palette and token styles (one changed() signal).
+  Q_INVOKABLE void applyPreset(const QString &name);
+
   // Copies every value from `other` (one changed() signal).
   void assign(const Theme &other);
 
