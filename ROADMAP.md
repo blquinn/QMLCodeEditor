@@ -178,7 +178,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - Off, at viewport width, at a fixed column; word-boundary vs. character wrapping.
 - [x] **WRAP-06** Hanging indent option — done 2026-10-02 (72c937f)
   - Continuation rows align under the line's indentation (optionally plus an extra indent).
-- [~] **WRAP-07** Visual-row cursor movement
+- [x] **WRAP-07** Visual-row cursor movement — done 2026-10-02 (950c5b3)
   - Up/down move by display row with a sticky goal X; Home/End go to row start/end (second press goes to line start/end).
 - [ ] **WRAP-08** Wrap toggle at runtime and horizontal scrolling in no-wrap mode
 - [ ] **WRAP-09** Very long lines wrap without stalling
