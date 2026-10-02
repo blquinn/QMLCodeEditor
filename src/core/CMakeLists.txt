@@ -6,6 +6,7 @@ qt_add_library(qce_core STATIC
     textdocument.h textdocument.cpp
     anchorset.h anchorset.cpp
     fileformat.h fileloader.h fileloader.cpp
+    filesaver.h filesaver.cpp
     textboundaries.h textboundaries.cpp
     selection.h undostack.h undostack.cpp
 )

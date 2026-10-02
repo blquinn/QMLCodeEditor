@@ -71,6 +71,10 @@ public:
   const FileFormat &format() const { return m_format; }
   void setFormat(const FileFormat &format) { m_format = format; }
 
+  // Writes the current text to `path` in format() (CORE-09), atomically. Blocks; for large files
+  // call saveFile() from a worker with snapshot().rope() instead.
+  bool save(const QString &path, QString *error = nullptr) const;
+
   // Replaces the whole text without a change event for each edit; emits textReset().
   void setText(QStringView text);
   void reset(const Rope &rope);

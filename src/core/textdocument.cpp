@@ -1,6 +1,7 @@
 #include "core/textdocument.h"
 
 #include "core/fileloader.h"
+#include "core/filesaver.h"
 
 namespace qce {
 
@@ -157,6 +158,15 @@ void TextDocument::load(const QString &path) {
     m_job = nullptr;
   });
   m_job->start();
+}
+
+bool TextDocument::save(const QString &path, QString *error) const {
+  if (m_loading) {
+    if (error)
+      *error = QStringLiteral("the document is still loading");
+    return false;
+  }
+  return saveFile(m_rope, path, m_format, error);
 }
 
 void TextDocument::cancelLoad() {

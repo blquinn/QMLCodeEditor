@@ -1,7 +1,9 @@
 #include "core/fileloader.h"
+#include "core/filesaver.h"
 #include "core/textdocument.h"
 #include "testutil.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QTemporaryDir>
 #include <QtTest>
@@ -175,6 +177,105 @@ private slots:
     QVERIFY(mirror == text); // the change events add up to the document
     QCOMPARE(doc.format().encoding, Encoding::Utf8);
     QVERIFY(doc.rope().validate());
+  }
+
+  // ---- saving ----
+
+  void roundTripIsByteIdentical_data() {
+    QTest::addColumn<QByteArray>("bytes");
+    const QString text = QStringLiteral("alpha\r\nbeta\ngamma \U0001F600\r\n\r\nlast\r");
+    QTest::newRow("utf8 mixed") << text.toUtf8();
+    QTest::newRow("utf8 bom crlf") << QByteArray(
+      "\xEF\xBB\xBF"
+      "a\r\nb\r\n"
+    );
+    QTest::newRow("utf16le bom") << utf16(text, false, true);
+    QTest::newRow("utf16be bom") << utf16(text, true, true);
+    QTest::newRow("utf16le no bom") << utf16(text, false, false);
+    QTest::newRow("empty") << QByteArray();
+    QTest::newRow("only newline") << QByteArray("\n");
+    QTest::newRow("lone cr") << QByteArray("a\rb\rc");
+  }
+
+  void roundTripIsByteIdentical() {
+    QFETCH(QByteArray, bytes);
+    const QString in = write("rt_in.txt", bytes);
+    const LoadResult r = loadFile(in);
+    QVERIFY(r.ok);
+    QVERIFY(!r.format.hadDecodeErrors);
+    const QString out = m_dir.filePath("rt_out.txt");
+    QString error;
+    QVERIFY2(saveFile(r.text, out, r.format, &error), qPrintable(error));
+    QFile f(out);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QVERIFY(f.readAll() == bytes);
+  }
+
+  void roundTripOfALargeFile() {
+    test::Random rnd(test::testSeed());
+    QString text;
+    while (text.size() < 5'000'000)
+      text += rnd.text(50'000);
+    const QByteArray bytes = text.toUtf8();
+    const QString in = write("big_in.txt", bytes);
+    const LoadResult r = loadFile(in);
+    QVERIFY(r.ok);
+    const QString out = m_dir.filePath("big_out.txt");
+    QVERIFY(saveFile(r.text, out, r.format));
+    QFile f(out);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QVERIFY(f.readAll() == bytes);
+  }
+
+  void editedDocumentSavesWithTheOriginalFormat() {
+    const QString in = write("fmt.txt", utf16(u"one\r\ntwo\r\n"_s, true, true));
+    TextDocument doc;
+    QSignalSpy loaded(&doc, &TextDocument::loadFinished);
+    doc.load(in);
+    QVERIFY(loaded.wait(5000));
+    doc.insert(3, u"!");
+    const QString out = m_dir.filePath("fmt_out.txt");
+    QVERIFY(doc.save(out));
+    QFile f(out);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QVERIFY(f.readAll() == utf16(u"one!\r\ntwo\r\n"_s, true, true));
+  }
+
+  void invalidBytesAreReplacedAndFlagged() {
+    const QString in = write(
+      "bad.txt", QByteArray(
+                   "a\xFF"
+                   "b"
+                 )
+    );
+    const LoadResult r = loadFile(in);
+    QVERIFY(r.format.hadDecodeErrors);
+    const QString out = m_dir.filePath("bad_out.txt");
+    QVERIFY(saveFile(r.text, out, r.format));
+    QFile f(out);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QCOMPARE(f.readAll(), QStringLiteral("a\uFFFDb").toUtf8()); // lossy, hence the flag
+  }
+
+  void saveFailureLeavesTheOriginalAlone() {
+    const QString target = write("keep.txt", "original");
+    QString error;
+    // a path inside a directory that does not exist cannot be opened
+    QVERIFY(!saveFile(Rope::fromString(u"new"), m_dir.filePath("no/such/dir/x.txt"), FileFormat(), &error));
+    QVERIFY(!error.isEmpty());
+    QFile f(target);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QCOMPARE(f.readAll(), QByteArray("original"));
+  }
+
+  void saveReplacesAnExistingFileAtomically() {
+    const QString target = write("replace.txt", "old old old old");
+    QVERIFY(saveFile(Rope::fromString(u"new"), target, FileFormat()));
+    QFile f(target);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QCOMPARE(f.readAll(), QByteArray("new"));
+    // no temporary files left behind
+    QCOMPARE(QDir(m_dir.path()).entryList(QStringList{"replace*"}, QDir::Files).size(), 1);
   }
 
   void loadFailureIsReported() {
