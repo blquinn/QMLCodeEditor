@@ -273,6 +273,10 @@ Rope::~Rope() = default;
 Rope::Rope(NodePtr root) : m_root(trim(std::move(root))) {}
 
 Rope Rope::fromString(QStringView text) {
+  if (text.isEmpty())
+    return {};
+  if (text.size() <= kMaxLeaf)
+    return Rope(makeLeaf(text.toString()));
   RopeBuilder b;
   b.append(text);
   return b.finish();
@@ -304,6 +308,24 @@ Rope Rope::slice(qsizetype start, qsizetype end) const {
     return {};
   if (start == 0 && end == length())
     return *this;
+  if (end - start <= kMaxLeaf) {
+    // a short range inside one leaf: copy it out instead of splitting the tree twice
+    const Node *node = m_root.data();
+    qsizetype s = start;
+    while (!node->isLeaf()) {
+      const Node *next = nullptr;
+      for (const Child &c : node->kids) {
+        if (s < c.sum.length) {
+          next = c.node.data();
+          break;
+        }
+        s -= c.sum.length;
+      }
+      node = next;
+    }
+    if (s + (end - start) <= node->text.size())
+      return Rope(makeLeaf(node->text.mid(s, end - start)));
+  }
   Pair left = splitAt(m_root, end);
   return Rope(splitAt(left.l, start).r);
 }
@@ -344,6 +366,8 @@ Rope Rope::insert(qsizetype offset, QStringView text) const {
 Rope Rope::insert(qsizetype offset, const Rope &text) const {
   if (text.isEmpty())
     return *this;
+  if (text.m_root->isLeaf()) // typing-sized text takes the single-leaf fast path
+    return insert(offset, QStringView(text.m_root->text));
   offset = qBound<qsizetype>(0, offset, length());
   Pair p = splitAt(m_root, offset);
   return Rope(join(join(p.l, text.m_root), p.r));
@@ -432,19 +456,93 @@ qsizetype Rope::lineAt(qsizetype offset) const {
 }
 
 TextPosition Rope::positionAt(qsizetype offset) const {
-  offset = snapToCodePoint(qBound<qsizetype>(0, offset, length()));
-  if (
-    offset > 0 && offset < length() && at(offset - 1) == QLatin1Char('\r') && at(offset) == QLatin1Char('\n')
-  )
-    --offset;
-  const qsizetype line = lineAt(offset);
+  if (!m_root)
+    return {};
+  offset = qBound<qsizetype>(0, offset, length());
+
+  // One descent finds the leaf, the number of line breaks before it and the offset's place in it.
+  qsizetype local = offset;
+  qsizetype line = 0;
+  const Node *node = m_root.data();
+  while (!node->isLeaf()) {
+    for (const Child &c : node->kids) {
+      if (local <= c.sum.length) {
+        node = c.node.data();
+        break;
+      }
+      local -= c.sum.length;
+      line += c.sum.newlines;
+    }
+  }
+  const QStringView text(node->text);
+
+  // Snap out of a surrogate pair or a CRLF break (ADR 0007). At the very edges of the leaf the
+  // neighbouring unit is in another leaf, so take the general path there.
+  if (local == 0 || local == text.size()) {
+    const qsizetype snapped = snapToCodePoint(offset);
+    qsizetype fixed = snapped;
+    if (fixed > 0 && fixed < length() && at(fixed - 1) == QLatin1Char('\r') && at(fixed) == QLatin1Char('\n'))
+      --fixed;
+    if (fixed != offset)
+      return positionAt(fixed);
+  } else {
+    const QChar before = text[local - 1];
+    const QChar after = text[local];
+    if (
+      (before.isHighSurrogate() && after.isLowSurrogate()) ||
+      (before == QLatin1Char('\r') && after == QLatin1Char('\n'))
+    )
+      return positionAt(offset - 1);
+  }
+
+  const QStringView prefix = text.first(local);
+  const qsizetype lastNewline = prefix.lastIndexOf(QLatin1Char('\n'));
+  if (lastNewline >= 0)
+    return {line + countNewlines(prefix), local - lastNewline - 1};
+  // The line began in an earlier leaf.
   return {line, offset - lineStart(line)};
 }
 
 qsizetype Rope::offsetAt(TextPosition pos) const {
-  const qsizetype line = qBound<qsizetype>(0, pos.line, newlineCount());
-  const qsizetype start = lineStart(line);
-  return start + qBound<qsizetype>(0, pos.column, lineEnd(line) - start);
+  if (!m_root)
+    return 0;
+  const qsizetype lines = newlineCount();
+  const qsizetype line = qBound<qsizetype>(0, pos.line, lines);
+  const qsizetype column = qMax<qsizetype>(pos.column, 0);
+
+  // Find the leaf holding the line's first unit (the line-th newline ends the previous line).
+  qsizetype n = line;
+  qsizetype base = 0;
+  const Node *node = m_root.data();
+  qsizetype startLocal = 0;
+  if (line > 0) {
+    while (!node->isLeaf()) {
+      for (const Child &c : node->kids) {
+        if (n <= c.sum.newlines) {
+          node = c.node.data();
+          break;
+        }
+        n -= c.sum.newlines;
+        base += c.sum.length;
+      }
+    }
+    startLocal = nthNewline(node->text, n) + 1;
+  } else {
+    while (!node->isLeaf())
+      node = node->kids.front().node.data();
+  }
+  const QStringView text(node->text);
+  const qsizetype start = base + startLocal;
+
+  // If the line's end is in the same leaf we can clamp the column without another descent.
+  const qsizetype nl = text.indexOf(QLatin1Char('\n'), startLocal);
+  if (nl >= 0) {
+    qsizetype contentEnd = nl;
+    if (nl > startLocal && text[nl - 1] == QLatin1Char('\r'))
+      --contentEnd;
+    return start + qMin(column, contentEnd - startLocal);
+  }
+  return start + qMin(column, lineEnd(line) - start);
 }
 
 qsizetype Rope::snapToCodePoint(qsizetype offset, Snap direction) const {
