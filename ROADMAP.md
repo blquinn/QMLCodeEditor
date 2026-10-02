@@ -207,22 +207,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [x] **GUTTER-08** Gutter benchmark and ADR — done 2026-10-02 (a8e2e6e)
   - Scroll with the gutter on, wrap on and off, and relative numbers while the cursor moves; ADR 0012 records the design.
 
-## M6 — Multi-cursor
-
-**Exit criteria:** add cursors above/below, add next occurrence, select all occurrences, and alt-drag box select all work; typing with 10,000 cursors on a large file stays interactive; one undo reverts a multi-cursor edit.
-
-- [ ] **MULTI-01** `SelectionSet` as a sorted, merged set
-  - Overlapping or touching selections merge; primary cursor tracked.
-- [ ] **MULTI-02** Add cursor above/below and by ctrl/alt-click
-- [ ] **MULTI-03** Add next occurrence and select all occurrences
-- [ ] **MULTI-04** Alt-drag box (column) selection
-- [ ] **MULTI-05** One transaction per multi-cursor edit
-  - Edits applied back-to-front so earlier offsets stay valid; a single undo step.
-- [ ] **MULTI-06** Batched rendering of many cursors and selections
-- [ ] **MULTI-07** Per-cursor clipboard
-  - Copy joins per-cursor text by line; paste distributes when line counts match.
-
-## M7 — Syntax highlighting
+## M6 — Syntax highlighting
 
 **Exit criteria:** C++, JSON, QML/JS, Python and Markdown highlight correctly; typing never waits on the parser; a 100 MB file highlights the visible region without a full parse blocking the UI.
 
@@ -247,7 +232,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [ ] **SYNTAX-10** Highlighting benchmarks
   - Initial parse time, edit-to-highlight latency, memory per MB of source.
 
-## M8 — Code folding
+## M7 — Code folding
 
 **Exit criteria:** fold/unfold via gutter and keyboard on a large file; folds survive edits; wrap and folding compose correctly (a folded wrapped line is one row group); fold state doesn't slow scrolling.
 
@@ -264,6 +249,21 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [ ] **FOLD-07** Fold commands
   - Fold/unfold at cursor, fold all, unfold all, fold to level N.
 - [ ] **FOLD-08** Fold state kept as anchored ranges ([ADR 0006](docs/adr/0006-anchored-decorations.md))
+
+## M8 — Multi-cursor
+
+**Exit criteria:** add cursors above/below, add next occurrence, select all occurrences, and alt-drag box select all work; typing with 10,000 cursors on a large file stays interactive; one undo reverts a multi-cursor edit.
+
+- [ ] **MULTI-01** `SelectionSet` as a sorted, merged set
+  - Overlapping or touching selections merge; primary cursor tracked.
+- [ ] **MULTI-02** Add cursor above/below and by ctrl/alt-click
+- [ ] **MULTI-03** Add next occurrence and select all occurrences
+- [ ] **MULTI-04** Alt-drag box (column) selection
+- [ ] **MULTI-05** One transaction per multi-cursor edit
+  - Edits applied back-to-front so earlier offsets stay valid; a single undo step.
+- [ ] **MULTI-06** Batched rendering of many cursors and selections
+- [ ] **MULTI-07** Per-cursor clipboard
+  - Copy joins per-cursor text by line; paste distributes when line counts match.
 
 ## M9 — Diagnostics & decorations
 
