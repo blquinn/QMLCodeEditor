@@ -166,7 +166,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria:** on a 1M-line file, toggling wrap and resizing the window never drops below interactive frame rates (viewport re-wraps first, rest in background); cursor up/down across wrapped rows keeps its goal column; no-wrap mode is unchanged in speed.
 
-- [~] **WRAP-01** `DisplayMap` layering: buffer → `FoldMap` (identity for now) → `WrapMap` → display rows
+- [x] **WRAP-01** `DisplayMap` layering: buffer → `FoldMap` (identity for now) → `WrapMap` → display rows — done 2026-10-02 (3c4e4be)
   - All rendering, hit-testing and scrolling go through the map; nothing else assumes one buffer line equals one row.
 - [ ] **WRAP-02** `WrapMap` with a row-count summary tree
   - O(log n) buffer line ↔ display row; buffer position ↔ (row, x).
