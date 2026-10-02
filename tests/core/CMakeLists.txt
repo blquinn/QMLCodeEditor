@@ -6,3 +6,4 @@ qce_add_test(tst_textdocument SOURCES tst_textdocument.cpp testutil.h LIBS QMLCo
 qce_add_test(tst_anchors SOURCES tst_anchors.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_undo SOURCES tst_undo.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_boundaries SOURCES tst_boundaries.cpp testutil.h LIBS QMLCodeEditor::Core)
+qce_add_test(tst_fileio SOURCES tst_fileio.cpp testutil.h LIBS QMLCodeEditor::Core)

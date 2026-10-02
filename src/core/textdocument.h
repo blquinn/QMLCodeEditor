@@ -2,6 +2,7 @@
 #define QCE_TEXTDOCUMENT_H
 
 #include "core/anchorset.h"
+#include "core/fileformat.h"
 #include "core/textchange.h"
 #include "core/textsnapshot.h"
 #include "core/undostack.h"
@@ -11,6 +12,8 @@
 #include <optional>
 
 namespace qce {
+
+class FileLoadJob;
 
 // How an edit is recorded in the undo history.
 struct EditOptions {
@@ -50,28 +53,46 @@ public:
   // is nothing to do or a group is open. Resetting the text clears the history.
   void beginEditGroup(const SelectionList &before = {});
   void endEditGroup(const SelectionList &after = {});
-  bool canUndo() const { return !m_undo.inGroup() && m_undo.canUndo(); }
-  bool canRedo() const { return !m_undo.inGroup() && m_undo.canRedo(); }
+  bool canUndo() const { return !m_loading && !m_undo.inGroup() && m_undo.canUndo(); }
+  bool canRedo() const { return !m_loading && !m_undo.inGroup() && m_undo.canRedo(); }
   std::optional<SelectionList> undo();
   std::optional<SelectionList> redo();
   void breakUndoCoalescing() { m_undo.breakCoalescing(); }
   UndoStack &undoStack() { return m_undo; }
+
+  // Loading (CORE-08). The file is decoded on a worker thread and appended as it arrives: each
+  // slice is announced as an ordinary changed() insertion at the end, so listeners see the document
+  // grow. While loading, edits are refused. load() clears the current text first (textReset()).
+  void load(const QString &path);
+  void cancelLoad();
+  bool isLoading() const { return m_loading; }
+  // How the loaded file was encoded; used when saving. Documents not loaded from a file default to
+  // UTF-8, no BOM, LF.
+  const FileFormat &format() const { return m_format; }
+  void setFormat(const FileFormat &format) { m_format = format; }
 
   // Replaces the whole text without a change event for each edit; emits textReset().
   void setText(QStringView text);
   void reset(const Rope &rope);
 
 signals:
+  void loadProgress(qint64 bytesDone, qint64 bytesTotal);
+  void loadFinished(const qce::FileFormat &format);
+  void loadFailed(const QString &error);
   void changed(const qce::TextChange &change);
   // The text was replaced wholesale (load, setText); anything position-based must be rebuilt.
   void textReset();
 
 private:
+  void appendLoaded(const Rope &full, bool final);
   bool apply(qsizetype start, qsizetype end, const Rope &text, const EditOptions *record);
 
   Rope m_rope;
   AnchorSet m_anchors;
   UndoStack m_undo;
+  FileFormat m_format;
+  FileLoadJob *m_job = nullptr;
+  bool m_loading = false;
   quint64 m_version = 0;
 };
 

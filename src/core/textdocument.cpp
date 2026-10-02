@@ -1,9 +1,11 @@
 #include "core/textdocument.h"
 
+#include "core/fileloader.h"
+
 namespace qce {
 
 TextDocument::TextDocument(QObject *parent) : QObject(parent) {}
-TextDocument::~TextDocument() = default;
+TextDocument::~TextDocument() { cancelLoad(); }
 
 bool TextDocument::insert(qsizetype offset, QStringView text, const EditOptions &options) {
   return replace(offset, offset, text, options);
@@ -14,10 +16,14 @@ bool TextDocument::remove(qsizetype start, qsizetype end, const EditOptions &opt
 }
 
 bool TextDocument::replace(qsizetype start, qsizetype end, QStringView text, const EditOptions &options) {
+  if (m_loading)
+    return false;
   return apply(start, end, Rope::fromString(text), &options);
 }
 
 bool TextDocument::replace(qsizetype start, qsizetype end, const Rope &text, const EditOptions &options) {
+  if (m_loading)
+    return false;
   return apply(start, end, text, &options);
 }
 
@@ -116,7 +122,60 @@ bool TextDocument::apply(
   return true;
 }
 
-void TextDocument::setText(QStringView text) { reset(Rope::fromString(text)); }
+void TextDocument::setText(QStringView text) {
+  cancelLoad();
+  reset(Rope::fromString(text));
+}
+
+void TextDocument::load(const QString &path) {
+  cancelLoad();
+  m_format = FileFormat();
+  reset(Rope());
+  m_loading = true;
+  m_job = new FileLoadJob(path, this);
+  connect(m_job, &FileLoadJob::progress, this, [this](const Rope &text, qint64 done, qint64 total) {
+    appendLoaded(text, false);
+    emit loadProgress(done, total);
+  });
+  connect(m_job, &FileLoadJob::finished, this, [this](const Rope &text, const FileFormat &format) {
+    appendLoaded(text, true);
+    m_format = format;
+    m_loading = false;
+    m_job->deleteLater();
+    m_job = nullptr;
+    emit loadFinished(format);
+  });
+  connect(m_job, &FileLoadJob::failed, this, [this](const QString &error) {
+    m_loading = false;
+    m_job->deleteLater();
+    m_job = nullptr;
+    emit loadFailed(error);
+  });
+  connect(m_job, &FileLoadJob::canceled, this, [this] {
+    m_loading = false;
+    m_job->deleteLater();
+    m_job = nullptr;
+  });
+  m_job->start();
+}
+
+void TextDocument::cancelLoad() {
+  if (!m_job)
+    return;
+  delete m_job; // cancels and waits for the worker; pending signals are dropped
+  m_job = nullptr;
+  m_loading = false;
+}
+
+void TextDocument::appendLoaded(const Rope &full, bool final) {
+  qsizetype length = full.length();
+  // Don't publish half of a surrogate pair that the next slice will complete.
+  if (!final && length > 0 && full.at(length - 1).isHighSurrogate())
+    --length;
+  const qsizetype old = m_rope.length();
+  if (length > old)
+    apply(old, old, full.slice(old, length), nullptr);
+}
 
 void TextDocument::reset(const Rope &rope) {
   m_anchors.applyEdit(0, m_rope.length(), rope.length());

@@ -41,6 +41,8 @@ public:
     while (out.size() < units)
       out += pieces[below(int(std::size(pieces)))];
     out.truncate(units);
+    if (!out.isEmpty() && out.back().isHighSurrogate())
+      out.chop(1); // never end in half a pair, so the text survives a UTF-8 round trip
     return out;
   }
 
