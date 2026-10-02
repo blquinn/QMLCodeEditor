@@ -154,7 +154,7 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
 - [x] **INPUT-07** Scroll-to-cursor and cursor-visibility behavior — done 2026-10-02 (492badd)
 - [x] **INPUT-08** Undo/redo wired to commands — done 2026-10-02 (492badd)
   - Keyboard shortcuts; typing is coalesced into sensible undo groups.
-- [ ] **INPUT-09** Basic auto-indent
+- [x] **INPUT-09** Basic auto-indent — done 2026-10-02 (b5744e2)
   - Newline keeps indentation; tab/shift-tab indent selections.
 - [ ] **INPUT-10** Focus handling and cursor blink
 - [ ] **INPUT-11** Keystroke-to-frame benchmark
