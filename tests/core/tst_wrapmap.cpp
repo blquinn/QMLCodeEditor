@@ -322,6 +322,103 @@ private slots:
     QCOMPARE(map.estimatedLineCount(), 1);
   }
 
+  // ---- Edits ---------------------------------------------------------------------------------
+
+  void editsMatchWrappingFromScratch() {
+    QRandomGenerator rng(21);
+    for (int round = 0; round < 8; ++round) {
+      const WrapConfig config = gridConfig(6 + round * 3, round % 2, round % 3 == 0, round % 2);
+      TextDocument doc;
+      doc.setText(randomText(rng, 30, 40));
+      DisplayMap map(&doc);
+      map.setWrapConfig(config);
+      allRows(map);
+      QSignalSpy changed(&map, &DisplayMap::rowsChanged);
+      for (int step = 0; step < 150; ++step) {
+        const qsizetype rowsBefore = map.rowCount();
+        const qsizetype length = doc.length();
+        const qsizetype a = rng.bounded(length + 1);
+        const qsizetype b = qMin<qsizetype>(length, a + rng.bounded(rng.bounded(6) == 0 ? 200 : 6));
+        QString text = rng.bounded(3) == 0 ? QString() : randomText(rng, rng.bounded(3), 12);
+        // Stay clear of CRLF pairs: their handling belongs to the document, not to wrapping.
+        text.remove(u'\r');
+        const quint64 version = doc.version();
+        doc.replace(a, b, text);
+        if (doc.version() == version) // nothing happened (empty replacing empty)
+          continue;
+        QCOMPARE(changed.count(), 1);
+        const QList<QVariant> signal = changed.takeFirst();
+        // Edited lines are wrapped on the spot and every other line was exact, so nothing is left to
+        // estimate.
+        QCOMPARE(map.estimatedLineCount(), 0);
+        QCOMPARE(map.rowCount(), rowsBefore + signal[2].toLongLong() - signal[1].toLongLong());
+        QVERIFY(signal[0].toLongLong() <= rowsBefore);
+
+        TextDocument fresh;
+        fresh.setText(doc.rope().toString());
+        DisplayMap expected(&fresh);
+        expected.setWrapConfig(config);
+        const QList<DisplayRow> want = allRows(expected);
+        const QList<DisplayRow> got = allRows(map);
+        QCOMPARE(got.size(), want.size());
+        for (qsizetype r = 0; r < got.size(); ++r) {
+          QVERIFY2(
+            got[r].line == want[r].line && got[r].startColumn == want[r].startColumn &&
+              got[r].endColumn == want[r].endColumn && got[r].rowsInLine == want[r].rowsInLine &&
+              qFuzzyCompare(got[r].indent + 1, want[r].indent + 1),
+            qPrintable(u"round %1 step %2 row %3"_s.arg(round).arg(step).arg(r))
+          );
+        }
+      }
+    }
+  }
+
+  void typingInOneLineOnlyChangesItsRows() {
+    TextDocument doc;
+    doc.setText(u"hello world foo bar\nsecond line here\nthird"_s);
+    DisplayMap map(&doc);
+    map.setWrapConfig(gridConfig(10));
+    allRows(map);
+    QSignalSpy spy(&map, &DisplayMap::rowsChanged);
+    doc.insert(doc.rope().lineStart(1), u"x"_s);
+    QCOMPARE(spy.takeLast(), (QList<QVariant>{3, 2, 2}));
+    doc.insert(doc.rope().lineStart(1), u"yyyyyyyyyyyyyyyyyyyyyyyyyy"_s);
+    QCOMPARE(spy.takeLast(), (QList<QVariant>{3, 2, 5}));
+    QCOMPARE(map.rowCount(), 3 + 5 + 1);
+    // Lines after the edit moved down but kept their rows.
+    QCOMPARE(map.rowAt(8).line, 2);
+  }
+
+  void newlinesSplitAndJoinRows() {
+    TextDocument doc;
+    doc.setText(u"hello world foo bar"_s);
+    DisplayMap map(&doc);
+    map.setWrapConfig(gridConfig(10));
+    QCOMPARE(map.rowCountOfLine(0), 3);
+    QSignalSpy spy(&map, &DisplayMap::rowsChanged);
+    doc.insert(6, u"\n"_s);
+    QCOMPARE(spy.takeLast(), (QList<QVariant>{0, 3, 3}));
+    QCOMPARE(map.rowAt(0).endColumn, 6);
+    QCOMPARE(map.rowAt(1).line, 1);
+    doc.remove(6, 7);
+    QCOMPARE(map.rowCountOfLine(0), 3);
+    QCOMPARE(map.rowCount(), 3);
+  }
+
+  void bigInsertsAreLeftAsEstimates() {
+    TextDocument doc;
+    DisplayMap map(&doc);
+    map.setWrapConfig(gridConfig(10));
+    QString big;
+    for (int i = 0; i < 40000; ++i)
+      big += u"some words that wrap around\n"_s;
+    doc.insert(0, big);
+    QVERIFY(map.estimatedLineCount() > 1000);
+    // Whatever is looked at is exact.
+    QCOMPARE(map.rowAt(map.rowCount() - 1).line, 40000);
+    QCOMPARE(map.rowCountOfLine(500), 3);
+  }
+
   void turningWrapOffRestoresIdentity() {
     TextDocument doc;
     doc.setText(u"hello world foo bar\nx"_s);

@@ -12,6 +12,7 @@ namespace {
 constexpr qsizetype kScanAhead = 64;   // rows scanned beyond what a query needs in a huge line
 constexpr qsizetype kMaxCached = 4096; // lines whose break columns are kept
 constexpr qsizetype kPinnedRows = 64;  // lines with more rows than this are never evicted
+constexpr qsizetype kEagerUnits = 1 << 18; // text an edit wraps at once; more is left to later
 
 } // namespace
 
@@ -74,16 +75,24 @@ void DisplayMap::onChanged(const TextChange &change) {
   }
   shiftBreaks(first, oldLines, newLines);
 
-  // Only the lines the edit touched are wrapped again. A huge one is left as an estimate and wrapped
-  // when something asks (or in the background).
+  // Only the lines the edit touched are wrapped again, up to a budget of text: a huge line, or the
+  // lines of a big paste or a file being loaded, are left as estimates to be wrapped when something
+  // asks (or in the background).
+  qsizetype budget = kEagerUnits;
   QList<WrapMap::Entry> entries;
   entries.reserve(newLines);
   const Rope &rope = m_document->rope();
   for (qsizetype i = 0; i < newLines; ++i) {
     const qsizetype line = first + i;
+    if (budget <= 0) {
+      entries.append({1, true});
+      continue;
+    }
     const qsizetype length = rope.lineLength(line);
-    if (length > kHugeLine) {
-      if (kept) {
+    if (length > kHugeLine || budget < length) {
+      if (length <= kHugeLine) {
+        entries.append({1, true});
+      } else if (kept) {
         m_breaks[line] = *kept;
         const qsizetype scanned = kept->starts.isEmpty() ? 0 : kept->starts.last();
         entries.append({quint32(kept->starts.size() + estimateRows(length - scanned, kept->indent)), true});
@@ -97,6 +106,7 @@ void DisplayMap::onChanged(const TextChange &change) {
       wrapRows(rope, rope.lineStart(line), length, m_config, lb.indent, 0, true,
                std::numeric_limits<qsizetype>::max(), lb.starts);
       lb.complete = true;
+      budget -= length + 1;
       entries.append({quint32(lb.starts.size() + 1), false});
     }
   }
