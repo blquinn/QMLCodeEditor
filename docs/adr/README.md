@@ -1,0 +1,32 @@
+# Architecture Decision Records
+
+Short records of decisions that are expensive to reverse. Roadmap items link to the ADR that motivates them.
+
+| ADR | Title | Status |
+|---|---|---|
+| [0001](0001-scene-graph-rendering.md) | Render with the scene graph, not `QQuickPaintedItem` | Accepted |
+| [0002](0002-rope-text-storage.md) | Persistent UTF-16 rope for text storage | Accepted |
+| [0003](0003-module-layout.md) | Core / Quick / Syntax module split | Accepted |
+| [0004](0004-display-map.md) | Layered display map (fold → wrap → rows) | Accepted |
+| [0005](0005-commands-and-selections.md) | Commands over an always-present selection set | Accepted |
+| [0006](0006-anchored-decorations.md) | Anchored ranges for decorations; QML for popups | Accepted |
+
+## Adding one
+
+Copy this template to `NNNN-short-title.md` (next number, never reused) and add a row above. To change a decision, write a new ADR and mark the old one `Superseded by NNNN`.
+
+```markdown
+# NNNN. Title
+
+- Status: Proposed | Accepted | Superseded by NNNN
+- Date: YYYY-MM-DD
+
+## Context
+What forces are at play?
+
+## Decision
+What we will do.
+
+## Consequences
+What gets easier, what gets harder, what we'll revisit.
+```
