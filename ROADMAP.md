@@ -128,9 +128,9 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Tab stops, optional visible whitespace, configurable tab width.
 - [x] **RENDER-09** `Highlighter` interface with a no-op implementation — done 2026-10-02 (afcbc5a)
   - Produces per-line format ranges for a requested line range; the tree-sitter implementation in M7 plugs in here.
-- [~] **RENDER-10** Demo app opens files
+- [x] **RENDER-10** Demo app opens files — done 2026-10-02 (1c469e0)
   - File dialog / command-line path / drag-and-drop in `demo/`.
-- [ ] **RENDER-11** Scroll and frame-time benchmarks
+- [~] **RENDER-11** Scroll and frame-time benchmarks
   - Scripted scroll over the generated large files; results recorded in JSON.
 
 ## M3 — Editing & input

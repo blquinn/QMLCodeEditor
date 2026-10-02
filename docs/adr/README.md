@@ -12,6 +12,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0006](0006-anchored-decorations.md) | Anchored ranges for decorations; QML for popups | Accepted |
 | [0007](0007-text-core-conventions.md) | Text core conventions: line breaks, offsets and code points | Accepted |
 | [0008](0008-edit-boundaries-and-rope-balance.md) | Edit boundaries and rope balance in practice | Accepted |
+| [0009](0009-rendering-pipeline.md) | Rendering pipeline: polish builds a frame plan, sync reconciles pooled nodes | Accepted |
 
 ## Adding one
 

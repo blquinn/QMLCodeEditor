@@ -4,6 +4,8 @@
 
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGRectangleNode>
+#include <QtCore/QElapsedTimer>
+
 #include <algorithm>
 #include <cmath>
 
@@ -319,7 +321,8 @@ QRectF CodeEditor::rectForPosition(qsizetype offset) {
 }
 
 CodeEditor::RenderStats CodeEditor::renderStats() const {
-  return {m_layouts.stats().created, m_layouts.stats().hits, m_layouts.size(), m_plan.size(), m_sceneStats};
+  return {m_layouts.stats().created, m_layouts.stats().hits, m_layouts.size(), m_plan.size(),
+          m_polishCalls,             m_polishNs,                m_polishMaxNs,   m_sceneStats};
 }
 
 void CodeEditor::onThemeChanged() { invalidateLayouts(); }
@@ -446,6 +449,18 @@ CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
 // Lays out the viewport plus a margin of rows on each side. Nothing outside that window is touched,
 // however large the document is.
 void CodeEditor::updatePolish() {
+  QElapsedTimer polishTimer;
+  polishTimer.start();
+  struct Record {
+    CodeEditor *self;
+    QElapsedTimer &timer;
+    ~Record() {
+      const quint64 ns = quint64(timer.nsecsElapsed());
+      ++self->m_polishCalls;
+      self->m_polishNs += ns;
+      self->m_polishMaxNs = qMax(self->m_polishMaxNs, ns);
+    }
+  } record{this, polishTimer};
   const qsizetype rowCount = m_map.rowCount();
   const qreal lineHeight = m_metrics.lineHeight();
   const qsizetype visibleRows = qsizetype(std::ceil(height() / lineHeight)) + 1;

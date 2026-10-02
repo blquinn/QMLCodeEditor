@@ -22,3 +22,8 @@ called_from_lib:libglib-2.0.so.0
 # reports a bad unlock / racy destroy. Matched by function so they only cover condvar calls.
 mutex:std::condition_variable::wait
 race:pthread_cond_destroy
+
+# qmlcachegen's generated loader (qce_demo_qmlcache_loader.cpp) keeps a static registry that QQmlThread reads
+# while the QML engine loads files, and that is destroyed at process exit. The thread is joined inside
+# uninstrumented Qt, so TSan sees no ordering between the last read and the static destructor.
+race:qmlcache_loader.cpp

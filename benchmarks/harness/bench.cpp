@@ -149,6 +149,16 @@ static bool optimizedBuild()
 #endif
 }
 
+Result valueResult(const QString &name, double value, const QString &unit)
+{
+    Result r;
+    r.name = name;
+    r.iterations = 1;
+    r.minNs = r.medianNs = r.p95Ns = r.meanNs = value;
+    r.unit = unit;
+    return r;
+}
+
 QByteArray toJson(const QList<Result> &results, const QString &suite)
 {
     QJsonObject meta;
@@ -165,6 +175,7 @@ QByteArray toJson(const QList<Result> &results, const QString &suite)
     for (const Result &r : results) {
         QJsonObject o;
         o[QStringLiteral("name")] = r.name;
+        o[QStringLiteral("unit")] = r.unit;
         o[QStringLiteral("iterations")] = r.iterations;
         o[QStringLiteral("items")] = r.items;
         o[QStringLiteral("min_ns")] = r.minNs;

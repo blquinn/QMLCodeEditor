@@ -118,6 +118,9 @@ public:
     quint64 layoutCacheHits = 0;
     qsizetype layoutsCached = 0;
     qsizetype rowsInPlan = 0; // rows laid out for the current frame (viewport plus margin)
+    quint64 polishCalls = 0; // updatePolish() runs that rebuilt the plan or checked it
+    quint64 polishNs = 0;    // total time spent in updatePolish()
+    quint64 polishMaxNs = 0; // slowest single run
     qce::SceneStats scene;    // scene-graph node pool activity, as of the last synced frame
   };
   RenderStats renderStats() const;
@@ -165,6 +168,7 @@ private:
   qce::TextMetrics m_metrics;
   qce::LineLayoutCache m_layouts;
   QList<qce::FramePlanRow> m_plan;
+  quint64 m_polishCalls = 0, m_polishNs = 0, m_polishMaxNs = 0;
   qce::SceneStats m_sceneStats; // copied from the scene on the render thread during sync
   void updateContentSize();
   void buildOverlays();

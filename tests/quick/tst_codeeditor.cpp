@@ -14,11 +14,15 @@ Q_IMPORT_QML_PLUGIN(me_blq_qmlcodeeditorPlugin)
 
 class TstCodeEditor : public QObject {
   Q_OBJECT
+  // One engine for every view: each QQmlEngine starts a loader thread, and creating that many threads
+  // from uninstrumented Qt trips a ThreadSanitizer thread-registry check under the tsan preset.
+  QQmlEngine m_engine;
+
 private slots:
   void initTestCase() { QQuickWindow::setGraphicsApi(QSGRendererInterface::Software); }
 
   void rendersBackground() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     QCOMPARE(view.status(), QQuickView::Ready);
     view.show();
@@ -32,7 +36,7 @@ private slots:
   }
 
   void themeSwitchRepaints() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -84,7 +88,7 @@ private slots:
   }
 
   void layoutsOnlyForViewportOfHugeDocument() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -109,7 +113,7 @@ private slots:
   }
 
   void editInvalidatesOnlyAffectedLayouts() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -125,7 +129,7 @@ private slots:
   }
 
   void drawsTextAndPoolsNodes() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -204,7 +208,7 @@ private slots:
   }
 
   void scrollModelClampsAndReportsSize() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -242,7 +246,7 @@ private slots:
   }
 
   void wheelScrolls() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -267,7 +271,7 @@ private slots:
   }
 
   void positionAndRectRoundTrip() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -296,7 +300,7 @@ private slots:
   }
 
   void selectionCursorAndCurrentLineGeometry() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -358,7 +362,7 @@ private slots:
   }
 
   void cursorBlinks() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -405,7 +409,7 @@ private slots:
   }
 
   void tabsFollowTheCellGrid() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
@@ -428,7 +432,7 @@ private slots:
   }
 
   void whitespaceMarksAreOptionalAndDim() {
-    QQuickView view;
+    QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));

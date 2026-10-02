@@ -57,8 +57,12 @@ struct Result
     double medianNs = 0;
     double p95Ns = 0;
     double meanNs = 0;
+    QString unit = QStringLiteral("ns"); // the *Ns fields hold this unit ("ns", "bytes", "count", ...)
     double medianNsPerItem() const { return items > 0 ? medianNs / double(items) : medianNs; }
 };
+
+// A single measured quantity that is not a duration (memory, counters): every statistic is `value`.
+Result valueResult(const QString &name, double value, const QString &unit);
 
 // Statistics over raw per-iteration times (nanoseconds). Exposed for tests.
 Result summarize(const QString &name, QList<qint64> samplesNs, qint64 items);
