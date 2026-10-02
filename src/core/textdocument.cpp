@@ -5,16 +5,44 @@ namespace qce {
 TextDocument::TextDocument(QObject *parent) : QObject(parent) {}
 TextDocument::~TextDocument() = default;
 
-bool TextDocument::insert(qsizetype offset, QStringView text) { return replace(offset, offset, text); }
-
-bool TextDocument::remove(qsizetype start, qsizetype end) { return replace(start, end, QStringView()); }
-
-bool TextDocument::replace(qsizetype start, qsizetype end, QStringView text) {
-  return apply(start, end, Rope::fromString(text));
+bool TextDocument::insert(qsizetype offset, QStringView text, const EditOptions &options) {
+  return replace(offset, offset, text, options);
 }
 
-bool TextDocument::replace(qsizetype start, qsizetype end, const Rope &text) {
-  return apply(start, end, text);
+bool TextDocument::remove(qsizetype start, qsizetype end, const EditOptions &options) {
+  return replace(start, end, QStringView(), options);
+}
+
+bool TextDocument::replace(qsizetype start, qsizetype end, QStringView text, const EditOptions &options) {
+  return apply(start, end, Rope::fromString(text), &options);
+}
+
+bool TextDocument::replace(qsizetype start, qsizetype end, const Rope &text, const EditOptions &options) {
+  return apply(start, end, text, &options);
+}
+
+void TextDocument::beginEditGroup(const SelectionList &before) { m_undo.beginGroup(before); }
+
+void TextDocument::endEditGroup(const SelectionList &after) { m_undo.endGroup(after); }
+
+std::optional<SelectionList> TextDocument::undo() {
+  if (!canUndo())
+    return std::nullopt;
+  const Transaction t = m_undo.undo();
+  for (qsizetype i = t.edits.size() - 1; i >= 0; --i) {
+    const EditRecord &e = t.edits[i];
+    apply(e.start, e.start + e.inserted.length(), e.removed, nullptr);
+  }
+  return t.selectionsBefore;
+}
+
+std::optional<SelectionList> TextDocument::redo() {
+  if (!canRedo())
+    return std::nullopt;
+  const Transaction t = m_undo.redo();
+  for (const EditRecord &e : t.edits)
+    apply(e.start, e.start + e.removed.length(), e.inserted, nullptr);
+  return t.selectionsAfter;
 }
 
 namespace {
@@ -33,7 +61,9 @@ qsizetype snapForEdit(const Rope &rope, qsizetype offset, Rope::Snap dir) {
 
 } // namespace
 
-bool TextDocument::apply(qsizetype start, qsizetype end, const Rope &insertedText) {
+bool TextDocument::apply(
+  qsizetype start, qsizetype end, const Rope &insertedText, const EditOptions *record
+) {
   Rope text = insertedText;
   const bool pureInsert = start == end;
   start = snapForEdit(m_rope, qBound<qsizetype>(0, start, length()), Rope::Snap::Backward);
@@ -73,6 +103,13 @@ bool TextDocument::apply(qsizetype start, qsizetype end, const Rope &insertedTex
 
   m_rope = m_rope.remove(start, end).insert(start, text);
   m_anchors.applyEdit(start, end, change.newEnd);
+  if (record) {
+    const EditRecord edit{start, change.removed, change.inserted};
+    if (m_undo.inGroup())
+      m_undo.addToGroup(edit);
+    else
+      m_undo.pushEdit(edit, record->kind, record->selectionsBefore, record->selectionsAfter);
+  }
   change.versionAfter = ++m_version;
   change.newEndPos = m_rope.positionAt(change.newEnd);
   emit changed(change);
@@ -83,6 +120,7 @@ void TextDocument::setText(QStringView text) { reset(Rope::fromString(text)); }
 
 void TextDocument::reset(const Rope &rope) {
   m_anchors.applyEdit(0, m_rope.length(), rope.length());
+  m_undo.clear();
   m_rope = rope;
   ++m_version;
   emit textReset();

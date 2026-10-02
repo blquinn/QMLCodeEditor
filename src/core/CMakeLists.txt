@@ -5,6 +5,7 @@ qt_add_library(qce_core STATIC
     textposition.h textsnapshot.h textchange.h
     textdocument.h textdocument.cpp
     anchorset.h anchorset.cpp
+    selection.h undostack.h undostack.cpp
 )
 add_library(QMLCodeEditor::Core ALIAS qce_core)
 

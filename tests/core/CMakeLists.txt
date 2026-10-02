@@ -4,3 +4,4 @@ qce_add_test(tst_positions SOURCES tst_positions.cpp testutil.h LIBS QMLCodeEdit
 qce_add_test(tst_snapshot SOURCES tst_snapshot.cpp testutil.h LIBS QMLCodeEditor::Core Qt6::Concurrent)
 qce_add_test(tst_textdocument SOURCES tst_textdocument.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_anchors SOURCES tst_anchors.cpp testutil.h LIBS QMLCodeEditor::Core)
+qce_add_test(tst_undo SOURCES tst_undo.cpp testutil.h LIBS QMLCodeEditor::Core)
