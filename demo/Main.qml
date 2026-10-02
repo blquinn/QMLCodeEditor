@@ -73,25 +73,33 @@ ApplicationWindow {
         }
     }
 
-    // Frame rate from the interval between presented frames, smoothed over about half a second.
+    // Frame rate, measured only while the editor is scrolling. Updating a label schedules a frame, and a
+    // frame would update the label again, so reacting to every frame would keep the demo rendering forever.
+    // Instead frames are counted and the label is refreshed twice a second, and only if scrolling happened.
     QtObject {
         id: fps
         property real value: 0
-        property double last: 0
-        property real smoothed: 0
+        property int frames: 0
+        property bool scrolled: false
     }
     Connections {
         target: window
-        function onFrameSwapped() {
-            var now = Date.now()
-            if (fps.last > 0) {
-                var dt = now - fps.last
-                if (dt > 0) {
-                    fps.smoothed = fps.smoothed * 0.9 + (1000 / dt) * 0.1
-                    fps.value = fps.smoothed
-                }
-            }
-            fps.last = now
+        function onFrameSwapped() { fps.frames++ }
+    }
+    Connections {
+        target: editor
+        function onContentYChanged() { fps.scrolled = true }
+        function onContentXChanged() { fps.scrolled = true }
+    }
+    Timer {
+        interval: 500
+        repeat: true
+        running: true
+        onTriggered: {
+            if (fps.scrolled)
+                fps.value = fps.frames * 1000 / interval
+            fps.scrolled = false
+            fps.frames = 0
         }
     }
 
