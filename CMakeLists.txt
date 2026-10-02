@@ -19,3 +19,4 @@ include(QceWarnings)
 
 add_subdirectory(src/core)
 add_subdirectory(src/quick)
+add_subdirectory(tests)
