@@ -130,7 +130,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Produces per-line format ranges for a requested line range; the tree-sitter implementation in M7 plugs in here.
 - [x] **RENDER-10** Demo app opens files — done 2026-10-02 (1c469e0)
   - File dialog / command-line path / drag-and-drop in `demo/`.
-- [~] **RENDER-11** Scroll and frame-time benchmarks
+- [x] **RENDER-11** Scroll and frame-time benchmarks — done 2026-10-02 (63f0522)
   - Scripted scroll over the generated large files; results recorded in JSON.
 
 ## M3 — Editing & input
