@@ -38,3 +38,10 @@ python3 tools/roadmap.py          # progress
 python3 tools/roadmap.py --next   # next item per milestone
 python3 tools/roadmap.py --check  # validate ROADMAP.md
 ```
+
+`ctest` runs `--check` as the `roadmap_check` test. To also validate on every commit that touches
+`ROADMAP.md`, enable the bundled hook once per clone:
+
+```sh
+git config core.hooksPath tools/hooks
+```

@@ -17,6 +17,12 @@ enable_testing()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(QceWarnings)
 
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+    add_test(NAME roadmap_check
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/roadmap.py --check)
+endif()
+
 add_subdirectory(src/core)
 add_subdirectory(src/quick)
 add_subdirectory(tests)

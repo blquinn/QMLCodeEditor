@@ -1,0 +1,10 @@
+#!/bin/sh
+# Validate ROADMAP.md when it is part of the commit.
+# Enable with: git config core.hooksPath tools/hooks
+if git diff --cached --name-only | grep -qx 'ROADMAP.md'; then
+    root=$(git rev-parse --show-toplevel)
+    python3 "$root/tools/roadmap.py" --check || {
+        echo "pre-commit: ROADMAP.md failed validation" >&2
+        exit 1
+    }
+fi
