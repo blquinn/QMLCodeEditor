@@ -207,7 +207,7 @@ void EditorScene::sync(const FrameParams &p) {
     if (item->layoutId != planRow.layout->id || colorChanged) {
       item->text->clear();
       item->text->setColor(p.foreground);
-      item->text->addTextLayout(QPointF(0, 0), planRow.layout->layout.get());
+      item->text->addTextLayout(QPointF(planRow.layout->indentX, 0), planRow.layout->layout.get());
       item->layoutId = planRow.layout->id;
       ++m_stats.linesFilled;
     }

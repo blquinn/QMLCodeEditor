@@ -29,12 +29,12 @@ public:
   qreal xForOffset(qsizetype offset) const override {
     const qce::TextSnapshot snapshot = m_editor->m_document.snapshot();
     const qce::TextPosition pos = snapshot.rope().positionAt(offset);
-    return m_editor->xForColumn(*m_editor->layoutForLine(pos.line, snapshot), pos.column);
+    return m_editor->xForColumn(*m_editor->layoutForRow(m_editor->rowOfPosition(pos), snapshot), pos.column);
   }
   qsizetype offsetForX(const qce::DisplayRow &row, qreal x) const override {
     const qce::TextSnapshot snapshot = m_editor->m_document.snapshot();
     const qsizetype column = qBound(
-      row.startColumn, m_editor->columnForX(*m_editor->layoutForLine(row.line, snapshot), x), row.endColumn
+      row.startColumn, m_editor->columnForX(*m_editor->layoutForRow(row, snapshot), x), row.lastCursorColumn()
     );
     const qce::Rope &rope = snapshot.rope();
     return rope.snapToCodePoint(rope.offsetAt({row.line, column}));
@@ -400,7 +400,7 @@ void CodeEditor::mouseUngrabEvent() { endDrag(); }
 
 qreal CodeEditor::preeditCursorX(const qce::LineLayout &layout) const {
   const int inside = m_preeditCursor >= 0 ? qMin<int>(m_preeditCursor, layout.preeditLength) : layout.preeditLength;
-  return layout.layout->lineAt(0).cursorToX(layout.preeditColumn + inside);
+  return layout.indentX + layout.layout->lineAt(0).cursorToX(layout.preeditColumn + inside);
 }
 
 void CodeEditor::clearPreedit() {
@@ -486,7 +486,7 @@ QVariant CodeEditor::inputMethodQuery(Qt::InputMethodQuery query) const {
     // At the cursor inside the composition when there is one, so candidates sit under what is typed.
     QRectF rect = const_cast<CodeEditor *>(this)->rectForPosition(head);
     if (hasPreedit())
-      if (const auto layout = const_cast<CodeEditor *>(this)->layoutForLine(pos.line, m_document.snapshot());
+      if (const auto layout = const_cast<CodeEditor *>(this)->layoutForRow(rowOfPosition(pos), m_document.snapshot());
           layout->preeditLength > 0)
         rect.moveLeft(preeditCursorX(*layout) - m_contentX);
     return rect;
@@ -646,9 +646,9 @@ void CodeEditor::pasteFrom(QClipboard::Mode mode) {
 void CodeEditor::ensureCursorVisible() {
   const qce::TextSnapshot snapshot = m_document.snapshot();
   const qce::TextPosition pos = snapshot.rope().positionAt(cursorPosition());
-  const auto layout = layoutForLine(pos.line, snapshot);
-  if (layout->width > m_maxLineWidth) {
-    m_maxLineWidth = layout->width;
+  const auto layout = layoutForRow(rowOfPosition(pos), snapshot);
+  if (layout->indentX + layout->width > m_maxLineWidth) {
+    m_maxLineWidth = layout->indentX + layout->width;
     updateContentSize();
   }
   const qreal lineHeight = m_metrics.lineHeight();
@@ -772,14 +772,16 @@ void CodeEditor::wheelEvent(QWheelEvent *event) {
   event->setAccepted(m_contentX != beforeX || m_contentY != beforeY);
 }
 
-// Columns are in the line as stored; a line showing an input-method composition has the preedit
-// text laid out inside it, so columns at or after it shift right.
+// `column` is a column of the buffer line. The layout holds one row of it, so the column is made
+// relative to the row first; a row showing an input-method composition has the preedit text laid
+// out inside it, so columns at or after it shift right.
 qreal CodeEditor::xForColumn(const qce::LineLayout &layout, qsizetype column) const {
+  column = qBound<qsizetype>(0, column - layout.startColumn, layout.text.size());
   if (layout.preeditLength == 0 && m_metrics.isSimple(layout.text))
-    return m_metrics.xForColumn(layout.text, column);
+    return layout.indentX + m_metrics.xForColumn(layout.text, column);
   if (layout.preeditLength > 0 && column >= layout.preeditColumn)
     column += layout.preeditLength;
-  return layout.layout->lineAt(0).cursorToX(int(column));
+  return layout.indentX + layout.layout->lineAt(0).cursorToX(int(column));
 }
 
 // A thin line across each tab's span on the baseline, for the rows being drawn. Capped so a
@@ -800,9 +802,9 @@ void CodeEditor::buildTabMarks() {
       const bool tab = text[i] == u'\t';
       const qsizetype nextCell = cell + (tab ? m_metrics.tabWidth() - cell % m_metrics.tabWidth() : 1);
       if (tab) {
-        const qreal x0 = simple ? cell * m_metrics.cellAdvance() : layout.layout->lineAt(0).cursorToX(int(i));
+        const qreal x0 = layout.indentX + (simple ? cell * m_metrics.cellAdvance() : layout.layout->lineAt(0).cursorToX(int(i)));
         const qreal x1 =
-          simple ? nextCell * m_metrics.cellAdvance() : layout.layout->lineAt(0).cursorToX(int(i) + 1);
+          layout.indentX + (simple ? nextCell * m_metrics.cellAdvance() : layout.layout->lineAt(0).cursorToX(int(i) + 1));
         if (x1 - x0 > 4)
           m_markSpans.append({planRow.row, x0 + 2, x1 - 2, markY, 1});
         if (m_markSpans.size() >= kMaxMarks)
@@ -838,8 +840,13 @@ void CodeEditor::buildOverlays() {
       const qreal x = i == primary && layout->preeditLength > 0 ? preeditCursorX(*layout)
                                                                   : xForColumn(*layout, head.column);
       m_cursorSpans.append({headRow, x, x + 2});
-      if (i == primary && sel.isEmpty())
-        m_currentLineSpans.append({headRow, m_contentX, m_contentX + width()});
+    }
+    if (i == primary && sel.isEmpty()) {
+      // The highlight covers every row of the cursor's line.
+      const qsizetype first = m_map.firstRowOfLine(head.line);
+      const qsizetype last = first + m_map.rowCountOfLine(head.line) - 1;
+      for (qsizetype row = qMax(first, m_planFirst); row <= qMin(last, m_planLast); ++row)
+        m_currentLineSpans.append({row, m_contentX, m_contentX + width()});
     }
     if (sel.isEmpty())
       continue;
@@ -849,18 +856,22 @@ void CodeEditor::buildOverlays() {
     const qsizetype endRow = m_map.rowForPosition(end);
     for (qsizetype row = qMax(startRow, m_planFirst); row <= qMin(endRow, m_planLast); ++row) {
       const qce::LineLayout *layout = planLayout(row);
-      const qreal x0 = row == startRow ? xForColumn(*layout, start.column) : 0;
-      // Rows the selection continues past include their line break as one cell.
-      const qreal x1 = row == endRow ? xForColumn(*layout, end.column) : layout->width + cell;
+      const qreal x0 = row == startRow ? xForColumn(*layout, start.column) : layout->indentX;
+      // A row the selection continues past ends at its text; at the end of a line the break counts
+      // as one more cell.
+      const qreal x1 = row == endRow ? xForColumn(*layout, end.column)
+                                     : layout->indentX + layout->width + (layout->endsLine ? cell : 0);
       if (x1 > x0)
         m_selectionSpans.append({row, x0, x1});
     }
   }
 }
 
+// The column of the buffer line nearest to x, for the row laid out in `layout`.
 qsizetype CodeEditor::columnForX(const qce::LineLayout &layout, qreal x) const {
+  x -= layout.indentX;
   if (layout.preeditLength == 0 && m_metrics.isSimple(layout.text))
-    return m_metrics.columnForX(layout.text, x);
+    return layout.startColumn + m_metrics.columnForX(layout.text, x);
   qsizetype column = layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
   if (layout.preeditLength > 0) { // the composition is not part of the text: hits on it land before it
     if (column >= layout.preeditColumn + layout.preeditLength)
@@ -868,7 +879,11 @@ qsizetype CodeEditor::columnForX(const qce::LineLayout &layout, qreal x) const {
     else
       column = qMin<qsizetype>(column, layout.preeditColumn);
   }
-  return column;
+  return layout.startColumn + column;
+}
+
+qce::DisplayRow CodeEditor::rowOfPosition(qce::TextPosition position) const {
+  return m_map.rowAt(m_map.rowForPosition(position));
 }
 
 qsizetype CodeEditor::positionAt(qreal x, qreal y) {
@@ -878,8 +893,9 @@ qsizetype CodeEditor::positionAt(qreal x, qreal y) {
   const qce::DisplayRow displayRow = m_map.rowAt(row);
   const qce::TextSnapshot snapshot = m_document.snapshot();
   const qce::Rope &rope = snapshot.rope();
-  const auto layout = layoutForLine(displayRow.line, snapshot);
-  const qsizetype column = columnForX(*layout, x + m_contentX);
+  const auto layout = layoutForRow(displayRow, snapshot);
+  const qsizetype column =
+    qBound(displayRow.startColumn, columnForX(*layout, x + m_contentX), displayRow.lastCursorColumn());
   return rope.snapToCodePoint(rope.offsetAt({displayRow.line, column}));
 }
 
@@ -887,7 +903,7 @@ QRectF CodeEditor::rectForPosition(qsizetype offset) {
   const qce::TextSnapshot snapshot = m_document.snapshot();
   const qce::TextPosition position = snapshot.rope().positionAt(offset);
   const qsizetype row = m_map.rowForPosition(position);
-  const auto layout = layoutForLine(position.line, snapshot);
+  const auto layout = layoutForRow(m_map.rowAt(row), snapshot);
   const qreal cursorX = xForColumn(*layout, position.column);
   return QRectF(
     cursorX - m_contentX, qreal(row) * m_metrics.lineHeight() - m_contentY, m_metrics.cellAdvance(),
@@ -1028,13 +1044,34 @@ QList<QTextLayout::FormatRange> withPreeditFormats(
 
 } // namespace
 
+namespace {
+
+// The part of a line's spans that falls inside columns [start, end), relative to start.
+QList<qce::HighlightSpan> sliceSpans(const QList<qce::HighlightSpan> &spans, qsizetype start, qsizetype end) {
+  if (start == 0)
+    return spans; // spans past `end` are harmless: QTextLayout clips formats to the text
+  QList<qce::HighlightSpan> out;
+  for (qce::HighlightSpan span : spans) {
+    const qsizetype from = qMax(span.start, start), to = qMin(span.start + span.length, end);
+    if (to <= from)
+      continue;
+    span.start = from - start;
+    span.length = to - from;
+    out.append(span);
+  }
+  return out;
+}
+
+} // namespace
+
 std::shared_ptr<qce::LineLayout>
-CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
-  if (auto cached = m_layouts.find(line))
+CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &snapshot) {
+  if (auto cached = m_layouts.find(row.line, row.rowInLine))
     return cached;
 
   const qce::Rope &rope = snapshot.rope();
-  const QString text = rope.toString(rope.lineStart(line), rope.lineEnd(line));
+  const qsizetype lineStart = rope.lineStart(row.line);
+  const QString text = rope.toString(lineStart + row.startColumn, lineStart + row.endColumn);
   // Visible spaces are drawn as middle dots: the text node doesn't render QTextOption's own marks.
   // Dot and space share a column in a monospace font, so offsets and positions stay the same.
   QString display = text;
@@ -1046,17 +1083,19 @@ CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
   option.setTabStopDistance(m_metrics.tabWidth() * m_metrics.cellAdvance());
   layout->setTextOption(option);
   layout->setCacheEnabled(true);
-  const auto spans = m_highlighter->highlightLines(snapshot, line, line);
+  const auto spans = m_highlighter->highlightLines(snapshot, row.line, row.line);
   QList<QTextLayout::FormatRange> formats;
   if (!spans.isEmpty())
-    formats = m_theme->formatRanges(spans.first());
+    formats = m_theme->formatRanges(sliceSpans(spans.first(), row.startColumn, row.endColumn));
   if (m_showWhitespace)
     formats = withWhitespaceFormats(text, std::move(formats), m_theme->whitespace());
   int preeditColumn = 0, preeditLength = 0;
   if (hasPreedit()) {
     const qce::TextPosition at = rope.positionAt(m_document.anchors().offset(m_preeditAnchor));
-    if (at.line == line) {
-      preeditColumn = int(at.column);
+    // A position at a soft break belongs to the row after it; the last row also owns the line end.
+    if (at.line == row.line && at.column >= row.startColumn &&
+        (at.column < row.endColumn || (row.isLast() && at.column <= row.endColumn))) {
+      preeditColumn = int(at.column - row.startColumn);
       preeditLength = int(m_preedit.size());
       layout->setText(display.left(preeditColumn) + m_preedit + display.mid(preeditColumn));
       QList<QTextLayout::FormatRange> shifted;
@@ -1075,7 +1114,10 @@ CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
   textLine.setPosition(QPointF(0, 0));
   const qreal width = textLine.naturalTextWidth();
   layout->endLayout();
-  auto result = m_layouts.insert(line, std::move(layout), width, text);
+  auto result = m_layouts.insert(row.line, std::move(layout), width, text, row.rowInLine);
+  result->startColumn = row.startColumn;
+  result->indentX = row.indent;
+  result->endsLine = row.isLast();
   result->preeditColumn = preeditColumn;
   result->preeditLength = preeditLength;
   return result;
@@ -1116,8 +1158,8 @@ void CodeEditor::updatePolish() {
   m_plan.reserve(lastRow - firstRow + 1);
   qreal widest = m_maxLineWidth;
   for (qsizetype row = firstRow; row <= lastRow; ++row) {
-    auto layout = layoutForLine(m_map.rowAt(row).line, snapshot);
-    widest = qMax(widest, layout->width);
+    auto layout = layoutForRow(m_map.rowAt(row), snapshot);
+    widest = qMax(widest, layout->indentX + layout->width);
     m_plan.append({row, std::move(layout)});
   }
   m_planFirst = firstRow;

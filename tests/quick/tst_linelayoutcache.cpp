@@ -23,6 +23,21 @@ private slots:
     QVERIFY(add(cache, 2)->id != a->id);
   }
 
+  void rowsOfALineAreSeparateEntries() {
+    LineLayoutCache cache(8);
+    const auto first = cache.insert(5, std::make_unique<QTextLayout>(), 1.0, {}, 0);
+    const auto second = cache.insert(5, std::make_unique<QTextLayout>(), 1.0, {}, 1);
+    QCOMPARE(cache.find(5, 0), first);
+    QCOMPARE(cache.find(5, 1), second);
+    QVERIFY(!cache.find(5, 2));
+    // Replacing a line drops all its rows and renumbers later ones.
+    const auto later = cache.insert(9, std::make_unique<QTextLayout>(), 1.0, {}, 3);
+    cache.invalidate(5, 1, 2);
+    QVERIFY(!cache.find(5, 0));
+    QVERIFY(!cache.find(5, 1));
+    QCOMPARE(cache.find(10, 3), later);
+  }
+
   void evictsLeastRecentlyUsed() {
     LineLayoutCache cache(3);
     add(cache, 1);

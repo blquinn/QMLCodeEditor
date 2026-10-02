@@ -27,6 +27,32 @@ private slots:
     QCOMPARE(map.rowForPosition({2, 4}), 2);
   }
 
+  void identityRowsAreWholeLines() {
+    TextDocument doc;
+    doc.setText(u"one\ntwo"_s);
+    DisplayMap map(&doc);
+    const DisplayRow row = map.rowAt(0);
+    QVERIFY(row.isFirst());
+    QVERIFY(row.isLast());
+    QCOMPARE(row.rowInLine, 0);
+    QCOMPARE(row.rowsInLine, 1);
+    QCOMPARE(row.indent, 0.0);
+    QCOMPARE(row.lastCursorColumn(), 3);
+    // A row that continues on the next one keeps the cursor off the break.
+    DisplayRow first{0, 0, 5, 0, 2, 0};
+    QCOMPARE(first.lastCursorColumn(), 4);
+  }
+
+  void foldMapIsIdentity() {
+    TextDocument doc;
+    doc.setText(u"a\nb\nc"_s);
+    FoldMap fold(&doc);
+    QCOMPARE(fold.lineCount(), 3);
+    QCOMPARE(fold.foldLineForBufferLine(2), 2);
+    QCOMPARE(fold.bufferLineForFoldLine(9), 2);
+    QVERIFY(fold.isVisible(1));
+  }
+
   void reportsRowChanges() {
     TextDocument doc;
     doc.setText(u"a\nb\nc"_s);

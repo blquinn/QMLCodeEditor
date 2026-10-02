@@ -1,6 +1,7 @@
 #ifndef QCE_DISPLAYMAP_H
 #define QCE_DISPLAYMAP_H
 
+#include "core/foldmap.h"
 #include "core/textchange.h"
 #include "core/textdocument.h"
 
@@ -13,13 +14,22 @@ struct DisplayRow {
   qsizetype line = 0;
   qsizetype startColumn = 0;
   qsizetype endColumn = 0; // exclusive; line content only, never the line break
+  qsizetype rowInLine = 0;
+  qsizetype rowsInLine = 1;
+  qreal indent = 0; // hanging indent of a continuation row, in pixels
+
+  bool isFirst() const { return rowInLine == 0; }
+  bool isLast() const { return rowInLine + 1 >= rowsInLine; }
+  // The last column a cursor can rest on here. A cursor at the end of a soft-wrapped row would be
+  // the start of the next one, so it stops one unit short.
+  qsizetype lastCursorColumn() const { return isLast() ? endColumn : endColumn - 1; }
 };
 
 // The only authority on how buffer text maps to on-screen rows (ADR 0004). Rendering, scrolling,
 // hit-testing and cursor movement ask it and never assume one buffer line is one row.
 //
-// Today it is the identity transform (row == line). WRAP-01 slots the fold and wrap layers in
-// behind this same interface, so consumers don't change.
+// Layers: buffer lines -> FoldMap (identity until FOLD-01) -> wrap -> display rows. At the moment
+// the wrap layer is the identity too (row == line).
 class DisplayMap : public QObject {
   Q_OBJECT
 public:
@@ -45,6 +55,7 @@ signals:
 
 private:
   const TextDocument *m_document;
+  FoldMap m_fold;
 };
 
 } // namespace qce

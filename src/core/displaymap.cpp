@@ -3,7 +3,7 @@
 namespace qce {
 
 DisplayMap::DisplayMap(const TextDocument *document, QObject *parent)
-    : QObject(parent), m_document(document) {
+    : QObject(parent), m_document(document), m_fold(document) {
   connect(document, &TextDocument::changed, this, [this](const TextChange &change) {
     // Rows are lines for now: the edit replaced the lines it touched with the lines it produced.
     const qsizetype first = change.startPos.line;
@@ -12,9 +12,9 @@ DisplayMap::DisplayMap(const TextDocument *document, QObject *parent)
   connect(document, &TextDocument::textReset, this, &DisplayMap::reset);
 }
 
-qsizetype DisplayMap::rowCount() const { return m_document->rope().lineCount(); }
+qsizetype DisplayMap::rowCount() const { return m_fold.lineCount(); }
 
-qsizetype DisplayMap::lineForRow(qsizetype row) const { return qBound<qsizetype>(0, row, rowCount() - 1); }
+qsizetype DisplayMap::lineForRow(qsizetype row) const { return m_fold.bufferLineForFoldLine(row); }
 
 DisplayRow DisplayMap::rowAt(qsizetype row) const {
   const qsizetype line = lineForRow(row);
@@ -22,7 +22,7 @@ DisplayRow DisplayMap::rowAt(qsizetype row) const {
 }
 
 qsizetype DisplayMap::firstRowOfLine(qsizetype line) const {
-  return qBound<qsizetype>(0, line, rowCount() - 1);
+  return m_fold.foldLineForBufferLine(line);
 }
 
 qsizetype DisplayMap::rowCountOfLine(qsizetype) const { return 1; }

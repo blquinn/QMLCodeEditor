@@ -277,7 +277,9 @@ private:
 
   // One row of the frame: which row, and the layout to draw it from. Built on the GUI thread in
   // updatePolish(), read by updatePaintNode() while the GUI thread is blocked.
-  std::shared_ptr<qce::LineLayout> layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot);
+  std::shared_ptr<qce::LineLayout> layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &snapshot);
+  // The row of the display map that shows `position`.
+  qce::DisplayRow rowOfPosition(qce::TextPosition position) const;
   void invalidateLayouts();
 
   qce::TextDocument m_document;
@@ -292,6 +294,7 @@ private:
   void buildOverlays();
   void buildTabMarks();
   void restartBlink();
+  // `column` is a column of the buffer line; the layout is one row of it.
   qreal xForColumn(const qce::LineLayout &layout, qsizetype column) const;
   void invalidatePlan();
 
