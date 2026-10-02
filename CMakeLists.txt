@@ -10,7 +10,7 @@ find_package(Qt6 6.2 COMPONENTS Quick REQUIRED)
 
 qt_add_library(QMLCodeEditor STATIC)
 qt_add_qml_module(QMLCodeEditor
-    URI QMLCodeEditor
+    URI me.blq.qmlcodeeditor
     VERSION 1.0
     QML_FILES CodeEditorControls.qml
     SOURCES codeeditor.cpp codeeditor.h

@@ -57,7 +57,7 @@ Get a clean, buildable project skeleton before any editor code. See [ADR 0003](d
 
 **Exit criteria:** `cmake --preset debug && cmake --build --preset debug && ctest --preset debug` works from a clean checkout; the demo app launches an empty window; the benchmark harness runs a no-op benchmark and prints timings.
 
-- [ ] **INFRA-01** Fix QML module URI mismatch
+- [~] **INFRA-01** Fix QML module URI mismatch
   - `qmldir` declares `me.blq.qmlcodeeditor` but CMake declares `QMLCodeEditor`. Pick one URI, and delete the hand-written `qmldir` (let `qt_add_qml_module` generate it).
 - [ ] **INFRA-02** Clean up scaffold CMake
   - Remove the leftover `MACOSX_BUNDLE`/`WIN32_EXECUTABLE` properties (this is a library, not an app) and the placeholder `CodeEditorControls.qml` / red-rect `paint()`.
