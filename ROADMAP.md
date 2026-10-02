@@ -145,11 +145,11 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
   - Maps key events to commands; vim (M10) is a second implementation.
 - [x] **INPUT-03** Cursor movement — done 2026-10-02 (492badd)
   - Char, word, line start/end, document start/end, page up/down; grapheme-aware.
-- [ ] **INPUT-04** Mouse input
+- [x] **INPUT-04** Mouse input — done 2026-10-02 (c2f42e9)
   - Click, drag-select, double-click word, triple-click line, shift-click extend.
 - [ ] **INPUT-05** Input method (IME) support
   - `inputMethodQuery` / `inputMethodEvent` with preedit rendering and correct candidate-window placement.
-- [ ] **INPUT-06** Clipboard
+- [x] **INPUT-06** Clipboard — done 2026-10-02 (c2f42e9)
   - Cut, copy, paste; selection clipboard on Linux; large pastes don't block the UI.
 - [x] **INPUT-07** Scroll-to-cursor and cursor-visibility behavior — done 2026-10-02 (492badd)
 - [x] **INPUT-08** Undo/redo wired to commands — done 2026-10-02 (492badd)
