@@ -1,6 +1,7 @@
 #ifndef QCE_TEXTDOCUMENT_H
 #define QCE_TEXTDOCUMENT_H
 
+#include "core/anchorset.h"
 #include "core/textchange.h"
 #include "core/textsnapshot.h"
 
@@ -20,6 +21,11 @@ public:
   const Rope &rope() const { return m_rope; }
   quint64 version() const { return m_version; }
   qsizetype length() const { return m_rope.length(); }
+
+  // Anchors follow every edit made through this document (CORE-06). A reset or setText counts as
+  // replacing the whole text, so anchors collapse to the start or the end according to gravity.
+  AnchorSet &anchors() { return m_anchors; }
+  const AnchorSet &anchors() const { return m_anchors; }
 
   // Edits. Offsets are clamped, then a start inside a surrogate pair or a CRLF break moves back
   // to its start and an end inside one moves forward past it. Return false when the edit is refused.
@@ -41,6 +47,7 @@ private:
   bool apply(qsizetype start, qsizetype end, const Rope &text);
 
   Rope m_rope;
+  AnchorSet m_anchors;
   quint64 m_version = 0;
 };
 

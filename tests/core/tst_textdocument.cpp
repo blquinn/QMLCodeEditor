@@ -90,6 +90,24 @@ private slots:
     QCOMPARE(changes[0].newEndPos, (TextPosition{1, 0}));
   }
 
+  void anchorsFollowEdits() {
+    TextDocument doc;
+    doc.setText(u"0123456789");
+    const AnchorId a = doc.anchors().create(5, Gravity::Left);
+    const AnchorId b = doc.anchors().create(8, Gravity::Right);
+    doc.insert(2, u"abc");
+    QCOMPARE(doc.anchors().offset(a), 8);
+    QCOMPARE(doc.anchors().offset(b), 11);
+    doc.remove(6, 10); // [6,10) in the new text, covers anchor a
+    QCOMPARE(doc.anchors().offset(a), 6);
+    QCOMPARE(doc.anchors().offset(b), 7);
+    doc.insert(7, u"!"); // at b: Right gravity moves after the new text
+    QCOMPARE(doc.anchors().offset(b), 8);
+    doc.setText(u"x");
+    QVERIFY(doc.anchors().validate());
+    QVERIFY(doc.anchors().offset(a) <= 1);
+  }
+
   void resetEmitsTextReset() {
     TextDocument doc;
     QSignalSpy spy(&doc, &TextDocument::textReset);

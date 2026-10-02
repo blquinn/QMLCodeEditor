@@ -72,6 +72,7 @@ bool TextDocument::apply(qsizetype start, qsizetype end, const Rope &insertedTex
   change.versionBefore = m_version;
 
   m_rope = m_rope.remove(start, end).insert(start, text);
+  m_anchors.applyEdit(start, end, change.newEnd);
   change.versionAfter = ++m_version;
   change.newEndPos = m_rope.positionAt(change.newEnd);
   emit changed(change);
@@ -81,6 +82,7 @@ bool TextDocument::apply(qsizetype start, qsizetype end, const Rope &insertedTex
 void TextDocument::setText(QStringView text) { reset(Rope::fromString(text)); }
 
 void TextDocument::reset(const Rope &rope) {
+  m_anchors.applyEdit(0, m_rope.length(), rope.length());
   m_rope = rope;
   ++m_version;
   emit textReset();
