@@ -7,6 +7,8 @@
 #include <QtCore/QStringView>
 #include <QtCore/QVarLengthArray>
 
+#include "core/textposition.h"
+
 namespace qce {
 
 namespace detail {
@@ -62,6 +64,25 @@ public:
   Rope remove(qsizetype start, qsizetype end) const;
   Rope replace(qsizetype start, qsizetype end, QStringView text) const;
   Rope concat(const Rope &other) const;
+
+  // Lines and positions (ADR 0007). '\n' ends a line; a '\r' right before it belongs to the break.
+  // All are O(log n) plus a scan inside one leaf.
+  enum class Snap { Backward, Forward };
+  qsizetype lineCount() const { return newlineCount() + 1; }
+  // Offset of the first unit of `line` (clamped to the valid lines).
+  qsizetype lineStart(qsizetype line) const;
+  // Offset just past the last content unit of `line`, before its line break.
+  qsizetype lineEnd(qsizetype line) const;
+  qsizetype lineLength(qsizetype line) const { return lineEnd(line) - lineStart(line); }
+  // Line containing `offset` (clamped). An offset inside a CRLF break belongs to the line it ends.
+  qsizetype lineAt(qsizetype offset) const;
+  // Offsets inside a CRLF break or a surrogate pair are snapped before conversion; the column is
+  // never beyond the line's content.
+  TextPosition positionAt(qsizetype offset) const;
+  // Clamps the line to the document and the column to the line's content.
+  qsizetype offsetAt(TextPosition pos) const;
+  // Moves an offset that points between the halves of a surrogate pair to the pair's edge.
+  qsizetype snapToCodePoint(qsizetype offset, Snap direction = Snap::Backward) const;
 
   // Identity of the root, for cheap "did anything change" checks.
   bool sharesRootWith(const Rope &other) const { return m_root == other.m_root; }

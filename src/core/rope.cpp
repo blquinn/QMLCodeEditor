@@ -368,6 +368,92 @@ Rope Rope::replace(qsizetype start, qsizetype end, QStringView text) const {
   return remove(start, end).insert(start, text);
 }
 
+// ---- lines and positions ----
+
+namespace {
+
+// Index of the n-th (1-based) '\n' in text; the caller guarantees it exists.
+qsizetype nthNewline(QStringView text, qsizetype n) {
+  qsizetype idx = -1;
+  while (n-- > 0)
+    idx = text.indexOf(QLatin1Char('\n'), idx + 1);
+  return idx;
+}
+
+} // namespace
+
+qsizetype Rope::lineStart(qsizetype line) const {
+  if (line <= 0 || !m_root)
+    return 0;
+  qsizetype n = qMin(line, newlineCount()); // the n-th newline ends line n-1
+  qsizetype base = 0;
+  const Node *node = m_root.data();
+  while (!node->isLeaf()) {
+    for (const Child &c : node->kids) {
+      if (n <= c.sum.newlines) {
+        node = c.node.data();
+        break;
+      }
+      n -= c.sum.newlines;
+      base += c.sum.length;
+    }
+  }
+  return base + nthNewline(node->text, n) + 1;
+}
+
+qsizetype Rope::lineEnd(qsizetype line) const {
+  const qsizetype last = newlineCount();
+  if (line >= last)
+    return length();
+  const qsizetype start = lineStart(line);
+  qsizetype nl = lineStart(line + 1) - 1; // the '\n'
+  if (nl > start && at(nl - 1) == QLatin1Char('\r'))
+    --nl;
+  return nl;
+}
+
+qsizetype Rope::lineAt(qsizetype offset) const {
+  if (!m_root)
+    return 0;
+  offset = qBound<qsizetype>(0, offset, length());
+  qsizetype line = 0;
+  const Node *node = m_root.data();
+  while (!node->isLeaf()) {
+    for (const Child &c : node->kids) {
+      if (offset <= c.sum.length) {
+        node = c.node.data();
+        break;
+      }
+      offset -= c.sum.length;
+      line += c.sum.newlines;
+    }
+  }
+  return line + countNewlines(QStringView(node->text).first(offset));
+}
+
+TextPosition Rope::positionAt(qsizetype offset) const {
+  offset = snapToCodePoint(qBound<qsizetype>(0, offset, length()));
+  if (
+    offset > 0 && offset < length() && at(offset - 1) == QLatin1Char('\r') && at(offset) == QLatin1Char('\n')
+  )
+    --offset;
+  const qsizetype line = lineAt(offset);
+  return {line, offset - lineStart(line)};
+}
+
+qsizetype Rope::offsetAt(TextPosition pos) const {
+  const qsizetype line = qBound<qsizetype>(0, pos.line, newlineCount());
+  const qsizetype start = lineStart(line);
+  return start + qBound<qsizetype>(0, pos.column, lineEnd(line) - start);
+}
+
+qsizetype Rope::snapToCodePoint(qsizetype offset, Snap direction) const {
+  offset = qBound<qsizetype>(0, offset, length());
+  if (offset > 0 && offset < length() && at(offset - 1).isHighSurrogate() && at(offset).isLowSurrogate())
+    return direction == Snap::Backward ? offset - 1 : offset + 1;
+  return offset;
+}
+
 Rope Rope::concat(const Rope &other) const { return Rope(join(m_root, other.m_root)); }
 
 bool Rope::validate(QString *problem) const {
