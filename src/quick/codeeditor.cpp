@@ -175,9 +175,24 @@ void CodeEditor::select(qsizetype anchor, qsizetype head) {
 
 qce::EditContext CodeEditor::editContext() {
   return {
-    m_document, m_selections, {true, m_metrics.tabWidth(), m_metrics.tabWidth(), m_readOnly}, &m_map,
+    m_document, m_selections, {m_insertSpaces, m_indentWidth, m_metrics.tabWidth(), m_readOnly}, &m_map,
     m_cursorLayout.get()
   };
+}
+
+void CodeEditor::setInsertSpaces(bool spaces) {
+  if (spaces == m_insertSpaces)
+    return;
+  m_insertSpaces = spaces;
+  emit insertSpacesChanged();
+}
+
+void CodeEditor::setIndentWidth(int columns) {
+  columns = qBound(1, columns, 32);
+  if (columns == m_indentWidth)
+    return;
+  m_indentWidth = columns;
+  emit indentWidthChanged();
 }
 
 void CodeEditor::setReadOnly(bool readOnly) {

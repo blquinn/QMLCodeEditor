@@ -232,6 +232,58 @@ private slots:
     QCOMPARE(f.cursor().head, 1);
   }
 
+  void enterKeepsIndentationUpToTheCursor() {
+    Fixture f(u"    foo"_s);
+    f.sel.setSingle(6);
+    f.key(Qt::Key_Return);
+    QCOMPARE(f.text(), u"    fo\n    o"_s);
+    f.sel.setSingle(2); // inside the indentation: only that much carries over
+    f.key(Qt::Key_Return);
+    QCOMPARE(f.text(), u"  \n    fo\n    o"_s);
+    f.sel.setSingle(0);
+    f.key(Qt::Key_Return);
+    QCOMPARE(f.text().left(3), u"\n  "_s);
+  }
+
+  void tabInsertsToNextStop() {
+    Fixture f(u"ab"_s);
+    f.sel.setSingle(2);
+    f.key(Qt::Key_Tab);
+    QCOMPARE(f.text(), u"ab  "_s); // indent width 4: two spaces reach column 4
+    f.ctx.settings.insertSpaces = false;
+    f.key(Qt::Key_Tab);
+    QCOMPARE(f.text(), u"ab  \t"_s);
+  }
+
+  void tabOnMultiLineSelectionIndentsLines() {
+    Fixture f(u"a\n\nb\nc"_s);
+    f.sel.setSingle(0, 4); // from the start of line 0 into line 2
+    f.key(Qt::Key_Tab);
+    QCOMPARE(f.text(), u"    a\n\n    b\nc"_s); // the blank line stays blank
+    QCOMPARE(f.cursor().start(), 4); // the first line's start follows the text it was in front of
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+    f.key(Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(f.text(), u"a\n\nb\nc"_s);
+    QCOMPARE(f.cursor(), (Selection{0, 4}));
+  }
+
+  void selectionEndingAtLineStartLeavesThatLineAlone() {
+    Fixture f(u"a\nb\nc"_s);
+    f.sel.setSingle(0, 4); // ends at the start of line 2
+    f.key(Qt::Key_Tab);
+    QCOMPARE(f.text(), u"    a\n    b\nc"_s);
+  }
+
+  void backtabOutdentsLines() {
+    Fixture f(u"        a\n  b\n\tc\nd"_s);
+    f.sel.setSingle(0, f.doc.length());
+    f.key(Qt::Key_Backtab, Qt::ShiftModifier);
+    QCOMPARE(f.text(), u"    a\nb\nc\nd"_s);
+    f.sel.setSingle(2); // an empty cursor outdents its own line
+    f.key(Qt::Key_Backtab, Qt::ShiftModifier);
+    QCOMPARE(f.text(), u"a\nb\nc\nd"_s);
+  }
+
   void movesEveryCursor() {
     Fixture f(u"ab\ncd"_s);
     f.sel.set({{0, 0}, {3, 3}});

@@ -55,8 +55,14 @@ bool deleteForward(EditContext &ctx);
 // Removes the selected text (cut without the clipboard); empty selections are left alone.
 bool deleteSelection(EditContext &ctx);
 
-// Enter: replaces the selections with a line break.
+// Enter: replaces the selections with a line break and the indentation of the line it was typed on
+// (as far as the cursor reaches into it).
 bool newline(EditContext &ctx);
+// Tab: indents the lines of any selection that spans several lines; otherwise replaces each
+// selection with spaces up to the next indent stop (or a tab character, when !insertSpaces).
+bool indent(EditContext &ctx);
+// Shift+Tab: removes one level of indentation from every line a selection touches.
+bool outdent(EditContext &ctx);
 
 // Backspace and Delete for whole words.
 bool deleteWordBackward(EditContext &ctx);

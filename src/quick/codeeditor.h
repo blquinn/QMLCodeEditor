@@ -39,6 +39,10 @@ class CodeEditor : public QQuickItem {
   Q_PROPERTY(
     qsizetype cursorPosition READ cursorPosition WRITE setCursorPosition NOTIFY selectionChanged FINAL
   )
+  Q_PROPERTY(
+    bool insertSpaces READ insertSpaces WRITE setInsertSpaces NOTIFY insertSpacesChanged FINAL
+  )
+  Q_PROPERTY(int indentWidth READ indentWidth WRITE setIndentWidth NOTIFY indentWidthChanged FINAL)
   Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged FINAL)
   Q_PROPERTY(bool canUndo READ canUndo NOTIFY canUndoChanged FINAL)
   Q_PROPERTY(bool canRedo READ canRedo NOTIFY canRedoChanged FINAL)
@@ -112,6 +116,12 @@ public:
   Q_INVOKABLE void select(qsizetype anchor, qsizetype head);
   // Edits from the user (keys, paste, input methods) are refused while read-only; the document API
   // and setText()/load() still work.
+  // Tab inserts `indentWidth` columns of spaces (or a tab character when false); selections of
+  // several lines are indented by one level.
+  bool insertSpaces() const { return m_insertSpaces; }
+  void setInsertSpaces(bool spaces);
+  int indentWidth() const { return m_indentWidth; }
+  void setIndentWidth(int columns);
   bool readOnly() const { return m_readOnly; }
   void setReadOnly(bool readOnly);
   bool canUndo() const { return m_canUndo; }
@@ -174,6 +184,8 @@ signals:
   void cursorBlinkIntervalChanged();
   void cursorVisibleChanged();
   void readOnlyChanged();
+  void insertSpacesChanged();
+  void indentWidthChanged();
   void canUndoChanged();
   void canRedoChanged();
   void contentXChanged();
@@ -225,6 +237,8 @@ private:
   qce::DefaultInputHandler m_defaultHandler;
   qce::InputHandler *m_handler = &m_defaultHandler;
   bool m_readOnly = false;
+  bool m_insertSpaces = true;
+  int m_indentWidth = 4;
   bool m_canUndo = false;
   bool m_canRedo = false;
   void onSelectionsChanged();

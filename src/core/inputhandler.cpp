@@ -98,6 +98,14 @@ bool DefaultInputHandler::keyPress(QKeyEvent *event, EditContext &ctx, InputHost
   case Qt::Key_Delete:
     deleteForward(ctx);
     return true;
+  case Qt::Key_Tab:
+    if (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
+      return false;
+    indent(ctx);
+    return true;
+  case Qt::Key_Backtab:
+    outdent(ctx);
+    return true;
   case Qt::Key_Return:
   case Qt::Key_Enter:
     newline(ctx);

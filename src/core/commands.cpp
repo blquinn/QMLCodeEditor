@@ -110,7 +110,115 @@ bool deleteSelection(EditContext &ctx) {
 bool newline(EditContext &ctx) {
   // CRLF documents keep their convention for new lines.
   const bool crlf = ctx.document.format().dominantLineEnding == LineEnding::Crlf;
-  return insertText(ctx, crlf ? u"\r\n" : u"\n", EditKind::Other);
+  const QString eol = crlf ? QStringLiteral("\r\n") : QStringLiteral("\n");
+  const Rope &rope = ctx.document.rope();
+  QList<Replacement> list;
+  for (int i = 0; i < ctx.selections.count(); ++i) {
+    const Selection s = ctx.selections.at(i);
+    const qsizetype line = rope.lineAt(s.start());
+    const qsizetype lineStart = rope.lineStart(line);
+    qsizetype end = lineStart;
+    while (end < s.start() && (rope.at(end) == u' ' || rope.at(end) == u'\t'))
+      ++end;
+    list.append({s.start(), s.end(), eol + rope.toString(lineStart, end)});
+  }
+  return applyReplacements(ctx, list, EditKind::Other);
+}
+
+namespace {
+
+// Cell column of `offset` on its line, with tab stops every `tabWidth` cells.
+qsizetype visualColumn(const Rope &rope, qsizetype offset, int tabWidth) {
+  const qsizetype start = rope.lineStart(rope.lineAt(offset));
+  qsizetype cell = 0;
+  for (qsizetype i = start; i < offset; ++i)
+    cell += rope.at(i) == u'\t' ? tabWidth - cell % tabWidth : 1;
+  return cell;
+}
+
+QString indentUnit(const EditorSettings &settings) {
+  return settings.insertSpaces ? QString(settings.indentWidth, u' ') : QStringLiteral("\t");
+}
+
+// The lines a set of selections covers, ascending and without repeats. A selection that ends at the
+// very start of a line does not include that line.
+QList<qsizetype> touchedLines(EditContext &ctx) {
+  const Rope &rope = ctx.document.rope();
+  QList<qsizetype> lines;
+  for (int i = 0; i < ctx.selections.count(); ++i) {
+    const Selection s = ctx.selections.at(i);
+    const qsizetype first = rope.lineAt(s.start());
+    qsizetype last = rope.lineAt(s.end());
+    if (!s.isEmpty() && last > first && s.end() == rope.lineStart(last))
+      --last;
+    for (qsizetype line = qMax(first, lines.isEmpty() ? first : lines.last() + 1); line <= last; ++line)
+      lines.append(line);
+  }
+  return lines;
+}
+
+// Applies one edit per line, back to front, keeping the selections on the anchors that follow the
+// edits (so a selection keeps covering the same text) and recording them for undo.
+template <typename EditFn> bool editLines(EditContext &ctx, const QList<qsizetype> &lines, EditFn edit) {
+  TextDocument &doc = ctx.document;
+  if (doc.isLoading() || ctx.settings.readOnly)
+    return false;
+  const SelectionList before = ctx.selections.selections();
+  const quint64 version = doc.version();
+  SelectionSet::Batch batch(ctx.selections);
+  doc.beginEditGroup(before);
+  for (qsizetype i = lines.size() - 1; i >= 0; --i)
+    edit(lines[i]);
+  doc.endEditGroup(ctx.selections.selections());
+  return doc.version() != version;
+}
+
+} // namespace
+
+bool indent(EditContext &ctx) {
+  const Rope &rope = ctx.document.rope();
+  bool multiLine = false;
+  for (int i = 0; i < ctx.selections.count() && !multiLine; ++i) {
+    const Selection s = ctx.selections.at(i);
+    multiLine = !s.isEmpty() && rope.lineAt(s.start()) != rope.lineAt(s.end()) &&
+                !(rope.lineAt(s.end()) == rope.lineAt(s.start()) + 1 && s.end() == rope.lineStart(rope.lineAt(s.end())));
+  }
+  const EditorSettings &settings = ctx.settings;
+  if (!multiLine) {
+    QList<Replacement> list;
+    for (int i = 0; i < ctx.selections.count(); ++i) {
+      const Selection s = ctx.selections.at(i);
+      QString text = QStringLiteral("\t");
+      if (settings.insertSpaces) {
+        const int width = qMax(1, settings.indentWidth);
+        text = QString(width - visualColumn(rope, s.start(), settings.tabWidth) % width, u' ');
+      }
+      list.append({s.start(), s.end(), text});
+    }
+    return applyReplacements(ctx, list, EditKind::Other);
+  }
+  const QString unit = indentUnit(settings);
+  return editLines(ctx, touchedLines(ctx), [&](qsizetype line) {
+    // Blank lines stay blank: indentation there would only be trailing whitespace.
+    if (ctx.document.rope().lineLength(line) > 0)
+      ctx.document.insert(ctx.document.rope().lineStart(line), unit);
+  });
+}
+
+bool outdent(EditContext &ctx) {
+  const int width = qMax(1, ctx.settings.indentWidth);
+  return editLines(ctx, touchedLines(ctx), [&](qsizetype line) {
+    const Rope &rope = ctx.document.rope();
+    const qsizetype start = rope.lineStart(line);
+    qsizetype n = 0;
+    if (rope.lineLength(line) > 0 && rope.at(start) == u'\t')
+      n = 1;
+    else
+      while (n < width && n < rope.lineLength(line) && rope.at(start + n) == u' ')
+        ++n;
+    if (n > 0)
+      ctx.document.remove(start, start + n);
+  });
 }
 
 bool deleteWordBackward(EditContext &ctx) {
