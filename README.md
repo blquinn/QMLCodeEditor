@@ -23,6 +23,9 @@ Other presets: `release`, `asan-ubsan`, `tsan`. Tests run with `QT_QPA_PLATFORM=
 The presets build with clang (`clang++` must be on `PATH`), which also provides the sanitizer runtimes. To use
 another compiler, override it at configure time: `cmake --preset debug -DCMAKE_CXX_COMPILER=g++`.
 
+The `tsan` preset uses `tools/tsan.supp` because the system Qt is not TSan-instrumented; see that file for what
+it hides and why.
+
 ## Using the module
 
 ```qml

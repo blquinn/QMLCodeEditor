@@ -1,0 +1,24 @@
+# ThreadSanitizer suppressions for the `tsan` preset.
+#
+# The system Qt is not built with TSan, so TSan cannot see Qt's internal synchronization (atomics, futexes) and
+# reports races for allocator/memset calls that Qt makes across its own threads (QtTest watchdog, QQmlThread,
+# ...). `called_from_lib` ignores only interceptor calls (malloc/free/operator new/memset, ...) made from inside
+# these libraries. It does NOT hide races between accesses in our own code (verified: a plain int raced from
+# two QThread workers is still reported).
+#
+# Known blind spot: a race *inside* Qt's out-of-line code (e.g. two threads calling QString::append on the same
+# object) is only visible to TSan as realloc/memmove interceptor reports from the Qt library, which these
+# entries hide. Concurrency tests must therefore exercise our own types (rope nodes, snapshots, anchors),
+# which are compiled in our translation units and fully instrumented.
+called_from_lib:libQt6Core.so.6
+called_from_lib:libQt6Gui.so.6
+called_from_lib:libQt6Qml.so.6
+called_from_lib:libQt6Quick.so.6
+called_from_lib:libQt6Test.so.6
+called_from_lib:libglib-2.0.so.0
+
+# QtTest's watchdog thread (and QThread internals) lock a std::mutex inline in uninstrumented Qt code, then
+# wait on / destroy a std::condition_variable. TSan only sees the intercepted pthread_cond_* calls and
+# reports a bad unlock / racy destroy. Matched by function so they only cover condvar calls.
+mutex:std::condition_variable::wait
+race:pthread_cond_destroy

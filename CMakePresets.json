@@ -73,7 +73,7 @@
       "name": "tsan",
       "inherits": "base",
       "configurePreset": "tsan",
-      "environment": { "QT_QPA_PLATFORM": "offscreen", "TSAN_OPTIONS": "halt_on_error=1" }
+      "environment": { "QT_QPA_PLATFORM": "offscreen", "TSAN_OPTIONS": "halt_on_error=1 report_thread_leaks=0 suppressions=${sourceDir}/tools/tsan.supp" }
     }
   ]
 }
