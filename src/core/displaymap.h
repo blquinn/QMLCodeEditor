@@ -4,8 +4,12 @@
 #include "core/foldmap.h"
 #include "core/textchange.h"
 #include "core/textdocument.h"
+#include "core/wrapbreaks.h"
+#include "core/wrapmap.h"
 
 #include <QtCore/QObject>
+
+#include <unordered_map>
 
 namespace qce {
 
@@ -25,17 +29,30 @@ struct DisplayRow {
   qsizetype lastCursorColumn() const { return isLast() ? endColumn : endColumn - 1; }
 };
 
-// The only authority on how buffer text maps to on-screen rows (ADR 0004). Rendering, scrolling,
-// hit-testing and cursor movement ask it and never assume one buffer line is one row.
+// The only authority on how buffer text maps to on-screen rows (ADR 0004, ADR 0011). Rendering,
+// scrolling, hit-testing and cursor movement ask it and never assume one buffer line is one row.
 //
-// Layers: buffer lines -> FoldMap (identity until FOLD-01) -> wrap -> display rows. At the moment
-// the wrap layer is the identity too (row == line).
+// Layers: buffer lines -> FoldMap (identity until FOLD-01) -> WrapMap -> display rows. With wrap off
+// a row is a line. With wrap on, a line's row count lives in a WrapMap and is exact once the line
+// has been wrapped; until then it is an estimate. Queries wrap the lines they touch on demand, so
+// the answer for the row or position asked about is always exact, while rows far away may shift as
+// their lines get wrapped (see rowsReestimated).
 class DisplayMap : public QObject {
   Q_OBJECT
 public:
+  // Lines longer than this are wrapped a few rows at a time instead of whole.
+  static constexpr qsizetype kHugeLine = 1 << 16;
+
   explicit DisplayMap(const TextDocument *document, QObject *parent = nullptr);
 
   const TextDocument *document() const { return m_document; }
+
+  // Turns wrapping on, off or changes its width. Every line becomes an estimate again.
+  void setWrapConfig(const WrapConfig &config);
+  const WrapConfig &wrapConfig() const { return m_config; }
+  bool wrapEnabled() const { return m_config.enabled(); }
+  // Lines whose row count is still an estimate.
+  qsizetype estimatedLineCount() const { return wrapEnabled() ? m_wrap.estimatedLineCount() : 0; }
 
   qsizetype rowCount() const;
   // Buffer line shown on `row` (clamped to the valid rows).
@@ -44,18 +61,49 @@ public:
   // First row of `line` and how many rows it occupies (a folded-away line has none).
   qsizetype firstRowOfLine(qsizetype line) const;
   qsizetype rowCountOfLine(qsizetype line) const;
-  // The row showing buffer `position`.
+  // The row showing buffer `position`. A position at a soft break belongs to the row after it.
   qsizetype rowForPosition(TextPosition position) const;
 
 signals:
   // Rows [firstRow, firstRow + oldCount) were replaced by newCount rows; rows after shift.
   void rowsChanged(qsizetype firstRow, qsizetype oldCount, qsizetype newCount);
-  // Everything is new (text reset); rebuild whatever you derived from row numbers.
+  // Wrapping a line showed it takes newCount rows, not the oldCount that was assumed. Nothing in the
+  // text changed; row numbers after firstRow moved.
+  void rowsReestimated(qsizetype firstRow, qsizetype oldCount, qsizetype newCount);
+  // Everything is new (text reset or wrap settings changed); rebuild whatever you derived from row
+  // numbers.
   void reset();
 
 private:
+  // Where the rows of one line begin. `starts` holds the start column of rows 1, 2, ...; it is the
+  // whole story once `complete`, otherwise the line (a huge one) has only been scanned up to the
+  // last start.
+  struct LineBreaks {
+    QList<qsizetype> starts;
+    bool complete = false;
+    qreal indent = 0;
+  };
+
+  void onChanged(const TextChange &change);
+  void resetWrap();
+  qsizetype lineLength(qsizetype line) const;
+  qsizetype estimateRows(qsizetype units, qreal indent) const;
+  LineBreaks &breaksFor(qsizetype line) const;
+  // Scans more of an incomplete line: until `rows` rows are determined (and then some).
+  void extend(qsizetype line, LineBreaks &lb, qsizetype rows) const;
+  void storeRows(qsizetype line, const LineBreaks &lb) const;
+  // Wraps `line` so its row count is exact; huge lines are only wrapped as far as `column`.
+  void resolve(qsizetype line, qsizetype column = 0) const;
+  qsizetype locate(qsizetype row, qsizetype *rowInLine) const;
+  DisplayRow makeRow(qsizetype line, qsizetype rowInLine) const;
+  void shiftBreaks(qsizetype first, qsizetype oldCount, qsizetype newCount);
+
   const TextDocument *m_document;
   FoldMap m_fold;
+  WrapConfig m_config;
+  // Wrapping state is a cache of what the text and config imply, filled when queries ask.
+  mutable WrapMap m_wrap;
+  mutable std::unordered_map<qsizetype, LineBreaks> m_breaks;
 };
 
 } // namespace qce

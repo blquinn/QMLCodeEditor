@@ -13,6 +13,7 @@ qt_add_library(qce_core STATIC
     undostack.h undostack.cpp
     highlighter.h highlighter.cpp
     displaymap.h displaymap.cpp
+    foldmap.h wrapmeasure.h wrapmeasure.cpp wrapbreaks.h wrapbreaks.cpp wrapmap.h wrapmap.cpp
 )
 add_library(QMLCodeEditor::Core ALIAS qce_core)
 
