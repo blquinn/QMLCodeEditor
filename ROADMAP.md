@@ -156,7 +156,7 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
   - Keyboard shortcuts; typing is coalesced into sensible undo groups.
 - [x] **INPUT-09** Basic auto-indent — done 2026-10-02 (b5744e2)
   - Newline keeps indentation; tab/shift-tab indent selections.
-- [ ] **INPUT-10** Focus handling and cursor blink
+- [x] **INPUT-10** Focus handling and cursor blink — done 2026-10-02 (b2ae309)
 - [ ] **INPUT-11** Keystroke-to-frame benchmark
   - `bench_typing`: typing, Enter, Backspace, paste and undo on the generated 100 MB file; event-to-frame latency median/p95/max; JSON result committed; ctest smoke variant.
 
