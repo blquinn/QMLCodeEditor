@@ -30,6 +30,18 @@ ApplicationWindow {
         placeholderText: darkMode ? "#8a8d91" : "#808080"
     }
 
+    // A tool button that lights up under the pointer (the Basic style only reacts to presses).
+    component DemoToolButton: ToolButton {
+        id: button
+        background: Rectangle {
+            implicitWidth: 40
+            implicitHeight: 40
+            color: button.down ? window.palette.highlight
+                 : button.hovered && button.enabled ? (window.darkMode ? "#4d5258" : "#cfd3d8")
+                                                    : "transparent"
+        }
+    }
+
     // A scroll bar with a clearly visible thumb on a track slightly apart from the editor background.
     component DemoScrollBar: ScrollBar {
         id: bar
@@ -50,7 +62,7 @@ ApplicationWindow {
         }
     }
 
-    width: 1400
+    width: 1100
     height: 720
     visible: true
     title: qsTr("QMLCodeEditor demo")
@@ -70,70 +82,36 @@ ApplicationWindow {
             anchors.rightMargin: 8
             spacing: 12
 
-            ToolButton {
+            DemoToolButton {
                 text: qsTr("Open…")
                 onClicked: openDialog.open()
             }
-            ToolButton {
+            DemoToolButton {
                 text: qsTr("Save")
                 enabled: window.currentFile.toString() !== ""
                 onClicked: editor.save(window.currentFile)
             }
-            ToolButton {
+            DemoToolButton {
                 text: qsTr("Undo")
                 enabled: editor.canUndo
                 onClicked: editor.undo()
             }
-            ToolButton {
+            DemoToolButton {
                 text: qsTr("Redo")
                 enabled: editor.canRedo
                 onClicked: editor.redo()
             }
-            ToolButton {
+            DemoToolButton {
                 text: qsTr("Cut")
                 onClicked: editor.cut()
             }
-            ToolButton {
+            DemoToolButton {
                 text: qsTr("Copy")
                 onClicked: editor.copy()
             }
-            ToolButton {
+            DemoToolButton {
                 text: qsTr("Paste")
                 onClicked: editor.paste()
-            }
-            CheckBox {
-                text: qsTr("Read-only")
-                onToggled: editor.readOnly = checked
-            }
-            CheckBox {
-                text: qsTr("Tabs")
-                onToggled: editor.insertSpaces = !checked
-            }
-            CheckBox {
-                text: qsTr("Dark")
-                checked: window.darkMode
-                onToggled: {
-                    window.darkMode = checked
-                    editor.theme.applyPreset(checked ? "dark" : "light")
-                }
-            }
-            CheckBox {
-                text: qsTr("Whitespace")
-                onToggled: editor.showWhitespace = checked
-            }
-            Label { text: qsTr("Tab") }
-            SpinBox {
-                from: 1; to: 16; value: editor.tabWidth
-                onValueModified: editor.tabWidth = value
-            }
-            Label { text: qsTr("Font") }
-            SpinBox {
-                from: 6; to: 48; value: editor.font.pointSize
-                onValueModified: {
-                    var f = editor.font
-                    f.pointSize = value
-                    editor.font = f
-                }
             }
             Item { Layout.fillWidth: true }
             Label {
@@ -142,24 +120,77 @@ ApplicationWindow {
         }
     }
 
-    footer: ToolBar {
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            Label {
-                text: editor.loading ? qsTr("Loading… %1%").arg(Math.round(editor.loadProgress * 100))
-                                     : statusText
-                property string statusText: qsTr("Ready")
-                id: statusLabel
+    footer: ColumnLayout {
+        spacing: 0
+
+        // Editor options.
+        ToolBar {
+            Layout.fillWidth: true
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 12
+
+                CheckBox {
+                    text: qsTr("Read-only")
+                    onToggled: editor.readOnly = checked
+                }
+                CheckBox {
+                    text: qsTr("Tabs")
+                    onToggled: editor.insertSpaces = !checked
+                }
+                CheckBox {
+                    text: qsTr("Dark")
+                    checked: window.darkMode
+                    onToggled: {
+                        window.darkMode = checked
+                        editor.theme.applyPreset(checked ? "dark" : "light")
+                    }
+                }
+                CheckBox {
+                    text: qsTr("Whitespace")
+                    onToggled: editor.showWhitespace = checked
+                }
+                Label { text: qsTr("Tab") }
+                SpinBox {
+                    from: 1; to: 16; value: editor.tabWidth
+                    onValueModified: editor.tabWidth = value
+                }
+                Label { text: qsTr("Font") }
+                SpinBox {
+                    from: 6; to: 48; value: editor.font.pointSize
+                    onValueModified: {
+                        var f = editor.font
+                        f.pointSize = value
+                        editor.font = f
+                    }
+                }
+                Item { Layout.fillWidth: true }
             }
-            Item { Layout.fillWidth: true }
-            Label {
-                text: qsTr("Ln %1, Col %2").arg(editor.cursorLine + 1).arg(editor.cursorColumn + 1)
-                      + (editor.selectionEnd > editor.selectionStart
-                         ? qsTr("  (%1 selected)").arg(editor.selectionEnd - editor.selectionStart) : "")
+        }
+
+        // Status.
+        ToolBar {
+            Layout.fillWidth: true
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                Label {
+                    text: editor.loading ? qsTr("Loading… %1%").arg(Math.round(editor.loadProgress * 100))
+                                         : statusText
+                    property string statusText: qsTr("Ready")
+                    id: statusLabel
+                }
+                Item { Layout.fillWidth: true }
+                Label {
+                    text: qsTr("Ln %1, Col %2").arg(editor.cursorLine + 1).arg(editor.cursorColumn + 1)
+                          + (editor.selectionEnd > editor.selectionStart
+                             ? qsTr("  (%1 selected)").arg(editor.selectionEnd - editor.selectionStart) : "")
+                }
+                Label { text: qsTr("%1 fps").arg(fps.value.toFixed(0)) }
             }
-            Label { text: qsTr("%1 fps").arg(fps.value.toFixed(0)) }
         }
     }
 
