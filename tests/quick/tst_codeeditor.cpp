@@ -306,6 +306,7 @@ private slots:
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->forceActiveFocus();
     editor->setCursorBlinkInterval(0);
     editor->setText(QStringLiteral("MMMMMMMMMM\nMMMMMMMMMM\nMMMMMMMMMM"));
     QTRY_VERIFY(editor->renderStats().rowsInPlan >= 3);
@@ -368,6 +369,7 @@ private slots:
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->forceActiveFocus();
     editor->setText(QStringLiteral("MMMMMMMMMM"));
     editor->setCursorPosition(4);
     editor->setCursorBlinkInterval(30);
@@ -707,6 +709,39 @@ private slots:
     const qreal y = editor->contentY();
     QTest::qWait(100);
     QCOMPARE(editor->contentY(), y); // releasing stops the scrolling
+  }
+
+  void unfocusedEditorShowsNoCursorAndStopsBlinking() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("MMMM"));
+    editor->setCursorPosition(2);
+    editor->setCursorBlinkInterval(20);
+    QTRY_VERIFY(editor->hasFocus());
+    QSignalSpy spy(editor, &CodeEditor::cursorVisibleChanged);
+    QTRY_VERIFY(spy.count() >= 2); // blinking while focused
+    editor->setFocus(false);
+    QTRY_VERIFY(!editor->hasFocus());
+    spy.clear();
+    QTest::qWait(100);
+    QCOMPARE(spy.count(), 0); // the timer is stopped: an idle editor renders nothing
+    const QImage image = view->grabWindow();
+    const qreal adv = editor->metrics().cellAdvance();
+    QVERIFY(image.pixelColor(int(adv * 2 + 1), 2) != editor->theme()->cursor());
+    editor->forceActiveFocus();
+    QTRY_VERIFY(editor->hasFocus());
+    QTRY_VERIFY(spy.count() >= 2);
+  }
+
+  void focusLossEndsTypingRunAndTabFocusIsEnabled() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    QVERIFY(editor->activeFocusOnTab());
+    typeText(view.get(), "a");
+    editor->setFocus(false);
+    editor->forceActiveFocus();
+    typeText(view.get(), "b");
+    QCOMPARE(editor->document()->undoStack().undoSteps(), 2);
   }
 
   void setTextUpdatesLineCount() {

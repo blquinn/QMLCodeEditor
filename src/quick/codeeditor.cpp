@@ -80,8 +80,16 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
     m_cursorVisible = !m_cursorVisible;
     emit cursorVisibleChanged();
     update();
+    // After a while without input the cursor stays solid, so an idle editor stops rendering.
+    if (++m_blinkPhases * m_blinkTimer.interval() >= kBlinkTimeoutMs) {
+      m_blinkTimer.stop();
+      if (!m_cursorVisible) {
+        m_cursorVisible = true;
+        emit cursorVisibleChanged();
+      }
+    }
   });
-  m_blinkTimer.start();
+  setActiveFocusOnTab(true);
 
   connect(&m_document, &qce::TextDocument::textReset, this, &CodeEditor::onDocumentReset);
   connect(&m_document, &qce::TextDocument::changed, this, &CodeEditor::onDocumentChanged);
@@ -548,10 +556,29 @@ void CodeEditor::restartBlink() {
     m_cursorVisible = true;
     emit cursorVisibleChanged();
   }
-  if (m_blinkTimer.interval() > 0)
+  m_blinkPhases = 0;
+  // Only a focused editor blinks (and shows) its cursor: an idle one must not keep rendering.
+  if (m_blinkTimer.interval() > 0 && m_hasFocus)
     m_blinkTimer.start();
   else
     m_blinkTimer.stop();
+}
+
+void CodeEditor::focusInEvent(QFocusEvent *event) {
+  QQuickItem::focusInEvent(event);
+  m_hasFocus = true;
+  restartBlink();
+  update();
+}
+
+void CodeEditor::focusOutEvent(QFocusEvent *event) {
+  QQuickItem::focusOutEvent(event);
+  m_hasFocus = false;
+  m_handler->reset();
+  m_document.breakUndoCoalescing();
+  endDrag();
+  restartBlink(); // stops the timer
+  update();
 }
 
 void CodeEditor::setContentX(qreal x) {
@@ -909,7 +936,7 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.markColor = m_theme->whitespace();
   params.marks = &m_markSpans;
   params.cursors = &m_cursorSpans;
-  params.cursorVisible = m_cursorVisible;
+  params.cursorVisible = m_cursorVisible && m_hasFocus;
   scene->sync(params);
   m_sceneStats = scene->stats();
   return scene;

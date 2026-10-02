@@ -148,7 +148,10 @@ public:
   // Time in ms between blink phases; 0 keeps the cursor solid. Any cursor movement shows it.
   int cursorBlinkInterval() const { return m_blinkTimer.interval(); }
   void setCursorBlinkInterval(int ms);
+  // The blink phase; the cursor is drawn only while the editor also has focus. Blinking stops (the
+  // cursor stays solid) after 10 s without input, and any cursor movement restarts it.
   bool cursorVisible() const { return m_cursorVisible; }
+  bool hasFocus() const { return m_hasFocus; }
 
   // Item coordinates -> buffer offset (like TextEdit.positionAt), and back: the rectangle of the
   // character cell at `offset` in item coordinates. Both go through the display map.
@@ -199,6 +202,8 @@ signals:
 protected:
   void updatePolish() override;
   void keyPressEvent(QKeyEvent *event) override;
+  void focusInEvent(QFocusEvent *event) override;
+  void focusOutEvent(QFocusEvent *event) override;
   void mousePressEvent(QMouseEvent *event) override;
   void mouseDoubleClickEvent(QMouseEvent *event) override;
   void mouseMoveEvent(QMouseEvent *event) override;
@@ -272,7 +277,10 @@ private:
   void onSelectionsChanged();
   bool m_showWhitespace = false;
   QTimer m_blinkTimer;
+  static constexpr int kBlinkTimeoutMs = 10000;
   bool m_cursorVisible = true;
+  bool m_hasFocus = false;
+  int m_blinkPhases = 0;
   QList<qce::RowSpan> m_currentLineSpans;
   QList<qce::RowSpan> m_selectionSpans;
   QList<qce::RowSpan> m_markSpans;
