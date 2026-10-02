@@ -67,6 +67,11 @@ void Theme::assign(const Theme &o) {
   m_cursor = o.m_cursor;
   m_currentLine = o.m_currentLine;
   m_whitespace = o.m_whitespace;
+  m_gutterBackground = o.m_gutterBackground;
+  m_lineNumber = o.m_lineNumber;
+  m_currentLineNumber = o.m_currentLineNumber;
+  m_changeModified = o.m_changeModified;
+  m_changeDeleted = o.m_changeDeleted;
   m_tokenStyles = o.m_tokenStyles;
   emit changed();
 }
@@ -105,6 +110,11 @@ Theme *Theme::createLight(QObject *parent) {
   t->m_cursor = QColor(0x00, 0x00, 0x00);
   t->m_currentLine = QColor(0xf3, 0xf3, 0xf3);
   t->m_whitespace = QColor(0xd0, 0xd0, 0xd0);
+  t->m_gutterBackground = QColor(0xff, 0xff, 0xff);
+  t->m_lineNumber = QColor(0x23, 0x78, 0x93);
+  t->m_currentLineNumber = QColor(0x0b, 0x21, 0x6f);
+  t->m_changeModified = QColor(0x2e, 0x7d, 0xd1);
+  t->m_changeDeleted = QColor(0xc7, 0x2e, 0x2e);
   t->m_tokenStyles = {
     {"keyword", style("#0000ff")},
     {"string", style("#a31515")},

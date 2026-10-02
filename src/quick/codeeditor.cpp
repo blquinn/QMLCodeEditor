@@ -68,6 +68,7 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setFlag(ItemAcceptsInputMethod);
   setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
   setCursor(Qt::IBeamCursor);
+  setAcceptHoverEvents(true);
   m_autoScrollTimer.setInterval(30);
   connect(&m_autoScrollTimer, &QTimer::timeout, this, &CodeEditor::autoScrollDrag);
   m_cursorLayout = std::make_unique<EditorLayout>(this);
@@ -121,7 +122,118 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   });
 }
 
-CodeEditor::~CodeEditor() = default;
+CodeEditor::~CodeEditor() {
+  // Columns may outlive the editor (QML owns them); they must let go of the document and items first.
+  const QList<qce::GutterColumn *> columns = m_columns;
+  m_columns.clear();
+  for (qce::GutterColumn *column : columns) {
+    disconnect(column, nullptr, this, nullptr);
+    column->detach(this);
+  }
+}
+
+QQmlListProperty<qce::GutterColumn> CodeEditor::gutterColumns() {
+  return QQmlListProperty<qce::GutterColumn>(
+    this, nullptr,
+    [](QQmlListProperty<qce::GutterColumn> *list, qce::GutterColumn *column) {
+      static_cast<CodeEditor *>(list->object)->addGutterColumn(column);
+    },
+    [](QQmlListProperty<qce::GutterColumn> *list) {
+      return static_cast<CodeEditor *>(list->object)->m_columns.size();
+    },
+    [](QQmlListProperty<qce::GutterColumn> *list, qsizetype index) {
+      return static_cast<CodeEditor *>(list->object)->m_columns.at(index);
+    },
+    [](QQmlListProperty<qce::GutterColumn> *list) {
+      auto *self = static_cast<CodeEditor *>(list->object);
+      const QList<qce::GutterColumn *> columns = self->m_columns;
+      for (qce::GutterColumn *column : columns)
+        self->removeGutterColumn(column);
+    }
+  );
+}
+
+void CodeEditor::addGutterColumn(qce::GutterColumn *column) {
+  if (!column || m_columns.contains(column))
+    return;
+  m_columns.append(column);
+  connect(column, &qce::GutterColumn::contentChanged, this, &CodeEditor::invalidatePlan);
+  connect(column, &QObject::destroyed, this, [this, column] {
+    if (m_columns.removeOne(column))
+      invalidatePlan();
+  });
+  column->attach(this);
+  invalidatePlan();
+}
+
+void CodeEditor::removeGutterColumn(qce::GutterColumn *column) {
+  if (!m_columns.removeOne(column))
+    return;
+  disconnect(column, nullptr, this, nullptr);
+  column->detach(this);
+  invalidatePlan();
+}
+
+qce::GutterContext CodeEditor::gutterContext() const {
+  qce::GutterContext context;
+  context.metrics = &m_metrics;
+  context.theme = m_theme;
+  context.document = &m_document;
+  context.map = &m_map;
+  context.cursorLine = cursorLine();
+  context.lineCount = lineCount();
+  context.contentY = m_contentY;
+  context.height = height();
+  return context;
+}
+
+// Places the visible columns side by side. A width only changes when a column's own rules say so (a new
+// digit in the line count, a font change), never with scrolling.
+bool CodeEditor::updateGutterLayout() {
+  const qce::GutterContext context = gutterContext();
+  qreal x = 0;
+  for (qce::GutterColumn *column : std::as_const(m_columns)) {
+    const qreal width = column->isVisible() ? std::ceil(qMax<qreal>(0, column->measure(context))) : 0;
+    column->setPlacement(x, width);
+    x += width;
+  }
+  if (x == m_gutterWidth)
+    return false;
+  m_gutterWidth = x;
+  emit gutterWidthChanged();
+  return true;
+}
+
+void CodeEditor::buildGutter() {
+  m_gutter.clear();
+  const qce::GutterContext context = gutterContext();
+  // The current line's band continues across the gutter.
+  if (m_gutterWidth > 0)
+    for (const qce::RowSpan &span : std::as_const(m_currentLineSpans))
+      m_gutter.rects.append({span.row, 0, m_gutterWidth, 0, -1, m_theme->currentLine()});
+  for (qce::GutterColumn *column : std::as_const(m_columns)) {
+    if (!column->isVisible())
+      continue;
+    qce::GutterPainter painter(&m_gutter, column->x(), column->actualWidth());
+    column->paintRows(context, m_plan, painter);
+  }
+}
+
+void CodeEditor::scrollGutter() {
+  if (m_columns.isEmpty())
+    return;
+  const qce::GutterContext context = gutterContext();
+  for (qce::GutterColumn *column : std::as_const(m_columns))
+    if (column->isVisible())
+      column->scrolled(context);
+}
+
+qce::GutterColumn *CodeEditor::columnAt(qreal x) const {
+  for (qce::GutterColumn *column : m_columns)
+    if (column->isVisible() && x >= column->x() && x < column->x() + column->actualWidth())
+      return column;
+  return nullptr;
+}
 
 void CodeEditor::setFont(const QFont &font) {
   if (m_font == font)
@@ -207,10 +319,10 @@ void CodeEditor::invalidateWrap() {
 qce::WrapConfig CodeEditor::wrapConfig() const {
   qce::WrapConfig config;
   // An item that has no size yet has nothing to wrap to.
-  if (m_wrapMode == NoWrap || (m_wrapMode == WrapAtViewport && width() <= 0))
+  if (m_wrapMode == NoWrap || (m_wrapMode == WrapAtViewport && textViewportWidth() <= 0))
     return config;
   config.mode = m_wrapMode == WrapAtViewport ? qce::WrapMode::Viewport : qce::WrapMode::Column;
-  config.width = m_wrapMode == WrapAtViewport ? width() : 0;
+  config.width = m_wrapMode == WrapAtViewport ? textViewportWidth() : 0;
   config.column = m_wrapColumn;
   config.wordBreak = m_wordWrap;
   config.hangingIndent = m_wrapIndent;
@@ -409,7 +521,53 @@ QPair<qsizetype, qsizetype> CodeEditor::unitRangeAt(qsizetype offset, DragUnit u
   return {offset, offset};
 }
 
+// A press in the gutter: tells the column's host, and in a column that selects lines starts a drag by
+// whole lines (shift extends the selection from where it began).
+void CodeEditor::handleGutterPress(QMouseEvent *event) {
+  forceActiveFocus(Qt::MouseFocusReason);
+  qce::GutterColumn *column = columnAt(event->position().x());
+  if (!column) {
+    event->accept();
+    return;
+  }
+  const qsizetype row = qBound<qsizetype>(
+    0, qsizetype(std::floor((event->position().y() + m_contentY) / m_metrics.lineHeight())), m_map.rowCount() - 1
+  );
+  const qsizetype line = m_map.rowAt(row).line;
+  emit column->clicked(line, int(event->button()), int(event->modifiers()));
+  if (event->button() == Qt::LeftButton && column->selectsLines()) {
+    const qce::Rope &rope = m_document.rope();
+    m_document.breakUndoCoalescing();
+    m_clickCount = 0; // a click in the text right after this is a first click
+    m_dragging = true;
+    m_dragUnit = DragUnit::Line;
+    m_dragPos = event->position();
+    if (event->modifiers() & Qt::ShiftModifier) {
+      m_dragInitial = unitRangeAt(m_selections.primary().anchor, DragUnit::Line);
+      m_dragAnchor = m_dragInitial.first;
+      updateDrag();
+    } else {
+      m_dragInitial = unitRangeAt(rope.lineStart(line), DragUnit::Line);
+      m_dragAnchor = m_dragInitial.first;
+      m_selections.setSingle(m_dragInitial.first, m_dragInitial.second);
+    }
+  }
+  event->accept();
+}
+
+void CodeEditor::hoverMoveEvent(QHoverEvent *event) {
+  const bool inGutter = event->position().x() < m_gutterWidth;
+  if (inGutter == m_cursorInGutter)
+    return;
+  m_cursorInGutter = inGutter;
+  setCursor(inGutter ? Qt::ArrowCursor : Qt::IBeamCursor);
+}
+
 void CodeEditor::handlePress(QMouseEvent *event, bool doubleClick) {
+  if (event->position().x() < m_gutterWidth) {
+    handleGutterPress(event);
+    return;
+  }
   forceActiveFocus(Qt::MouseFocusReason);
   const qsizetype offset = positionAt(event->position().x(), event->position().y());
   if (event->button() == Qt::MiddleButton) {
@@ -612,7 +770,7 @@ QVariant CodeEditor::inputMethodQuery(Qt::InputMethodQuery query) const {
     if (hasPreedit())
       if (const auto layout = const_cast<CodeEditor *>(this)->layoutForRow(rowOfPosition(pos), m_document.snapshot());
           layout->preeditLength > 0)
-        rect.moveLeft(preeditCursorX(*layout) - m_contentX);
+        rect.moveLeft(preeditCursorX(*layout) - m_contentX + m_gutterWidth);
     return rect;
   }
   case Qt::ImCursorPosition:
@@ -785,8 +943,8 @@ void CodeEditor::ensureCursorVisible() {
   const qreal margin = 2 * m_metrics.cellAdvance();
   if (x - margin < m_contentX)
     setContentX(x - margin);
-  else if (x + margin + m_metrics.cellAdvance() > m_contentX + width())
-    setContentX(x + margin + m_metrics.cellAdvance() - width());
+  else if (x + margin + m_metrics.cellAdvance() > m_contentX + textViewportWidth())
+    setContentX(x + margin + m_metrics.cellAdvance() - textViewportWidth());
 }
 
 // Selections moved: by a command, by select(), or because an edit shifted their anchors. The
@@ -851,7 +1009,7 @@ void CodeEditor::focusOutEvent(QFocusEvent *event) {
 }
 
 void CodeEditor::setContentX(qreal x) {
-  x = qBound<qreal>(0, x, qMax<qreal>(0, m_contentWidth - width()));
+  x = qBound<qreal>(0, x, qMax<qreal>(0, m_contentWidth - textViewportWidth()));
   if (x == m_contentX)
     return;
   m_contentX = x;
@@ -880,7 +1038,7 @@ void CodeEditor::updateContentSize() {
   // wide as its rows, which are the item (or the column) wide.
   qreal width = m_maxLineWidth > 0 ? m_maxLineWidth + m_metrics.cellAdvance() : 0;
   if (m_map.wrapEnabled())
-    width = m_map.wrapConfig().mode == qce::WrapMode::Viewport ? this->width() : m_map.wrapConfig().rowWidth() + m_metrics.cellAdvance();
+    width = m_map.wrapConfig().mode == qce::WrapMode::Viewport ? textViewportWidth() : m_map.wrapConfig().rowWidth() + m_metrics.cellAdvance();
   if (width != m_contentWidth) {
     m_contentWidth = width;
     emit contentWidthChanged();
@@ -975,7 +1133,7 @@ void CodeEditor::buildOverlays() {
       const qsizetype first = m_map.firstRowOfLine(head.line);
       const qsizetype last = first + m_map.rowCountOfLine(head.line) - 1;
       for (qsizetype row = qMax(first, m_planFirst); row <= qMin(last, m_planLast); ++row)
-        m_currentLineSpans.append({row, m_contentX, m_contentX + width()});
+        m_currentLineSpans.append({row, m_contentX, m_contentX + textViewportWidth()});
     }
     if (sel.isEmpty())
       continue;
@@ -1024,7 +1182,7 @@ qsizetype CodeEditor::positionAt(qreal x, qreal y) {
   const qce::Rope &rope = snapshot.rope();
   const auto layout = layoutForRow(displayRow, snapshot);
   const qsizetype column =
-    qBound(displayRow.startColumn, columnForX(*layout, x + m_contentX), displayRow.lastCursorColumn());
+    qBound(displayRow.startColumn, columnForX(*layout, x - m_gutterWidth + m_contentX), displayRow.lastCursorColumn());
   return rope.snapToCodePoint(rope.offsetAt({displayRow.line, column}));
 }
 
@@ -1035,7 +1193,7 @@ QRectF CodeEditor::rectForPosition(qsizetype offset) {
   const auto layout = layoutForRow(m_map.rowAt(row), snapshot);
   const qreal cursorX = xForColumn(*layout, position.column);
   return QRectF(
-    cursorX - m_contentX, qreal(row) * m_metrics.lineHeight() - m_contentY, m_metrics.cellAdvance(),
+    cursorX - m_contentX + m_gutterWidth, qreal(row) * m_metrics.lineHeight() - m_contentY, m_metrics.cellAdvance(),
     m_metrics.lineHeight()
   );
 }
@@ -1268,8 +1426,16 @@ void CodeEditor::updatePolish() {
       self->m_polishMaxNs = qMax(self->m_polishMaxNs, ns);
     }
   } record{this, polishTimer};
+  // The gutter's width is part of what wrapping and scrolling are laid out against, so it comes first.
+  const bool gutterMoved = m_planDirty && updateGutterLayout();
+  if (gutterMoved) {
+    m_wrapDirty = true;
+    m_planDirty = true;
+  }
   if (m_wrapDirty)
     applyWrap();
+  if (gutterMoved)
+    updateContentSizeKeepingAnchor();
   if (m_reanchorPending) {
     // Wrapping showed some lines to be taller or shorter than assumed: the text at the top of the
     // view stays where it was and the row number it is on moves.
@@ -1287,6 +1453,7 @@ void CodeEditor::updatePolish() {
 
   // Plain scrolling inside the layout window changes nothing but the scroll transform.
   if (!m_planDirty && firstRow == m_planFirst && lastRow == m_planLast) {
+    scrollGutter();
     update();
     return;
   }
@@ -1297,14 +1464,16 @@ void CodeEditor::updatePolish() {
   m_plan.reserve(lastRow - firstRow + 1);
   qreal widest = m_maxLineWidth;
   for (qsizetype row = firstRow; row <= lastRow; ++row) {
-    auto layout = layoutForRow(m_map.rowAt(row), snapshot);
+    const qce::DisplayRow displayRow = m_map.rowAt(row);
+    auto layout = layoutForRow(displayRow, snapshot);
     widest = qMax(widest, layout->indentX + layout->width);
-    m_plan.append({row, std::move(layout)});
+    m_plan.append({row, std::move(layout), displayRow});
   }
   m_planFirst = firstRow;
   m_planLast = lastRow;
   m_planDirty = false;
   buildOverlays();
+  buildGutter();
   m_maxLineWidth = widest;
   updateContentSize();
   update();
@@ -1342,6 +1511,9 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.marks = &m_markSpans;
   params.cursors = &m_cursorSpans;
   params.cursorVisible = m_cursorVisible && m_hasFocus;
+  params.gutterWidth = m_gutterWidth;
+  params.gutterBackground = m_theme->gutterBackground();
+  params.gutter = &m_gutter;
   scene->sync(params);
   m_sceneStats = scene->stats();
   return scene;

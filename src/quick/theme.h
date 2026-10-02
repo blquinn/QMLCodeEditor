@@ -24,6 +24,11 @@ class Theme : public QObject {
   Q_PROPERTY(QColor cursor MEMBER m_cursor NOTIFY changed)
   Q_PROPERTY(QColor currentLine MEMBER m_currentLine NOTIFY changed)
   Q_PROPERTY(QColor whitespace MEMBER m_whitespace NOTIFY changed)
+  Q_PROPERTY(QColor gutterBackground MEMBER m_gutterBackground NOTIFY changed)
+  Q_PROPERTY(QColor lineNumber MEMBER m_lineNumber NOTIFY changed)
+  Q_PROPERTY(QColor currentLineNumber MEMBER m_currentLineNumber NOTIFY changed)
+  Q_PROPERTY(QColor changeModified MEMBER m_changeModified NOTIFY changed)
+  Q_PROPERTY(QColor changeDeleted MEMBER m_changeDeleted NOTIFY changed)
   // Style name -> { color, bold, italic }; names are the TokenStyle names from core/highlighter.h
   // in lower case ("keyword", "string", ...). Unlisted styles use the foreground color.
   Q_PROPERTY(QVariantMap tokenStyles READ tokenStyles WRITE setTokenStyles NOTIFY changed)
@@ -40,6 +45,11 @@ public:
   QColor cursor() const { return m_cursor; }
   QColor currentLine() const { return m_currentLine; }
   QColor whitespace() const { return m_whitespace; }
+  QColor gutterBackground() const { return m_gutterBackground; }
+  QColor lineNumber() const { return m_lineNumber; }
+  QColor currentLineNumber() const { return m_currentLineNumber; }
+  QColor changeModified() const { return m_changeModified; }
+  QColor changeDeleted() const { return m_changeDeleted; }
 
   QVariantMap tokenStyles() const { return m_tokenStyles; }
   void setTokenStyles(const QVariantMap &styles);
@@ -67,6 +77,11 @@ private:
   QColor m_cursor{0xae, 0xaf, 0xad};
   QColor m_currentLine{0x2a, 0x2d, 0x2e};
   QColor m_whitespace{0x40, 0x40, 0x40};
+  QColor m_gutterBackground{0x1e, 0x1e, 0x1e};
+  QColor m_lineNumber{0x85, 0x85, 0x85};
+  QColor m_currentLineNumber{0xc6, 0xc6, 0xc6};
+  QColor m_changeModified{0x1b, 0x81, 0xa8};
+  QColor m_changeDeleted{0xf1, 0x4c, 0x4c};
   void rebuildFormats();
 
   QVariantMap m_tokenStyles;

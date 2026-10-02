@@ -10,6 +10,7 @@
 #include "core/selectionset.h"
 #include "core/textdocument.h"
 #include "quick/editorscene.h"
+#include "quick/gutter.h"
 #include "quick/linelayoutcache.h"
 #include "quick/textmetrics.h"
 #include "quick/theme.h"
@@ -20,6 +21,7 @@
 #include <QtGui/QColor>
 #include <QtGui/QFont>
 #include <QtGui/QTextLayout>
+#include <QtQml/QQmlListProperty>
 #include <QtQml/qqmlregistration.h>
 #include <QtQuick/QQuickItem>
 
@@ -79,6 +81,8 @@ public:
   Q_PROPERTY(bool wrapIndent READ wrapIndent WRITE setWrapIndent NOTIFY wrapIndentChanged FINAL)
   Q_PROPERTY(int wrapIndentExtra READ wrapIndentExtra WRITE setWrapIndentExtra NOTIFY wrapIndentExtraChanged FINAL)
   Q_PROPERTY(bool wrapping READ wrapping NOTIFY wrappingChanged FINAL)
+  Q_PROPERTY(QQmlListProperty<qce::GutterColumn> gutterColumns READ gutterColumns FINAL)
+  Q_PROPERTY(qreal gutterWidth READ gutterWidth NOTIFY gutterWidthChanged FINAL)
 public:
   explicit CodeEditor(QQuickItem *parent = nullptr);
   ~CodeEditor() override;
@@ -126,6 +130,19 @@ public:
   void setWrapIndentExtra(int columns);
   // True while a worker is still refining row counts, i.e. contentHeight is an estimate.
   bool wrapping() const { return m_wrapping; }
+
+  // The gutter (M5): columns laid out left to right in the order given, to the left of the text. The
+  // text area is `width - gutterWidth` wide; wrap, hit-testing and scrolling all use that. The editor
+  // does not own columns it is handed through the C++ API.
+  QQmlListProperty<qce::GutterColumn> gutterColumns();
+  const QList<qce::GutterColumn *> &gutterColumnList() const { return m_columns; }
+  void addGutterColumn(qce::GutterColumn *column);
+  void removeGutterColumn(qce::GutterColumn *column);
+  qreal gutterWidth() const { return m_gutterWidth; }
+  // Width of the area text is drawn in.
+  qreal textViewportWidth() const { return qMax<qreal>(0, width() - m_gutterWidth); }
+  // What the columns painted for the last frame plan.
+  const qce::GutterPlan &gutterPlan() const { return m_gutter; }
 
   const qce::DisplayMap &displayMap() const { return m_map; }
   const qce::TextMetrics &metrics() const { return m_metrics; }
@@ -256,6 +273,7 @@ signals:
   void wrapIndentChanged();
   void wrapIndentExtraChanged();
   void wrappingChanged();
+  void gutterWidthChanged();
   void loadFailed(const QString &error);
   void saved(const QString &path);
   void saveFailed(const QString &error);
@@ -271,6 +289,7 @@ protected:
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override;
   void mouseUngrabEvent() override;
+  void hoverMoveEvent(QHoverEvent *event) override;
   void wheelEvent(QWheelEvent *event) override;
   QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
   void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
@@ -280,6 +299,13 @@ private:
   class EditorHost;
   enum class DragUnit : quint8 { Char, Word, Line };
   void handlePress(QMouseEvent *event, bool doubleClick);
+  void handleGutterPress(QMouseEvent *event);
+  qce::GutterColumn *columnAt(qreal x) const;
+  qce::GutterContext gutterContext() const;
+  // Lays the columns out; true when the gutter's width changed.
+  bool updateGutterLayout();
+  void buildGutter();
+  void scrollGutter();
   void updateDrag();
   void endDrag();
   void autoScrollDrag();
@@ -325,6 +351,10 @@ private:
 
   qce::TextDocument m_document;
   qce::DisplayMap m_map{&m_document};
+  QList<qce::GutterColumn *> m_columns;
+  qce::GutterPlan m_gutter;
+  qreal m_gutterWidth = 0;
+  bool m_cursorInGutter = false;
   qce::SelectionSet m_selections{&m_document};
   qce::TextMetrics m_metrics;
   qce::LineLayoutCache m_layouts;
