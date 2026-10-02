@@ -2,6 +2,7 @@
 #define CODEEDITOR_H
 
 #include "core/textdocument.h"
+#include "quick/theme.h"
 
 #include <QtCore/QUrl>
 #include <QtGui/QColor>
@@ -19,6 +20,7 @@ class CodeEditor : public QQuickItem {
   Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged FINAL)
   Q_PROPERTY(qreal loadProgress READ loadProgress NOTIFY loadProgressChanged FINAL)
   Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
+  Q_PROPERTY(qce::Theme *theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
 public:
   explicit CodeEditor(QQuickItem *parent = nullptr);
   ~CodeEditor() override;
@@ -33,6 +35,10 @@ public:
   QFont font() const { return m_font; }
   void setFont(const QFont &font);
 
+  // Never null: the editor owns a dark theme until the host assigns one.
+  qce::Theme *theme() const { return m_theme; }
+  void setTheme(qce::Theme *theme);
+
   // Replaces the whole text. Convenience for small documents; large ones go through load().
   Q_INVOKABLE void setText(const QString &text);
   // Loads a file in the background; the first lines show while the rest is read. Accepts a local
@@ -44,6 +50,7 @@ signals:
   void loadingChanged();
   void loadProgressChanged();
   void fontChanged();
+  void themeChanged();
   void loadFailed(const QString &error);
 
 protected:
@@ -56,7 +63,10 @@ private:
 
   qce::TextDocument m_document;
   QFont m_font;
-  QColor m_background{0x1e, 0x1e, 0x1e};
+  void onThemeChanged();
+
+  qce::Theme *m_theme = nullptr;
+  qce::Theme *m_ownedTheme = nullptr;
   qreal m_loadProgress = 0;
   qsizetype m_lastLineCount = 1;
 };

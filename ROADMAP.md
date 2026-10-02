@@ -110,7 +110,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
 
 **Exit criteria:** a 100 MB file scrolls at a steady 120 fps in the demo app with only visible lines laid out; frame-time benchmark committed; memory use is independent of file size beyond the rope itself.
 
-- [~] **RENDER-01** `CodeEditor` as a `QQuickItem` using `updatePaintNode`
+- [x] **RENDER-01** `CodeEditor` as a `QQuickItem` using `updatePaintNode` — done 2026-10-02 (c958c32)
   - Replace the `QQuickPaintedItem` scaffold; `ItemHasContents` set; all scene-graph mutation on the render thread in `updatePaintNode`.
 - [ ] **RENDER-02** Scroll model
   - Owned `contentX/contentY/contentWidth/contentHeight` properties so a QML `ScrollBar` can bind to them; kinetic scrolling friendly; scrolling changes a transform only, with no relayout.
@@ -120,7 +120,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Line nodes are reused as lines scroll in and out; no per-frame allocation in steady-state scrolling.
 - [ ] **RENDER-05** Cursor and selection geometry
   - Batched geometry nodes behind and above the text; cursor blink timer.
-- [ ] **RENDER-06** Theme object
+- [~] **RENDER-06** Theme object
   - Colors for text, background, selection, cursor, current line; token-style table used by highlighting; exposed to QML for light/dark switching.
 - [ ] **RENDER-07** Font metrics with a monospace fast path
   - Cell-grid math for ASCII/monospace runs; falls back to `QTextLayout` measurement for wide chars, emoji, ligatures and mixed fonts ([ADR 0001](docs/adr/0001-scene-graph-rendering.md)).

@@ -19,6 +19,8 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setFlag(ItemHasContents);
   setFlag(ItemIsFocusScope);
   m_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+  m_ownedTheme = m_theme = qce::Theme::createDark(this);
+  connect(m_theme, &qce::Theme::changed, this, &CodeEditor::onThemeChanged);
 
   connect(&m_document, &qce::TextDocument::textReset, this, &CodeEditor::onDocumentReset);
   connect(&m_document, &qce::TextDocument::changed, this, &CodeEditor::onDocumentChanged);
@@ -46,6 +48,20 @@ void CodeEditor::setFont(const QFont &font) {
   emit fontChanged();
   update();
 }
+
+void CodeEditor::setTheme(qce::Theme *theme) {
+  if (!theme)
+    theme = m_ownedTheme;
+  if (theme == m_theme)
+    return;
+  disconnect(m_theme, &qce::Theme::changed, this, &CodeEditor::onThemeChanged);
+  m_theme = theme;
+  connect(m_theme, &qce::Theme::changed, this, &CodeEditor::onThemeChanged);
+  emit themeChanged();
+  onThemeChanged();
+}
+
+void CodeEditor::onThemeChanged() { update(); }
 
 void CodeEditor::setText(const QString &text) { m_document.setText(text); }
 
@@ -85,6 +101,6 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
     root->appendChildNode(root->background);
   }
   root->background->setRect(boundingRect());
-  root->background->setColor(m_background);
+  root->background->setColor(m_theme->background());
   return root;
 }

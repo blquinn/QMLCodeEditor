@@ -31,6 +31,24 @@ private slots:
     QCOMPARE(image.pixelColor(10, 10), QColor(0x1e, 0x1e, 0x1e));
   }
 
+  void themeSwitchRepaints() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    QVERIFY(editor && editor->theme());
+    qce::Theme light;
+    light.assign(*std::unique_ptr<qce::Theme>(qce::Theme::createLight()));
+    editor->setTheme(&light);
+    QCOMPARE(editor->theme(), &light);
+    QTRY_COMPARE(view.grabWindow().pixelColor(10, 10), QColor(0xff, 0xff, 0xff));
+    light.setProperty("background", QColor(0x10, 0x20, 0x30));
+    QTRY_COMPARE(view.grabWindow().pixelColor(10, 10), QColor(0x10, 0x20, 0x30));
+    editor->setTheme(nullptr); // back to the owned default
+    QTRY_COMPARE(view.grabWindow().pixelColor(10, 10), QColor(0x1e, 0x1e, 0x1e));
+  }
+
   void setTextUpdatesLineCount() {
     CodeEditor editor;
     QSignalSpy spy(&editor, &CodeEditor::lineCountChanged);
