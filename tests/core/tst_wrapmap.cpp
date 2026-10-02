@@ -163,6 +163,8 @@ private slots:
 
   void characterWrapIgnoresWords() {
     QCOMPARE(wrapLine(u"hello world foo bar"_s, gridConfig(10, false)), (QList<qsizetype>{10}));
+    // Spaces are ordinary characters here: they don't hang past the edge.
+    QCOMPARE(wrapLine(u"aaaa bbbb cccc"_s, gridConfig(4, false)), (QList<qsizetype>{4, 8, 12}));
   }
 
   void trailingWhitespaceHangs() {

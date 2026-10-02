@@ -46,7 +46,8 @@ qreal wrapIndent(const WrapConfig &config, const Rope &rope, qsizetype lineStart
 // the end of the line. Returns the column where scanning stopped: the start of the next row to
 // scan, or `lineLength` when the line is finished.
 //
-// A row always holds at least one character cluster. Whitespace may hang past the right edge.
+// A row always holds at least one character cluster. When breaking at words, whitespace may hang
+// past the right edge.
 qsizetype wrapRows(
   const Rope &rope, qsizetype lineStart, qsizetype lineLength, const WrapConfig &config, qreal indent,
   qsizetype startColumn, bool firstRow, qsizetype maxRows, QList<qsizetype> &starts

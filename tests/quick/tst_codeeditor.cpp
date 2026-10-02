@@ -1004,6 +1004,66 @@ private slots:
     QCOMPARE(editor->cursorLine(), 2);
     QCOMPARE(editor->cursorColumn(), 7); // and comes back
   }
+
+  void viewportWrapFollowsTheItemWidth() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setWordWrap(false);
+    editor->setText(QString(300, u'a'));
+    editor->setWrapMode(CodeEditor::WrapAtViewport);
+    const qreal cell = editor->metrics().cellAdvance();
+    auto columnsFor = [&](qreal width) { return qsizetype(std::floor((qMax(width - cell, 4 * cell) + 1e-6) / cell)); };
+    auto rowsFor = [&](qreal width) { return (300 + columnsFor(width) - 1) / columnsFor(width); };
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), rowsFor(200));
+    editor->setWidth(120);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), rowsFor(120));
+    editor->setWidth(400);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), rowsFor(400));
+    QCOMPARE(editor->contentWidth(), 400.0); // wrapped text never scrolls sideways
+  }
+
+  void wordAndCharacterWrap() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("aaaa bbbb cccc"));
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(7);
+    QVERIFY(editor->wordWrap());
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 3);
+    QCOMPARE(editor->displayMap().rowAt(1).startColumn, 5);
+    editor->setWordWrap(false);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 2);
+    QCOMPARE(editor->displayMap().rowAt(1).startColumn, 7);
+    editor->setWrapColumn(4);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 4);
+  }
+
+  void columnWrapWiderThanTheItemScrollsSideways() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QString(300, u'a'));
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(80);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 4);
+    const qreal cell = editor->metrics().cellAdvance();
+    QTRY_VERIFY(editor->contentWidth() >= 80 * cell);
+    QVERIFY(editor->contentWidth() > editor->width());
+    editor->setContentX(40);
+    QCOMPARE(editor->contentX(), 40.0);
+  }
+
+  void wrapModeSwitchesKeepTheSettings() {
+    CodeEditor editor;
+    QSignalSpy mode(&editor, &CodeEditor::wrapModeChanged);
+    QCOMPARE(editor.wrapMode(), CodeEditor::NoWrap);
+    editor.setWrapMode(CodeEditor::WrapAtColumn);
+    editor.setWrapMode(CodeEditor::WrapAtColumn);
+    QCOMPARE(mode.count(), 1);
+    editor.setWrapColumn(0); // clamped
+    QCOMPARE(editor.wrapColumn(), 1);
+    QVERIFY(editor.wrapIndent());
+    QCOMPARE(editor.wrapIndentExtra(), 0);
+  }
 };
 
 QTEST_MAIN(TstCodeEditor)

@@ -64,7 +64,8 @@ qsizetype scanWindow(const QString &t, bool atLineEnd, qreal avail, const WrapCo
     const bool extender = i > 0 && (afterJoiner || isClusterExtender(cp));
     const bool space = cp == u' ' || cp == u'\t';
     const qreal advance = cp == u'\t' ? tabStop - std::fmod(x, tabStop) : measure.advance(cp);
-    if (!extender && !space && i > 0 && x + advance > avail + 1e-6)
+    // Whitespace may hang past the edge when breaking at words; between characters it is a character.
+    if (!extender && !(space && cfg.wordBreak) && i > 0 && x + advance > avail + 1e-6)
       return cfg.wordBreak && lastBreak > 0 ? lastBreak : i;
     x += advance;
     i += len;
