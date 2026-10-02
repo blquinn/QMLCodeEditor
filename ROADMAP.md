@@ -183,7 +183,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [x] **WRAP-08** Wrap toggle at runtime and horizontal scrolling in no-wrap mode — done 2026-10-02 (d674891)
 - [x] **WRAP-09** Very long lines wrap without stalling — done 2026-10-02 (88235dd)
   - A 5 MB single line wraps incrementally and stays responsive.
-- [~] **WRAP-10** Wrap benchmarks
+- [x] **WRAP-10** Wrap benchmarks — done 2026-10-02 (6de2f70)
   - Wrap/unwrap/resize timing on generated large files.
 
 ## M5 — Gutters & line numbers
