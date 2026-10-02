@@ -2,7 +2,11 @@
 // and scrolls through them, recording per-frame sync, render and polish cost, presented-frame intervals, how
 // much layout and node churn scrolling causes, and memory growth.
 //
-//   bench_scroll [--json out.json] [--frames N] [--quick] [--filter REGEX]
+//   bench_scroll [--json out.json] [--frames N] [--quick] [--filter REGEX] [--gutter] [--relative] [--wrap]
+//
+// --gutter adds line numbers, a change column and a marker column (M5); --relative makes the numbers
+// relative to the cursor; --wrap wraps at the viewport. The "cursor" scenarios move the cursor one line per
+// frame, which renumbers every row in relative mode.
 //
 // Inputs are generated once into $QCE_BENCH_DIR (default: the system temp dir) and reused. Run from a release
 // build on a real display for meaningful numbers; --quick uses a small file and few frames (the ctest smoke
@@ -10,7 +14,10 @@
 #include "bench.h"
 #include "datagen.h"
 #include "frametimer.h"
+#include "quick/changecolumn.h"
 #include "quick/codeeditor.h"
+#include "quick/linenumbercolumn.h"
+#include "quick/markercolumn.h"
 
 #include <QtCore/QCommandLineParser>
 #include <QtCore/QDir>
@@ -68,6 +75,7 @@ enum class Mode {
   Smooth, // 2.5 rows per frame, like a fast trackpad scroll
   Fling,  // 12 rows per frame, like a scrollbar drag or a page-down repeat
   Jumps,  // a random position every frame: every layout is cold
+  Cursor, // the cursor moves one line down per frame, and the view follows
 };
 
 struct Scenario {
@@ -138,7 +146,7 @@ public:
     const qreal lh = m_editor.metrics().lineHeight();
     const qreal range = qMax<qreal>(0, m_editor.contentHeight() - m_editor.height());
     m_mode = mode;
-    m_step = (mode == Mode::Smooth ? 2.5 : 12.0) * lh;
+    m_step = (mode == Mode::Smooth ? 2.5 : mode == Mode::Cursor ? 1.0 : 12.0) * lh;
     m_rng.seed(42);
     m_y = range / 2; // scroll from the middle: far from row 0, where float precision matters
     m_range = range;
@@ -253,6 +261,14 @@ private:
     case Mode::Jumps:
       m_y = std::uniform_real_distribution<qreal>(0, m_range)(m_rng);
       break;
+    case Mode::Cursor:
+      m_y += m_step;
+      if (m_y > m_range)
+        m_y = m_range / 2;
+      // The cursor stays a few rows below the top of the view, so every frame moves it and the numbers.
+      m_editor.setCursorPosition(m_editor.document()->rope().lineStart(
+        m_editor.displayMap().lineForRow(qsizetype(m_y / m_editor.metrics().lineHeight()) + 5)));
+      break;
     }
     m_editor.setContentY(m_y);
   }
@@ -317,6 +333,9 @@ int main(int argc, char **argv) {
      QStringLiteral("600")}
   );
   parser.addOption({QStringLiteral("quick"), QStringLiteral("Small input and few frames (smoke test).")});
+  parser.addOption({QStringLiteral("gutter"), QStringLiteral("Show line numbers, change bars and markers.")});
+  parser.addOption({QStringLiteral("relative"), QStringLiteral("With --gutter: relative line numbers.")});
+  parser.addOption({QStringLiteral("wrap"), QStringLiteral("Wrap at the viewport width.")});
   parser.addOption(
     {{QStringLiteral("f"), QStringLiteral("filter")},
      QStringLiteral("Only scenarios whose name matches this regex."),
@@ -331,7 +350,8 @@ int main(int argc, char **argv) {
     const QString small =
       inputFile(QStringLiteral("qce_scroll_2MB.txt"), Shape::ManyShortLines, 2 * 1024 * 1024);
     scenarios << Scenario{QStringLiteral("short_2MB/smooth"), small, Mode::Smooth}
-              << Scenario{QStringLiteral("short_2MB/jumps"), small, Mode::Jumps};
+              << Scenario{QStringLiteral("short_2MB/jumps"), small, Mode::Jumps}
+              << Scenario{QStringLiteral("short_2MB/cursor"), small, Mode::Cursor};
   } else {
     const QString small =
       inputFile(QStringLiteral("qce_scroll_10MB.txt"), Shape::ManyShortLines, 10 * 1024 * 1024);
@@ -340,7 +360,8 @@ int main(int argc, char **argv) {
     scenarios << Scenario{QStringLiteral("short_10MB/smooth"), small, Mode::Smooth}
               << Scenario{QStringLiteral("short_100MB/smooth"), big, Mode::Smooth}
               << Scenario{QStringLiteral("short_100MB/fling"), big, Mode::Fling}
-              << Scenario{QStringLiteral("short_100MB/jumps"), big, Mode::Jumps};
+              << Scenario{QStringLiteral("short_100MB/jumps"), big, Mode::Jumps}
+              << Scenario{QStringLiteral("short_100MB/cursor"), big, Mode::Cursor};
   }
 
   QQuickView view;
@@ -348,6 +369,22 @@ int main(int argc, char **argv) {
   auto *editor = new CodeEditor(view.contentItem());
   editor->setSize(QSizeF(1280, 800));
   editor->setCursorBlinkInterval(0); // blink repaints would add frames the scroll didn't ask for
+  QString variant;
+  qce::MarkerColumn *markers = nullptr;
+  if (parser.isSet(QStringLiteral("gutter"))) {
+    auto *numbers = new qce::LineNumberColumn(editor);
+    if (parser.isSet(QStringLiteral("relative")))
+      numbers->setMode(qce::LineNumberColumn::Relative);
+    editor->addGutterColumn(numbers);
+    editor->addGutterColumn(new qce::ChangeColumn(editor));
+    markers = new qce::MarkerColumn(editor);
+    editor->addGutterColumn(markers);
+    variant += QStringLiteral("gutter/");
+  }
+  if (parser.isSet(QStringLiteral("wrap"))) {
+    editor->setWrapMode(CodeEditor::WrapAtViewport);
+    variant += QStringLiteral("wrap/");
+  }
   view.show();
   QElapsedTimer exposeWait;
   exposeWait.start();
@@ -365,9 +402,13 @@ int main(int argc, char **argv) {
   for (const Scenario &s : scenarios) {
     if (!filter.isEmpty() && !QRegularExpression(filter).match(s.name).hasMatch())
       continue;
-    const QString label = QStringLiteral("scroll/") + s.name;
+    const QString label = QStringLiteral("scroll/") + variant + s.name;
     if (s.path != currentPath) { // consecutive scenarios share an opened file
       results << bench.open(s.name.section(QLatin1Char('/'), 0, 0), s.path);
+      // A hundred marks spread through the file, as a git or diagnostics provider might leave.
+      if (markers)
+        for (int i = 0; i < 100; ++i)
+          markers->addMarker(editor->lineCount() / 100 * i, {{QStringLiteral("color"), QColor(Qt::red)}});
       currentPath = s.path;
     }
     results << bench.scroll(label, s.mode);

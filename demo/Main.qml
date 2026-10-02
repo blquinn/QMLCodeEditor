@@ -14,6 +14,8 @@ ApplicationWindow {
     // Chrome colors follow the editor theme; the Basic style (set in main.cpp) draws from this palette
     // instead of the system's.
     property bool darkMode: true
+    // Lines carrying a bookmark star, by line number.
+    property var bookmarks: ({})
 
     palette {
         window: darkMode ? "#1e1f22" : "#f2f2f2"
@@ -209,6 +211,32 @@ ApplicationWindow {
                     from: 0; to: 16; value: editor.wrapIndentExtra
                     onValueModified: editor.wrapIndentExtra = value
                 }
+                Label { text: qsTr("Numbers") }
+                ComboBox {
+                    model: [qsTr("Absolute"), qsTr("Relative"), qsTr("Hybrid")]
+                    currentIndex: lineNumbers.mode
+                    onActivated: (index) => lineNumbers.mode = index
+                }
+                CheckBox {
+                    text: qsTr("Line numbers")
+                    checked: lineNumbers.visible
+                    onToggled: lineNumbers.visible = checked
+                }
+                CheckBox {
+                    text: qsTr("Changes")
+                    checked: changeBars.visible
+                    onToggled: changeBars.visible = checked
+                }
+                CheckBox {
+                    text: qsTr("Breakpoints")
+                    checked: breakpoints.visible
+                    onToggled: breakpoints.visible = checked
+                }
+                CheckBox {
+                    text: qsTr("Bookmarks")
+                    checked: bookmarkColumn.visible
+                    onToggled: bookmarkColumn.visible = checked
+                }
                 Item { Layout.fillWidth: true }
             }
         }
@@ -271,6 +299,52 @@ ApplicationWindow {
         id: editor
         objectName: "editor"
         undoLimit: 10000 // keep a long session's history bounded
+
+        // The gutter, left to right: line numbers (a click selects the line), bars for lines edited since
+        // loading, breakpoints (a click toggles one) and a column of bookmark stars drawn in QML.
+        gutterColumns: [
+            LineNumberColumn { id: lineNumbers },
+            ChangeColumn { id: changeBars },
+            MarkerColumn {
+                id: breakpoints
+                width: 16
+                onClicked: (line) => {
+                    if (!removeMarkersAt(line))
+                        addMarker(line, { color: "#e51400", barWidth: 12 })
+                }
+            },
+            DelegateColumn {
+                id: bookmarkColumn
+                width: 18
+                delegate: Item {
+                    id: bookmark
+                    required property int line
+                    required property int row
+                    required property int rowInLine
+                    required property bool firstRow
+                    required property bool current
+                    // Bookmarks stay on their line numbers; they do not follow edits.
+                    readonly property bool marked: window.bookmarks[line] === true
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\u2605"
+                        color: bookmark.marked ? "#f5c518" : (bookmarkArea.containsMouse ? "#80808080" : "transparent")
+                        font.pixelSize: Math.max(8, parent.height - 4)
+                    }
+                    MouseArea {
+                        id: bookmarkArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            var next = Object.assign({}, window.bookmarks)
+                            if (next[bookmark.line]) delete next[bookmark.line]
+                            else next[bookmark.line] = true
+                            window.bookmarks = next
+                        }
+                    }
+                }
+            }
+        ]
         anchors.fill: parent
         anchors.rightMargin: vbar.width
         anchors.bottomMargin: hbar.visible ? hbar.height : 0
@@ -304,7 +378,8 @@ ApplicationWindow {
         // Text wrapped to the window never scrolls sideways.
         visible: editor.wrapMode !== CodeEditor.WrapAtViewport
         anchors { left: parent.left; right: vbar.left; bottom: parent.bottom }
-        size: editor.contentWidth > 0 ? Math.min(1, editor.width / editor.contentWidth) : 1
+        anchors.leftMargin: editor.gutterWidth
+        size: editor.contentWidth > 0 ? Math.min(1, (editor.width - editor.gutterWidth) / editor.contentWidth) : 1
         position: editor.contentWidth > 0 ? editor.contentX / editor.contentWidth : 0
         onPositionChanged: if (pressed) editor.contentX = position * editor.contentWidth
     }

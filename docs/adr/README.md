@@ -15,6 +15,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0009](0009-rendering-pipeline.md) | Rendering pipeline: polish builds a frame plan, sync reconciles pooled nodes | Accepted |
 | [0010](0010-command-layer.md) | Command layer, selection set and input handlers | Accepted |
 | [0011](0011-soft-wrap.md) | Soft wrap: estimated row counts, refined on demand and in the background | Accepted |
+| [0012](0012-gutter.md) | Gutter inside the editor: columns paint into the frame plan | Accepted |
 
 ## Adding one
 

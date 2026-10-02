@@ -190,7 +190,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria:** line numbers, a change-marker column and a custom QML-provided column render correctly with wrap on and off; gutter width tracks digit count without jitter during scroll.
 
-- [~] **GUTTER-01** Gutter framework
+- [ ] **GUTTER-01** Gutter framework
   - Ordered columns supplied by providers (built-in or QML); each column reports its width and paints per visible row.
 - [ ] **GUTTER-02** Line numbers
   - Absolute, relative or hybrid; continuation rows of wrapped lines show no number; current line highlighted.
