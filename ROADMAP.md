@@ -120,9 +120,9 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Line nodes are reused as lines scroll in and out; no per-frame allocation in steady-state scrolling.
 - [ ] **RENDER-05** Cursor and selection geometry
   - Batched geometry nodes behind and above the text; cursor blink timer.
-- [~] **RENDER-06** Theme object
+- [x] **RENDER-06** Theme object — done 2026-10-02 (beb5f5e)
   - Colors for text, background, selection, cursor, current line; token-style table used by highlighting; exposed to QML for light/dark switching.
-- [ ] **RENDER-07** Font metrics with a monospace fast path
+- [~] **RENDER-07** Font metrics with a monospace fast path
   - Cell-grid math for ASCII/monospace runs; falls back to `QTextLayout` measurement for wide chars, emoji, ligatures and mixed fonts ([ADR 0001](docs/adr/0001-scene-graph-rendering.md)).
 - [ ] **RENDER-08** Tabs and whitespace
   - Tab stops, optional visible whitespace, configurable tab width.

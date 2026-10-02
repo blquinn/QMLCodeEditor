@@ -3,7 +3,7 @@ qt_add_library(QMLCodeEditor STATIC)
 qt_add_qml_module(QMLCodeEditor
     URI me.blq.qmlcodeeditor
     VERSION 1.0
-    SOURCES codeeditor.cpp codeeditor.h theme.cpp theme.h
+    SOURCES codeeditor.cpp codeeditor.h theme.cpp theme.h textmetrics.cpp textmetrics.h
 )
 
 target_compile_definitions(QMLCodeEditor

@@ -1,6 +1,7 @@
 #include "codeeditor.h"
 
-#include <QtGui/QFontDatabase>
+#include "quick/textmetrics.h"
+
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGRectangleNode>
 
@@ -18,7 +19,7 @@ public:
 CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setFlag(ItemHasContents);
   setFlag(ItemIsFocusScope);
-  m_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+  m_font = qce::TextMetrics::defaultMonospaceFont();
   m_ownedTheme = m_theme = qce::Theme::createDark(this);
   connect(m_theme, &qce::Theme::changed, this, &CodeEditor::onThemeChanged);
 
