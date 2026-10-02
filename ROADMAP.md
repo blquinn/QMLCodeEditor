@@ -172,7 +172,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - O(log n) buffer line ↔ display row; buffer position ↔ (row, x).
 - [x] **WRAP-03** Incremental re-wrap on edit — done 2026-10-02 (2d6db3e)
   - Only affected lines are re-wrapped; row count deltas propagate through the summary tree.
-- [~] **WRAP-04** Re-wrap on resize
+- [x] **WRAP-04** Re-wrap on resize — done 2026-10-02 (b3ccdd5)
   - Viewport lines first, remainder in the background; scroll position anchored to the top visible buffer position so content doesn't jump.
 - [ ] **WRAP-05** Wrap modes
   - Off, at viewport width, at a fixed column; word-boundary vs. character wrapping.
