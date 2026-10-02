@@ -11,6 +11,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0005](0005-commands-and-selections.md) | Commands over an always-present selection set | Accepted |
 | [0006](0006-anchored-decorations.md) | Anchored ranges for decorations; QML for popups | Accepted |
 | [0007](0007-text-core-conventions.md) | Text core conventions: line breaks, offsets and code points | Accepted |
+| [0008](0008-edit-boundaries-and-rope-balance.md) | Edit boundaries and rope balance in practice | Accepted |
 
 ## Adding one
 

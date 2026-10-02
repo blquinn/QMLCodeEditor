@@ -2,6 +2,8 @@
 qt_add_library(qce_core STATIC
     qcecore.h qcecore.cpp
     rope.h rope.cpp
+    textposition.h textsnapshot.h textchange.h
+    textdocument.h textdocument.cpp
 )
 add_library(QMLCodeEditor::Core ALIAS qce_core)
 
