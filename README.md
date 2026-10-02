@@ -20,6 +20,9 @@ ctest --preset debug
 
 Other presets: `release`, `asan-ubsan`, `tsan`. Tests run with `QT_QPA_PLATFORM=offscreen`.
 
+The sanitizer presets are compiler-agnostic. If your GCC lacks the sanitizer runtimes (Fedora needs `libasan`,
+`libubsan`, `libtsan`), configure them with clang: `CXX=clang++ cmake --preset asan-ubsan`.
+
 ## Using the module
 
 ```qml

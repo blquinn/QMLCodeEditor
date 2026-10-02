@@ -12,5 +12,7 @@ set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick)
 qt_standard_project_setup(REQUIRES 6.8)
 
+enable_testing()
+
 add_subdirectory(src/core)
 add_subdirectory(src/quick)
