@@ -10,6 +10,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0004](0004-display-map.md) | Layered display map (fold → wrap → rows) | Accepted |
 | [0005](0005-commands-and-selections.md) | Commands over an always-present selection set | Accepted |
 | [0006](0006-anchored-decorations.md) | Anchored ranges for decorations; QML for popups | Accepted |
+| [0007](0007-text-core-conventions.md) | Text core conventions: line breaks, offsets and code points | Accepted |
 
 ## Adding one
 
