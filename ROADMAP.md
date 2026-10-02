@@ -190,21 +190,21 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria:** line numbers, a change-marker column and a custom QML-provided column render correctly with wrap on and off; gutter width tracks digit count without jitter during scroll.
 
-- [ ] **GUTTER-01** Gutter framework
+- [x] **GUTTER-01** Gutter framework — done 2026-10-02 (c752ae6)
   - Ordered columns supplied by providers (built-in or QML); each column reports its width and paints per visible row.
-- [ ] **GUTTER-02** Line numbers
+- [x] **GUTTER-02** Line numbers — done 2026-10-02 (c752ae6)
   - Absolute, relative or hybrid; continuation rows of wrapped lines show no number; current line highlighted.
-- [ ] **GUTTER-03** Auto-sizing width
+- [x] **GUTTER-03** Auto-sizing width — done 2026-10-02 (c752ae6)
   - Based on digit count of the last line, stable while scrolling.
-- [ ] **GUTTER-04** Marker column API
+- [x] **GUTTER-04** Marker column API — done 2026-10-02 (c752ae6)
   - Hosts attach icons/colors per line (git change bars, breakpoints, diagnostics); batched into the scene graph.
-- [ ] **GUTTER-05** Gutter interaction
+- [x] **GUTTER-05** Gutter interaction — done 2026-10-02 (c752ae6)
   - Click/drag selects lines; click signal for hosts (e.g. toggling breakpoints).
-- [ ] **GUTTER-06** QML delegate column
+- [x] **GUTTER-06** QML delegate column — done 2026-10-02 (c752ae6)
   - `DelegateColumn` instantiates a host-supplied delegate per visible row, pooled and reused as rows scroll; delegates never exist for rows outside the frame plan.
-- [ ] **GUTTER-07** Change-marker column
+- [x] **GUTTER-07** Change-marker column — done 2026-10-02 (c752ae6)
   - `ChangeColumn` marks lines edited since load/save with anchored ranges; cleared on text reset and save.
-- [ ] **GUTTER-08** Gutter benchmark and ADR
+- [x] **GUTTER-08** Gutter benchmark and ADR — done 2026-10-02 (a8e2e6e)
   - Scroll with the gutter on, wrap on and off, and relative numbers while the cursor moves; ADR 0012 records the design.
 
 ## M6 — Multi-cursor
