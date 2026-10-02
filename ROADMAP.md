@@ -110,7 +110,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
 
 **Exit criteria:** a 100 MB file scrolls at a steady 120 fps in the demo app with only visible lines laid out; frame-time benchmark committed; memory use is independent of file size beyond the rope itself.
 
-- [ ] **RENDER-01** `CodeEditor` as a `QQuickItem` using `updatePaintNode`
+- [~] **RENDER-01** `CodeEditor` as a `QQuickItem` using `updatePaintNode`
   - Replace the `QQuickPaintedItem` scaffold; `ItemHasContents` set; all scene-graph mutation on the render thread in `updatePaintNode`.
 - [ ] **RENDER-02** Scroll model
   - Owned `contentX/contentY/contentWidth/contentHeight` properties so a QML `ScrollBar` can bind to them; kinetic scrolling friendly; scrolling changes a transform only, with no relayout.
