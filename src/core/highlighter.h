@@ -9,7 +9,7 @@
 namespace qce {
 
 // What kind of token a span is. Colors live in the theme, not here, so highlighters (tree-sitter in
-// M7) stay free of presentation. Theme token-style names are these in lower case.
+// M6) stay free of presentation. Theme token-style names are these in lower case.
 enum class TokenStyle : quint8 {
   Default,
   Keyword,

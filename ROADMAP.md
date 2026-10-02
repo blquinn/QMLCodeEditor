@@ -39,15 +39,15 @@ These are the bar every milestone is measured against; benchmarks (INFRA-08, PER
 | M3 | Editing & input | INPUT |
 | M4 | Display map & soft wrap | WRAP |
 | M5 | Gutters & line numbers | GUTTER |
-| M6 | Multi-cursor | MULTI |
-| M7 | Syntax highlighting | SYNTAX |
-| M8 | Code folding | FOLD |
+| M6 | Syntax highlighting | SYNTAX |
+| M7 | Code folding | FOLD |
+| M8 | Multi-cursor | MULTI |
 | M9 | Diagnostics & decorations | DIAG |
 | M10 | Vim mode | VIM |
 | M11 | LSP-ready API & polish | API |
 | M12 | Performance hardening | PERF |
 
-Order is deliberate: wrap (M4) comes before folding (M8), and the display-map layering ([ADR 0004](docs/adr/0004-display-map.md)) means folding slots in later without reworking anything. Gutters (M5) need the display map to know which rows are continuations.
+Order is deliberate: wrap (M4) comes before folding (M7), and the display-map layering ([ADR 0004](docs/adr/0004-display-map.md)) means folding slots in later without reworking anything. Gutters (M5) need the display map to know which rows are continuations.
 
 ---
 
@@ -127,7 +127,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
 - [x] **RENDER-08** Tabs and whitespace — done 2026-10-02 (fee0f0d)
   - Tab stops, optional visible whitespace, configurable tab width.
 - [x] **RENDER-09** `Highlighter` interface with a no-op implementation — done 2026-10-02 (afcbc5a)
-  - Produces per-line format ranges for a requested line range; the tree-sitter implementation in M7 plugs in here.
+  - Produces per-line format ranges for a requested line range; the tree-sitter implementation in M6 plugs in here.
 - [x] **RENDER-10** Demo app opens files — done 2026-10-02 (1c469e0)
   - File dialog / command-line path / drag-and-drop in `demo/`.
 - [x] **RENDER-11** Scroll and frame-time benchmarks — done 2026-10-02 (63f0522)
@@ -231,6 +231,10 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - Keep previous highlights (shifted through anchors) until the new tree lands, to avoid flicker.
 - [ ] **SYNTAX-10** Highlighting benchmarks
   - Initial parse time, edit-to-highlight latency, memory per MB of source.
+- [ ] **SYNTAX-11** Viewport window parse for large files
+  - A worker parses a window around the viewport first; the full parse runs only below a size cap (default 32 MB). Above it, scrolling re-parses the window.
+- [ ] **SYNTAX-12** `SyntaxHighlighter` QML element and demo language menu
+  - Auto-detects by file name; `language` override; `CodeEditor.highlighter` settable from QML.
 
 ## M7 — Code folding
 
