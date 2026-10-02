@@ -16,7 +16,7 @@ private slots:
     QTest::newRow("hpp") << u"x.hpp"_s << u"cpp"_s;
     QTest::newRow("json") << u"data.json"_s << u"json"_s;
     QTest::newRow("qml") << u"Main.qml"_s << u"qml"_s;
-    QTest::newRow("js") << u"app.js"_s << u"qml"_s;
+    QTest::newRow("js") << u"app.js"_s << u"javascript"_s;
     QTest::newRow("py") << u"tool.py"_s << u"python"_s;
     QTest::newRow("md") << u"notes.md"_s << u"markdown"_s;
     QTest::newRow("readme") << u"README"_s << u"markdown"_s;
@@ -33,7 +33,7 @@ private slots:
     const auto &r = LanguageRegistry::instance();
     QCOMPARE(r.detect(u"script"_s, u"#!/usr/bin/env python3"_s)->id, u"python"_s);
     QCOMPARE(r.detect(u""_s, u"#!/usr/bin/python3.11"_s)->id, u"python"_s);
-    QCOMPARE(r.detect(u""_s, u"#!/usr/bin/env -S node --flag"_s)->id, u"qml"_s);
+    QCOMPARE(r.detect(u""_s, u"#!/usr/bin/env -S node --flag"_s)->id, u"javascript"_s);
     QVERIFY(!r.detect(u"script"_s, u"#!/bin/sh"_s));
     QVERIFY(!r.detect(u"script"_s, u"no shebang"_s));
   }
@@ -41,7 +41,7 @@ private slots:
   void findsAliases() {
     const auto &r = LanguageRegistry::instance();
     QCOMPARE(r.find(u"C++"_s)->id, u"cpp"_s);
-    QCOMPARE(r.find(u"js"_s)->id, u"qml"_s);
+    QCOMPARE(r.find(u"js"_s)->id, u"javascript"_s);
     QCOMPARE(r.find(u"Python"_s)->id, u"python"_s);
     QVERIFY(!r.find(u"cobol"_s));
   }

@@ -123,6 +123,7 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
 }
 
 CodeEditor::~CodeEditor() {
+  m_highlighter->detach(); // it may outlive the document that is about to go
   // Columns may outlive the editor (QML owns them); they must let go of the document and items first.
   const QList<qce::GutterColumn *> columns = m_columns;
   m_columns.clear();
@@ -396,8 +397,13 @@ void CodeEditor::setHighlighter(qce::Highlighter *highlighter) {
   if (highlighter == m_highlighter)
     return;
   disconnect(m_highlighter, &qce::Highlighter::invalidated, this, &CodeEditor::onHighlightInvalidated);
+  disconnect(m_highlighter, &QObject::destroyed, this, nullptr);
+  m_highlighter->detach();
   m_highlighter = highlighter;
   connect(m_highlighter, &qce::Highlighter::invalidated, this, &CodeEditor::onHighlightInvalidated);
+  if (m_highlighter != m_nullHighlighter)
+    connect(m_highlighter, &QObject::destroyed, this, [this] { setHighlighter(nullptr); });
+  m_highlighter->attach(&m_document);
   onHighlightInvalidated(qce::Highlighter::AllLines, qce::Highlighter::AllLines);
 }
 

@@ -96,7 +96,15 @@ Theme *Theme::createDark(QObject *parent) {
     {"constant", style("#4fc1ff")},
     {"operator", style("#d4d4d4")},
     {"punctuation", style("#d4d4d4")},
-    {"preprocessor", style("#c586c0")}
+    {"preprocessor", style("#c586c0")},
+    {"property", style("#9cdcfe")},
+    {"attribute", style("#d7ba7d")},
+    {"tag", style("#569cd6")},
+    {"heading", style("#569cd6", true)},
+    {"emphasis", style("#d4d4d4", false, true)},
+    {"strong", style("#d4d4d4", true)},
+    {"link", style("#3794ff")},
+    {"code", style("#ce9178")}
   };
   t->rebuildFormats();
   return t;
@@ -126,7 +134,15 @@ Theme *Theme::createLight(QObject *parent) {
     {"constant", style("#0070c1")},
     {"operator", style("#1f1f1f")},
     {"punctuation", style("#1f1f1f")},
-    {"preprocessor", style("#af00db")}
+    {"preprocessor", style("#af00db")},
+    {"property", style("#001080")},
+    {"attribute", style("#e50000")},
+    {"tag", style("#800000")},
+    {"heading", style("#800000", true)},
+    {"emphasis", style("#1f1f1f", false, true)},
+    {"strong", style("#1f1f1f", true)},
+    {"link", style("#0066cc")},
+    {"code", style("#a31515")}
   };
   t->rebuildFormats();
   return t;

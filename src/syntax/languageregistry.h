@@ -1,6 +1,8 @@
 #ifndef QCE_LANGUAGEREGISTRY_H
 #define QCE_LANGUAGEREGISTRY_H
 
+#include "syntax/queryinfo.h"
+
 #include <QtCore/QList>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
@@ -33,6 +35,8 @@ struct CompiledLanguage {
   const TSLanguage *language = nullptr;
   TSQuery *highlights = nullptr; // null when there are no (compilable) queries
   TSQuery *injections = nullptr;
+  QueryInfo highlightInfo;  // capture styles and predicates, valid when `highlights` is
+  QueryInfo injectionInfo;
   QStringList warnings; // patterns that had to be dropped, with the reason
 
   CompiledLanguage() = default;

@@ -1,6 +1,10 @@
 # tree-sitter integration and language registry (M6). Depends on core only (ADR 0003).
 qt_add_library(qce_syntax STATIC
     languageregistry.h languageregistry.cpp
+    queryinfo.h queryinfo.cpp
+    ropeinput.h ropeinput.cpp
+    parsejob.h parsejob.cpp
+    treesitterhighlighter.h treesitterhighlighter.cpp
 )
 add_library(QMLCodeEditor::Syntax ALIAS qce_syntax)
 target_include_directories(qce_syntax PUBLIC ${PROJECT_SOURCE_DIR}/src)

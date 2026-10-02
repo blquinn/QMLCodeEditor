@@ -152,12 +152,23 @@ LanguageRegistry::LanguageRegistry() {
        &tree_sitter_json,
        {u"json/highlights.scm"_s},
        {}});
-  add({u"qml"_s,
-       u"QML / JavaScript"_s,
-       {u"qml"_s, u"js"_s, u"mjs"_s, u"cjs"_s, u"ts"_s},
+  add({u"javascript"_s,
+       u"JavaScript"_s,
+       {u"js"_s, u"mjs"_s, u"cjs"_s, u"jsx"_s},
        {},
-       {u"node"_s, u"nodejs"_s, u"qml"_s, u"qmlscene"_s},
-       {u"javascript"_s, u"js"_s, u"typescript"_s, u"ts"_s},
+       {u"node"_s, u"nodejs"_s, u"deno"_s},
+       {u"js"_s, u"node"_s},
+       &tree_sitter_javascript,
+       {u"javascript/highlights.scm"_s},
+       {}});
+  // The QML grammar parses JavaScript natively inside bindings and functions, so no injection is
+  // needed for it; its queries build on the JavaScript and TypeScript ones.
+  add({u"qml"_s,
+       u"QML"_s,
+       {u"qml"_s},
+       {},
+       {u"qml"_s, u"qmlscene"_s},
+       {u"qml"_s},
        &tree_sitter_qmljs,
        {u"javascript/highlights.scm"_s, u"typescript/highlights.scm"_s, u"qml/highlights.scm"_s},
        {}});
@@ -269,6 +280,10 @@ std::shared_ptr<const CompiledLanguage> LanguageRegistry::compiled(const QString
   };
   result->highlights = build(info->highlightQueries);
   result->injections = build(info->injectionQueries);
+  if (result->highlights)
+    result->highlightInfo = QueryInfo::analyze(result->highlights);
+  if (result->injections)
+    result->injectionInfo = QueryInfo::analyze(result->injections);
   cache.emplace(info->id, result);
   return result;
 }

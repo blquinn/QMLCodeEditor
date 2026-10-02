@@ -28,6 +28,22 @@ QLatin1StringView tokenStyleName(TokenStyle style) {
     return "punctuation"_L1;
   case TokenStyle::Preprocessor:
     return "preprocessor"_L1;
+  case TokenStyle::Property:
+    return "property"_L1;
+  case TokenStyle::Attribute:
+    return "attribute"_L1;
+  case TokenStyle::Tag:
+    return "tag"_L1;
+  case TokenStyle::Heading:
+    return "heading"_L1;
+  case TokenStyle::Emphasis:
+    return "emphasis"_L1;
+  case TokenStyle::Strong:
+    return "strong"_L1;
+  case TokenStyle::Link:
+    return "link"_L1;
+  case TokenStyle::Code:
+    return "code"_L1;
   case TokenStyle::Default:
   case TokenStyle::Count:
     break;
