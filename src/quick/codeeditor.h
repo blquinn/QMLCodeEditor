@@ -26,6 +26,10 @@ class CodeEditor : public QQuickItem {
   Q_PROPERTY(qsizetype lineCount READ lineCount NOTIFY lineCountChanged FINAL)
   Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged FINAL)
   Q_PROPERTY(qreal loadProgress READ loadProgress NOTIFY loadProgressChanged FINAL)
+  Q_PROPERTY(qreal contentX READ contentX WRITE setContentX NOTIFY contentXChanged FINAL)
+  Q_PROPERTY(qreal contentY READ contentY WRITE setContentY NOTIFY contentYChanged FINAL)
+  Q_PROPERTY(qreal contentWidth READ contentWidth NOTIFY contentWidthChanged FINAL)
+  Q_PROPERTY(qreal contentHeight READ contentHeight NOTIFY contentHeightChanged FINAL)
   Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
   Q_PROPERTY(qce::Theme *theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
 public:
@@ -54,9 +58,23 @@ public:
   const qce::DisplayMap &displayMap() const { return m_map; }
   const qce::TextMetrics &metrics() const { return m_metrics; }
 
-  // Vertical scroll offset in pixels; the scroll model proper arrives with RENDER-02.
+  // Scroll model (RENDER-02). contentX/contentY are the pixel offset of the viewport's top-left
+  // corner inside the content and are clamped to [0, contentSize - viewportSize], so a QML
+  // ScrollBar can bind to them like it would to a Flickable. Scrolling only moves a scene-graph
+  // transform; text is laid out again only when new rows enter the layout window.
+  qreal contentX() const { return m_contentX; }
   qreal contentY() const { return m_contentY; }
+  void setContentX(qreal x);
   void setContentY(qreal y);
+  // Height is exact: rows * line height. Width is the widest line laid out so far (a document
+  // is never measured whole), so it grows as the user scrolls through long lines.
+  qreal contentWidth() const { return m_contentWidth; }
+  qreal contentHeight() const { return m_contentHeight; }
+
+  // Item coordinates -> buffer offset (like TextEdit.positionAt), and back: the rectangle of the
+  // character cell at `offset` in item coordinates. Both go through the display map.
+  Q_INVOKABLE qsizetype positionAt(qreal x, qreal y);
+  Q_INVOKABLE QRectF rectForPosition(qsizetype offset);
 
   // Counters for tests and benchmarks.
   struct RenderStats {
@@ -79,11 +97,16 @@ signals:
   void loadingChanged();
   void loadProgressChanged();
   void fontChanged();
+  void contentXChanged();
+  void contentYChanged();
+  void contentWidthChanged();
+  void contentHeightChanged();
   void themeChanged();
   void loadFailed(const QString &error);
 
 protected:
   void updatePolish() override;
+  void wheelEvent(QWheelEvent *event) override;
   QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
   void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
@@ -102,7 +125,17 @@ private:
   qce::LineLayoutCache m_layouts;
   QList<qce::FramePlanRow> m_plan;
   qce::SceneStats m_sceneStats; // copied from the scene on the render thread during sync
+  void updateContentSize();
+  void invalidatePlan();
+
+  qreal m_contentX = 0;
   qreal m_contentY = 0;
+  qreal m_contentWidth = 0;
+  qreal m_contentHeight = 0;
+  qreal m_maxLineWidth = 0;
+  bool m_planDirty = true;
+  qsizetype m_planFirst = -1;
+  qsizetype m_planLast = -1;
   QFont m_font;
   void onThemeChanged();
   void onHighlightInvalidated(qsizetype firstLine, qsizetype lastLine);

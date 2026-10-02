@@ -41,6 +41,7 @@ void CodeEditor::setFont(const QFont &font) {
   m_font = font;
   m_metrics.setFont(font);
   invalidateLayouts();
+  updateContentSize();
   emit fontChanged();
 }
 
@@ -73,20 +74,95 @@ void CodeEditor::onHighlightInvalidated(qsizetype firstLine, qsizetype lastLine)
     return;
   }
   m_layouts.invalidate(firstLine, lastLine - firstLine + 1, lastLine - firstLine + 1);
+  invalidatePlan();
+}
+
+void CodeEditor::invalidatePlan() {
+  m_planDirty = true;
   polish();
 }
 
 void CodeEditor::invalidateLayouts() {
   m_layouts.clear();
-  polish();
+  m_maxLineWidth = 0;
+  invalidatePlan();
+}
+
+void CodeEditor::setContentX(qreal x) {
+  x = qBound<qreal>(0, x, qMax<qreal>(0, m_contentWidth - width()));
+  if (x == m_contentX)
+    return;
+  m_contentX = x;
+  emit contentXChanged();
+  update();
 }
 
 void CodeEditor::setContentY(qreal y) {
-  y = qMax<qreal>(0, y);
+  y = qBound<qreal>(0, y, qMax<qreal>(0, m_contentHeight - height()));
   if (y == m_contentY)
     return;
   m_contentY = y;
-  polish();
+  emit contentYChanged();
+  polish(); // cheap when the layout window still covers the viewport
+}
+
+void CodeEditor::updateContentSize() {
+  const qreal height = qreal(m_map.rowCount()) * m_metrics.lineHeight();
+  if (height != m_contentHeight) {
+    m_contentHeight = height;
+    emit contentHeightChanged();
+  }
+  // One cell of slack so a cursor at the end of the widest line is reachable.
+  const qreal width = m_maxLineWidth > 0 ? m_maxLineWidth + m_metrics.cellAdvance() : 0;
+  if (width != m_contentWidth) {
+    m_contentWidth = width;
+    emit contentWidthChanged();
+  }
+  setContentX(m_contentX);
+  setContentY(m_contentY);
+}
+
+void CodeEditor::wheelEvent(QWheelEvent *event) {
+  QPointF delta = event->pixelDelta().isNull()
+                    ? QPointF(event->angleDelta()) * (m_metrics.lineHeight() * 3 / 120.0)
+                    : QPointF(event->pixelDelta());
+  if (event->modifiers() & Qt::ShiftModifier && delta.x() == 0)
+    delta = QPointF(delta.y(), 0);
+  const qreal beforeX = m_contentX, beforeY = m_contentY;
+  setContentX(m_contentX - delta.x());
+  setContentY(m_contentY - delta.y());
+  event->setAccepted(m_contentX != beforeX || m_contentY != beforeY);
+}
+
+qsizetype CodeEditor::positionAt(qreal x, qreal y) {
+  const qsizetype row = qBound<qsizetype>(
+    0, qsizetype(std::floor((y + m_contentY) / m_metrics.lineHeight())), m_map.rowCount() - 1
+  );
+  const qce::DisplayRow displayRow = m_map.rowAt(row);
+  const qce::TextSnapshot snapshot = m_document.snapshot();
+  const qce::Rope &rope = snapshot.rope();
+  const auto layout = layoutForLine(displayRow.line, snapshot);
+  const QString &text = layout->layout->text();
+  const qreal contentX = x + m_contentX;
+  const qsizetype column =
+    m_metrics.isSimple(text)
+      ? m_metrics.columnForX(text, contentX)
+      : layout->layout->lineAt(0).xToCursor(contentX, QTextLine::CursorBetweenCharacters);
+  return rope.snapToCodePoint(rope.offsetAt({displayRow.line, column}));
+}
+
+QRectF CodeEditor::rectForPosition(qsizetype offset) {
+  const qce::TextSnapshot snapshot = m_document.snapshot();
+  const qce::TextPosition position = snapshot.rope().positionAt(offset);
+  const qsizetype row = m_map.rowForPosition(position);
+  const auto layout = layoutForLine(position.line, snapshot);
+  const QString &text = layout->layout->text();
+  const qreal cursorX = m_metrics.isSimple(text) ? m_metrics.xForColumn(text, position.column)
+                                                 : layout->layout->lineAt(0).cursorToX(int(position.column));
+  return QRectF(
+    cursorX - m_contentX, qreal(row) * m_metrics.lineHeight() - m_contentY, m_metrics.cellAdvance(),
+    m_metrics.lineHeight()
+  );
 }
 
 CodeEditor::RenderStats CodeEditor::renderStats() const {
@@ -108,8 +184,10 @@ void CodeEditor::load(const QUrl &file) {
 void CodeEditor::onDocumentReset() {
   m_lastLineCount = lineCount();
   m_layouts.clear();
+  m_maxLineWidth = 0;
   emit lineCountChanged();
-  polish();
+  updateContentSize();
+  invalidatePlan();
 }
 
 void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
@@ -119,7 +197,8 @@ void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
     m_lastLineCount = count;
     emit lineCountChanged();
   }
-  polish();
+  updateContentSize();
+  invalidatePlan();
 }
 
 std::shared_ptr<qce::LineLayout>
@@ -150,7 +229,6 @@ CodeEditor::layoutForLine(qsizetype line, const qce::TextSnapshot &snapshot) {
 // Lays out the viewport plus a margin of rows on each side. Nothing outside that window is touched,
 // however large the document is.
 void CodeEditor::updatePolish() {
-  m_plan.clear();
   const qsizetype rowCount = m_map.rowCount();
   const qreal lineHeight = m_metrics.lineHeight();
   const qsizetype visibleRows = qsizetype(std::ceil(height() / lineHeight)) + 1;
@@ -159,18 +237,36 @@ void CodeEditor::updatePolish() {
   const qsizetype firstRow = qBound<qsizetype>(0, top - margin, rowCount - 1);
   const qsizetype lastRow = qBound<qsizetype>(0, top + visibleRows + margin, rowCount - 1);
 
+  // Plain scrolling inside the layout window changes nothing but the scroll transform.
+  if (!m_planDirty && firstRow == m_planFirst && lastRow == m_planLast) {
+    update();
+    return;
+  }
+
+  m_plan.clear();
   m_layouts.setCapacity(qMax<qsizetype>(256, 3 * (lastRow - firstRow + 1)));
   const qce::TextSnapshot snapshot = m_document.snapshot();
   m_plan.reserve(lastRow - firstRow + 1);
-  for (qsizetype row = firstRow; row <= lastRow; ++row)
-    m_plan.append({row, layoutForLine(m_map.rowAt(row).line, snapshot)});
+  qreal widest = m_maxLineWidth;
+  for (qsizetype row = firstRow; row <= lastRow; ++row) {
+    auto layout = layoutForLine(m_map.rowAt(row).line, snapshot);
+    widest = qMax(widest, layout->width);
+    m_plan.append({row, std::move(layout)});
+  }
+  m_planFirst = firstRow;
+  m_planLast = lastRow;
+  m_planDirty = false;
+  m_maxLineWidth = widest;
+  updateContentSize();
   update();
 }
 
 void CodeEditor::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) {
   QQuickItem::geometryChange(newGeometry, oldGeometry);
-  if (newGeometry.size() != oldGeometry.size())
-    polish();
+  if (newGeometry.size() != oldGeometry.size()) {
+    updateContentSize();
+    invalidatePlan();
+  }
 }
 
 QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
@@ -183,6 +279,7 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.background = m_theme->background();
   params.foreground = m_theme->foreground();
   params.lineHeight = m_metrics.lineHeight();
+  params.contentX = m_contentX;
   params.contentY = m_contentY;
   params.rows = &m_plan;
   scene->sync(params);

@@ -173,6 +173,20 @@ private slots:
     QCOMPARE(editor->renderStats().layoutsCreated, after.layoutsCreated);
     QCOMPARE(editor->renderStats().scene.nodesCreated, after.scene.nodesCreated);
 
+    // Pixel-sized scrolling inside the window touches no node at all except the scroll matrix.
+    editor->setContentY(1003 * lh);
+    view.grabWindow();
+    const auto beforePixels = editor->renderStats();
+    for (int px = 1; px <= 5; ++px) {
+      editor->setContentY(1003 * lh + px);
+      view.grabWindow();
+    }
+    const auto afterPixels = editor->renderStats();
+    QCOMPARE(afterPixels.layoutsCreated, beforePixels.layoutsCreated);
+    QCOMPARE(afterPixels.scene.linesFilled, beforePixels.scene.linesFilled);
+    QCOMPARE(afterPixels.scene.matrixUpdates, beforePixels.scene.matrixUpdates);
+    QCOMPARE(afterPixels.scene.nodesRecycled, beforePixels.scene.nodesRecycled);
+
     // A long scroll in small steps reuses the same nodes over and over.
     const quint64 createdBefore = editor->renderStats().scene.nodesCreated;
     for (int step = 1004; step < 1400; ++step) {
@@ -187,6 +201,98 @@ private slots:
     QVERIFY(after.layoutsCached <= 256);
     // Ink is still visible after all the recycling.
     QVERIFY(view.grabWindow().pixelColor(0, 0) != QColor());
+  }
+
+  void scrollModelClampsAndReportsSize() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    const qreal lh = editor->metrics().lineHeight();
+    QString text;
+    for (int i = 0; i < 1000; ++i)
+      text += QStringLiteral(
+        "0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789\n"
+      );
+    editor->setText(text);
+    QCOMPARE(editor->contentHeight(), 1001 * lh);
+    QSignalSpy heightSpy(editor, &CodeEditor::contentHeightChanged);
+    QSignalSpy ySpy(editor, &CodeEditor::contentYChanged);
+
+    editor->setContentY(-50);
+    QCOMPARE(editor->contentY(), 0.0);
+    editor->setContentY(1e9);
+    QCOMPARE(editor->contentY(), editor->contentHeight() - editor->height());
+    QCOMPARE(ySpy.count(), 1);
+    editor->setContentY(0);
+
+    // Width is learned from the lines that were laid out.
+    QTRY_VERIFY(editor->contentWidth() > editor->width());
+    editor->setContentX(1e9);
+    QCOMPARE(editor->contentX(), editor->contentWidth() - editor->width());
+    editor->setContentX(0);
+
+    // Shrinking the document re-clamps the scroll offset.
+    editor->setContentY(900 * lh);
+    editor->setText(QStringLiteral("a\nb"));
+    QCOMPARE(editor->contentY(), 0.0);
+    QCOMPARE(editor->contentHeight(), 2 * lh);
+    QVERIFY(heightSpy.count() >= 1);
+  }
+
+  void wheelScrolls() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    QString text;
+    for (int i = 0; i < 1000; ++i)
+      text += QStringLiteral("line\n");
+    editor->setText(text);
+    const qreal lh = editor->metrics().lineHeight();
+    QWheelEvent down(
+      QPointF(10, 10), QPointF(10, 10), QPoint(0, 0), QPoint(0, -120), Qt::NoButton, Qt::NoModifier,
+      Qt::NoScrollPhase, false
+    );
+    QGuiApplication::sendEvent(&view, &down);
+    QCOMPARE(editor->contentY(), 3 * lh);
+    QWheelEvent pixels(
+      QPointF(10, 10), QPointF(10, 10), QPoint(0, -7), QPoint(0, -120), Qt::NoButton, Qt::NoModifier,
+      Qt::NoScrollPhase, false
+    );
+    QGuiApplication::sendEvent(&view, &pixels);
+    QCOMPARE(editor->contentY(), 3 * lh + 7); // pixel delta wins over angle delta
+  }
+
+  void positionAndRectRoundTrip() {
+    QQuickView view;
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setText(QStringLiteral("alpha\n\tbeta\ngamma \u4e2d\u6587 end\n"));
+    const qreal lh = editor->metrics().lineHeight();
+    const auto *rope = &editor->document()->rope();
+    for (qsizetype offset :
+         {qsizetype(0), qsizetype(3), rope->lineStart(1) + 1, rope->lineStart(1) + 3, rope->lineStart(2) + 4,
+          rope->lineStart(2) + 8, rope->lineEnd(2)}) {
+      const QRectF rect = editor->rectForPosition(offset);
+      QVERIFY2(rect.height() == lh, "cell height");
+      // The middle of the cell's left edge maps back to the offset.
+      QCOMPARE(editor->positionAt(rect.left() + 0.01, rect.center().y()), offset);
+    }
+    // Below the last line and left of the text clamp to document edges.
+    QCOMPARE(editor->positionAt(-20, 100000), rope->length());
+    QCOMPARE(editor->positionAt(-20, 0), 0);
+    // Scrolling moves rectangles but not offsets.
+    const QRectF before = editor->rectForPosition(rope->lineStart(1));
+    editor->setText(QString(200, QLatin1Char('x')).repeated(1).append(u'\n').repeated(100));
+    editor->setContentY(lh * 3);
+    const QRectF row3 = editor->rectForPosition(editor->document()->rope().lineStart(3));
+    QCOMPARE(row3.top(), 0.0);
+    QVERIFY(before.top() > 0);
   }
 
   void setTextUpdatesLineCount() {
