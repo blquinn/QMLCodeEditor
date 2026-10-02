@@ -10,6 +10,7 @@
 #include <QtCore/QCache>
 #include <QtCore/QList>
 #include <QtCore/QString>
+#include <QtQml/qqmlregistration.h>
 
 #include <atomic>
 #include <memory>
@@ -30,6 +31,7 @@ struct HighlightMailbox;
 // and painted over the host (SYNTAX-08).
 class TreeSitterHighlighter : public Highlighter {
   Q_OBJECT
+  QML_NAMED_ELEMENT(SyntaxHighlighter)
   // Language id or alias; empty detects from `fileName` and the first line (shebang). An unknown
   // id (or "plain") means no highlighting.
   Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
@@ -62,7 +64,9 @@ public:
   QString fileName() const { return m_fileName; }
   void setFileName(const QString &fileName);
   QString detectedLanguage() const { return m_lang ? m_lang->info->id : QString(); }
-  static QStringList availableLanguages();
+  // Ids of the languages that can be chosen with `language` (also callable from QML).
+  Q_INVOKABLE static QStringList availableLanguages();
+  Q_INVOKABLE static QString languageName(const QString &id);
 
   qsizetype fullParseLimit() const { return m_fullLimit; }
   void setFullParseLimit(qsizetype units);

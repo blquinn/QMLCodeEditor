@@ -31,7 +31,9 @@ if(QCE_SYNTAX)
     add_subdirectory(src/syntax)
 endif()
 add_subdirectory(tests)
-add_subdirectory(demo)
+if(QCE_SYNTAX) # the demo highlights with tree-sitter
+    add_subdirectory(demo)
+endif()
 
 option(QCE_BUILD_BENCHMARKS "Build the benchmark suite" ON)
 if(QCE_BUILD_BENCHMARKS)

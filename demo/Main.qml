@@ -1,8 +1,10 @@
 import QtQuick
+import QtQml
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import me.blq.qmlcodeeditor
+import me.blq.qmlcodeeditor.syntax
 
 ApplicationWindow {
     id: window
@@ -225,6 +227,35 @@ ApplicationWindow {
             }
         }
         Menu {
+            id: languageMenu
+            title: qsTr("&Language")
+            MenuItem {
+                text: qsTr("Auto-detect")
+                checkable: true; autoExclusive: true
+                checked: highlighter.language === ""
+                onTriggered: highlighter.language = ""
+            }
+            MenuItem {
+                text: qsTr("Plain text")
+                checkable: true; autoExclusive: true
+                checked: highlighter.language === "plain"
+                onTriggered: highlighter.language = "plain"
+            }
+            MenuSeparator {}
+            Instantiator {
+                model: highlighter.availableLanguages()
+                delegate: MenuItem {
+                    required property string modelData
+                    text: highlighter.languageName(modelData)
+                    checkable: true; autoExclusive: true
+                    checked: highlighter.language === modelData
+                    onTriggered: highlighter.language = modelData
+                }
+                onObjectAdded: (index, object) => languageMenu.insertItem(index + 3, object)
+                onObjectRemoved: (index, object) => languageMenu.removeItem(object)
+            }
+        }
+        Menu {
             title: qsTr("&Gutter")
             MenuItem {
                 text: qsTr("Line numbers")
@@ -292,6 +323,10 @@ ApplicationWindow {
                     id: statusLabel
                 }
                 Item { Layout.fillWidth: true }
+                Label {
+                    text: highlighter.detectedLanguage !== "" ? highlighter.languageName(highlighter.detectedLanguage)
+                                                              : qsTr("Plain text")
+                }
                 Label { text: qsTr("%1 lines").arg(editor.lineCount.toLocaleString()) }
                 Label {
                     text: qsTr("Ln %1, Col %2").arg(editor.cursorLine + 1).arg(editor.cursorColumn + 1)
@@ -338,6 +373,13 @@ ApplicationWindow {
         id: editor
         objectName: "editor"
         undoLimit: 10000 // keep a long session's history bounded
+
+        // tree-sitter highlighting; the language follows the file name (or its shebang) unless chosen
+        // in the Language menu.
+        highlighter: SyntaxHighlighter {
+            id: highlighter
+            fileName: window.currentFile.toString()
+        }
 
         // The gutter, left to right: line numbers (a click selects the line), bars for lines edited since
         // loading, breakpoints (a click toggles one) and a column of bookmark stars drawn in QML.

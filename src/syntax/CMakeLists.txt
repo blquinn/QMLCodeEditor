@@ -1,14 +1,19 @@
 # tree-sitter integration and language registry (M6). Depends on core only (ADR 0003).
-qt_add_library(qce_syntax STATIC
-    languageregistry.h languageregistry.cpp
-    queryinfo.h queryinfo.cpp
-    ropeinput.h ropeinput.cpp
-    parsejob.h parsejob.cpp
-    treesitterhighlighter.h treesitterhighlighter.cpp
+# The QML module (SyntaxHighlighter) needs only Qt Qml, never Quick.
+qt_add_library(qce_syntax STATIC)
+qt_add_qml_module(qce_syntax
+    URI me.blq.qmlcodeeditor.syntax
+    VERSION 1.0
+    SOURCES
+        languageregistry.h languageregistry.cpp
+        queryinfo.h queryinfo.cpp
+        ropeinput.h ropeinput.cpp
+        parsejob.h parsejob.cpp
+        treesitterhighlighter.h treesitterhighlighter.cpp
 )
 add_library(QMLCodeEditor::Syntax ALIAS qce_syntax)
 target_include_directories(qce_syntax PUBLIC ${PROJECT_SOURCE_DIR}/src)
-target_link_libraries(qce_syntax PUBLIC QMLCodeEditor::Core qce_grammars PRIVATE qce_warnings)
+target_link_libraries(qce_syntax PUBLIC QMLCodeEditor::Core qce_grammars Qt6::Qml PRIVATE qce_warnings)
 
 # Query files become resources at :/qce/syntax/<language>/<kind>.scm. A file in src/syntax/queries/<language>/
 # replaces the upstream one of the same name (for queries that don't compile against the pinned grammar).

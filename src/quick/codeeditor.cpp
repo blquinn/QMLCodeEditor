@@ -405,6 +405,7 @@ void CodeEditor::setHighlighter(qce::Highlighter *highlighter) {
     connect(m_highlighter, &QObject::destroyed, this, [this] { setHighlighter(nullptr); });
   m_highlighter->attach(&m_document);
   onHighlightInvalidated(qce::Highlighter::AllLines, qce::Highlighter::AllLines);
+  emit highlighterChanged();
 }
 
 void CodeEditor::onHighlightInvalidated(qsizetype firstLine, qsizetype lastLine) {

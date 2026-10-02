@@ -200,6 +200,11 @@ QStringList TreeSitterHighlighter::availableLanguages() {
   return ids;
 }
 
+QString TreeSitterHighlighter::languageName(const QString &id) {
+  const LanguageInfo *info = LanguageRegistry::instance().find(id);
+  return info ? info->name : QString();
+}
+
 void TreeSitterHighlighter::setLanguage(const QString &language) {
   if (language == m_languageOverride)
     return;

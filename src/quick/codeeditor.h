@@ -29,6 +29,15 @@
 
 // The editor item (ADR 0001). The GUI thread owns the document and does all text layout; the scene
 // graph is only touched from updatePaintNode().
+namespace qce {
+// Lets QML assign any Highlighter (a SyntaxHighlighter, a host's own) to CodeEditor::highlighter.
+struct HighlighterForeign {
+  Q_GADGET
+  QML_FOREIGN(qce::Highlighter)
+  QML_ANONYMOUS
+};
+} // namespace qce
+
 class CodeEditor : public QQuickItem {
   Q_OBJECT
   QML_ELEMENT
@@ -75,6 +84,7 @@ public:
   )
   Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
   Q_PROPERTY(qce::Theme *theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
+  Q_PROPERTY(qce::Highlighter *highlighter READ highlighter WRITE setHighlighter NOTIFY highlighterChanged FINAL)
   Q_PROPERTY(WrapMode wrapMode READ wrapMode WRITE setWrapMode NOTIFY wrapModeChanged FINAL)
   Q_PROPERTY(int wrapColumn READ wrapColumn WRITE setWrapColumn NOTIFY wrapColumnChanged FINAL)
   Q_PROPERTY(bool wordWrap READ wordWrap WRITE setWordWrap NOTIFY wordWrapChanged FINAL)
@@ -267,6 +277,7 @@ signals:
   void contentWidthChanged();
   void contentHeightChanged();
   void themeChanged();
+  void highlighterChanged();
   void wrapModeChanged();
   void wrapColumnChanged();
   void wordWrapChanged();
