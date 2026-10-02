@@ -1,8 +1,14 @@
 #ifndef QCE_TEXTMETRICS_H
 #define QCE_TEXTMETRICS_H
 
+#include "core/wrapmeasure.h"
+
+#include <QtCore/QHash>
+#include <QtCore/QMutex>
 #include <QtCore/QStringView>
 #include <QtGui/QFont>
+
+#include <array>
 
 namespace qce {
 
@@ -55,6 +61,26 @@ private:
   qreal m_ascent = 12;
   qreal m_advance = 8;
   bool m_monospace = false;
+};
+
+// Character advances for soft wrap (ADR 0011), from the font the editor draws with. Characters
+// below U+0100 are tabulated up front; others are measured on first use and remembered. Safe to use
+// from the background wrapping thread.
+class FontWrapMeasure : public WrapMeasure {
+public:
+  FontWrapMeasure(const QFont &layoutFont, int tabWidth, qreal cellAdvance);
+
+  qreal cellAdvance() const override { return m_cell; }
+  int tabWidth() const override { return m_tabWidth; }
+  qreal advance(char32_t codePoint) const override;
+
+private:
+  QFont m_font;
+  int m_tabWidth;
+  qreal m_cell;
+  std::array<qreal, 256> m_latin;
+  mutable QMutex m_mutex;
+  mutable QHash<char32_t, qreal> m_cache;
 };
 
 } // namespace qce

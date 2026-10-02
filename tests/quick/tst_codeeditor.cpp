@@ -901,6 +901,109 @@ private slots:
     QCOMPARE(editor.lineCount(), 3);
     QVERIFY(spy.count() >= 1);
   }
+
+  // ---- Soft wrap (M4) ----
+
+  void wrapsAtAColumn() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("hello world foo bar\nx"));
+    QCOMPARE(editor->displayMap().rowCount(), 2);
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(10);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 3);
+    QTRY_COMPARE(editor->contentHeight(), 4 * editor->metrics().lineHeight());
+    const qreal lh = editor->metrics().lineHeight();
+    // Continuation rows are rows: a position on one sits at that row's y.
+    QCOMPARE(editor->rectForPosition(7).top(), lh);
+    QCOMPARE(editor->rectForPosition(16).top(), 2 * lh);
+    QCOMPARE(editor->rectForPosition(20).top(), 3 * lh); // line 1
+    // Wrap off puts everything back on one row per line.
+    editor->setWrapMode(CodeEditor::NoWrap);
+    QTRY_COMPARE(editor->contentHeight(), 2 * lh);
+    QCOMPARE(editor->rectForPosition(7).top(), 0.0);
+  }
+
+  void clicksLandOnWrappedRows() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("hello world foo bar\nx"));
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(10);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 3);
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 1, 2), 10);
+    QCOMPARE(editor->cursorPosition(), 6 + 2);
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 2, 1), 10);
+    QCOMPARE(editor->cursorPosition(), 16 + 1);
+    // Past the end of a soft-wrapped row the cursor stops before the break, not on the next row.
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, QPoint(190, int(1.5 * editor->metrics().lineHeight())), 10);
+    QCOMPARE(editor->cursorPosition(), 15);
+  }
+
+  void drawsEachWrappedRow() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("aaaa bbbb cccc"));
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(5);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 3);
+    const qreal lh = editor->metrics().lineHeight();
+    auto inkInRow = [&](const QImage &image, int row) {
+      const QColor background = editor->theme()->background();
+      for (int y = int(row * lh); y < int((row + 1) * lh); ++y)
+        for (int x = 0; x < 100; ++x)
+          if (image.pixelColor(x, y) != background)
+            return true;
+      return false;
+    };
+    QTRY_VERIFY(inkInRow(view->grabWindow(), 2));
+    const QImage image = view->grabWindow();
+    QVERIFY(inkInRow(image, 0) && inkInRow(image, 1));
+    QVERIFY(!inkInRow(image, 3));
+  }
+
+  void resizingKeepsTheTopOfTheView() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setWidth(300);
+    QString text;
+    for (int i = 0; i < 400; ++i)
+      text += QStringLiteral("line %1 has several words so that it wraps at narrow widths\n").arg(i);
+    editor->setText(text);
+    editor->setWrapMode(CodeEditor::WrapAtViewport);
+    QTRY_COMPARE(editor->wrapping(), false);
+    const qreal lh = editor->metrics().lineHeight();
+    editor->setContentY(lh * 300);
+    const qsizetype topLine = editor->document()->rope().lineAt(editor->positionAt(0, 1));
+    QVERIFY(topLine > 50);
+    for (int width : {220, 160, 120, 400}) {
+      editor->setWidth(width);
+      QTRY_COMPARE(editor->wrapping(), false);
+      QTRY_COMPARE(editor->document()->rope().lineAt(editor->positionAt(0, 1)), topLine);
+    }
+    QVERIFY(editor->contentWidth() <= editor->width());
+  }
+
+  void cursorUpDownKeepsItsColumnAcrossRows() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("abcdefghijklmnopqrstuvwxyz\nshort\nabcdefghijklmnopqrstuvwxyz"));
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(10);
+    editor->setWordWrap(false);
+    QTRY_COMPARE(editor->displayMap().rowCountOfLine(0), 3);
+    editor->setCursorPosition(7); // row 0, column 7
+    QTest::keyClick(view.get(), Qt::Key_Down);
+    QCOMPARE(editor->cursorPosition(), 17); // row 1, same column
+    QTest::keyClick(view.get(), Qt::Key_Down);
+    QCOMPARE(editor->cursorPosition(), 20 + 6 - 6 + 0 + 6); // row 2 is "uvwxyz": column 7 clamps to its end
+    QTest::keyClick(view.get(), Qt::Key_Down);
+    QCOMPARE(editor->cursorLine(), 1);
+    QCOMPARE(editor->cursorColumn(), 5); // "short" is shorter, so the goal column clamps
+    QTest::keyClick(view.get(), Qt::Key_Down);
+    QCOMPARE(editor->cursorLine(), 2);
+    QCOMPARE(editor->cursorColumn(), 7); // and comes back
+  }
 };
 
 QTEST_MAIN(TstCodeEditor)

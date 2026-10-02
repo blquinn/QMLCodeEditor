@@ -7,6 +7,7 @@
 #include "core/wrapbreaks.h"
 #include "core/wrapmap.h"
 
+#include <QtCore/QFutureWatcher>
 #include <QtCore/QObject>
 
 #include <unordered_map>
@@ -53,6 +54,9 @@ public:
   bool wrapEnabled() const { return m_config.enabled(); }
   // Lines whose row count is still an estimate.
   qsizetype estimatedLineCount() const { return wrapEnabled() ? m_wrap.estimatedLineCount() : 0; }
+  // Estimates are refined by a worker thread, a chunk of lines at a time, whenever the event loop
+  // runs. Turn that off to wrap only what queries ask for (tests).
+  void setBackgroundWrapping(bool enabled);
 
   qsizetype rowCount() const;
   // Buffer line shown on `row` (clamped to the valid rows).
@@ -73,6 +77,8 @@ signals:
   // Everything is new (text reset or wrap settings changed); rebuild whatever you derived from row
   // numbers.
   void reset();
+  // Background wrapping finished a chunk; this many lines are still estimates.
+  void wrapProgress(qsizetype estimatedLines);
 
 private:
   // Where the rows of one line begin. `starts` holds the start column of rows 1, 2, ...; it is the
@@ -98,8 +104,28 @@ private:
   DisplayRow makeRow(qsizetype line, qsizetype rowInLine) const;
   void shiftBreaks(qsizetype first, qsizetype oldCount, qsizetype newCount);
 
+  // What a worker found out about a stretch of lines.
+  struct ChunkResult {
+    quint64 generation = 0;
+    quint64 version = 0;
+    qsizetype firstLine = 0;
+    QList<quint32> rows;         // exact row counts of lines [firstLine, firstLine + rows.size())
+    QList<qsizetype> hugeStarts; // for a single huge line: all the starts found so far
+    qsizetype hugeKnown = 0;     // how many of them were known before this chunk
+    bool hugeComplete = false;
+    bool huge = false;
+  };
+
+  void pumpBackground();
+  void applyChunk(const ChunkResult &result);
+
   const TextDocument *m_document;
   FoldMap m_fold;
+  bool m_background = true;
+  quint64 m_generation = 1;  // bumped when the config changes, so stale chunks are dropped
+  qsizetype m_cursor = 0;    // where the background looks for the next estimate
+  QFutureWatcher<ChunkResult> m_watcher;
+  bool m_running = false;
   WrapConfig m_config;
   // Wrapping state is a cache of what the text and config imply, filled when queries ask.
   mutable WrapMap m_wrap;

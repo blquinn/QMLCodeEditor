@@ -31,6 +31,15 @@ class CodeEditor : public QQuickItem {
   Q_OBJECT
   QML_ELEMENT
   Q_DISABLE_COPY(CodeEditor)
+public:
+  // How long lines are shown (M4). Wrapping is soft: the text is not changed.
+  enum WrapMode {
+    NoWrap,         // one row per line; long lines scroll sideways
+    WrapAtViewport, // rows are as wide as the item
+    WrapAtColumn    // rows are `wrapColumn` characters wide
+  };
+  Q_ENUM(WrapMode)
+
   Q_PROPERTY(qsizetype lineCount READ lineCount NOTIFY lineCountChanged FINAL)
   Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged FINAL)
   Q_PROPERTY(qreal loadProgress READ loadProgress NOTIFY loadProgressChanged FINAL)
@@ -64,6 +73,12 @@ class CodeEditor : public QQuickItem {
   )
   Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
   Q_PROPERTY(qce::Theme *theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
+  Q_PROPERTY(WrapMode wrapMode READ wrapMode WRITE setWrapMode NOTIFY wrapModeChanged FINAL)
+  Q_PROPERTY(int wrapColumn READ wrapColumn WRITE setWrapColumn NOTIFY wrapColumnChanged FINAL)
+  Q_PROPERTY(bool wordWrap READ wordWrap WRITE setWordWrap NOTIFY wordWrapChanged FINAL)
+  Q_PROPERTY(bool wrapIndent READ wrapIndent WRITE setWrapIndent NOTIFY wrapIndentChanged FINAL)
+  Q_PROPERTY(int wrapIndentExtra READ wrapIndentExtra WRITE setWrapIndentExtra NOTIFY wrapIndentExtraChanged FINAL)
+  Q_PROPERTY(bool wrapping READ wrapping NOTIFY wrappingChanged FINAL)
 public:
   explicit CodeEditor(QQuickItem *parent = nullptr);
   ~CodeEditor() override;
@@ -93,6 +108,24 @@ public:
   // nullptr restores it. The editor does not take ownership.
   qce::Highlighter *highlighter() const { return m_highlighter; }
   void setHighlighter(qce::Highlighter *highlighter);
+
+  // Soft wrap (M4). With WrapAtViewport rows follow the item's width; WrapAtColumn wraps at a fixed
+  // number of characters. Lines break after whitespace (`wordWrap`) or between any two characters;
+  // `wrapIndent` starts continuation rows under the line's own indentation, `wrapIndentExtra` adds
+  // columns to that. Changing any of them re-wraps the viewport at once and everything else on a
+  // worker thread, keeping the text at the top of the view where it is.
+  WrapMode wrapMode() const { return m_wrapMode; }
+  void setWrapMode(WrapMode mode);
+  int wrapColumn() const { return m_wrapColumn; }
+  void setWrapColumn(int column);
+  bool wordWrap() const { return m_wordWrap; }
+  void setWordWrap(bool word);
+  bool wrapIndent() const { return m_wrapIndent; }
+  void setWrapIndent(bool indent);
+  int wrapIndentExtra() const { return m_wrapIndentExtra; }
+  void setWrapIndentExtra(int columns);
+  // True while a worker is still refining row counts, i.e. contentHeight is an estimate.
+  bool wrapping() const { return m_wrapping; }
 
   const qce::DisplayMap &displayMap() const { return m_map; }
   const qce::TextMetrics &metrics() const { return m_metrics; }
@@ -215,6 +248,12 @@ signals:
   void contentWidthChanged();
   void contentHeightChanged();
   void themeChanged();
+  void wrapModeChanged();
+  void wrapColumnChanged();
+  void wordWrapChanged();
+  void wrapIndentChanged();
+  void wrapIndentExtraChanged();
+  void wrappingChanged();
   void loadFailed(const QString &error);
   void saved(const QString &path);
   void saveFailed(const QString &error);
@@ -297,6 +336,34 @@ private:
   // `column` is a column of the buffer line; the layout is one row of it.
   qreal xForColumn(const qce::LineLayout &layout, qsizetype column) const;
   void invalidatePlan();
+
+  // Soft wrap plumbing. Settings only mark the wrap dirty; the next polish applies it once, however
+  // many settings or resize events came in.
+  void invalidateWrap();
+  void applyWrap();
+  void updateWrapMeasure();
+  qce::WrapConfig wrapConfig() const;
+  void onRowsReestimated();
+  // The scroll anchor is the buffer position at the top of the view. Row numbers move when wrapping
+  // is refined, so contentY is derived from the anchor again whenever they do.
+  void captureAnchor();
+  void restoreAnchor();
+  struct ScrollAnchor {
+    qsizetype line = 0;
+    qsizetype column = 0;
+    qreal offset = 0; // pixels the view is scrolled into the row
+  };
+  ScrollAnchor m_anchor;
+  WrapMode m_wrapMode = NoWrap;
+  int m_wrapColumn = 80;
+  bool m_wordWrap = true;
+  bool m_wrapIndent = true;
+  int m_wrapIndentExtra = 0;
+  std::shared_ptr<qce::FontWrapMeasure> m_wrapMeasure;
+  bool m_wrapDirty = true;
+  bool m_reanchorPending = false;
+  bool m_reanchoring = false;
+  bool m_wrapping = false;
 
   qce::EditContext editContext();
   std::unique_ptr<EditorLayout> m_cursorLayout;

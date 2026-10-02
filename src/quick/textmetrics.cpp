@@ -75,4 +75,26 @@ qsizetype TextMetrics::columnForX(QStringView line, qreal x) const {
   return line.size();
 }
 
+FontWrapMeasure::FontWrapMeasure(const QFont &layoutFont, int tabWidth, qreal cellAdvance)
+    : m_font(layoutFont), m_tabWidth(tabWidth), m_cell(cellAdvance) {
+  const QFontMetricsF fm(m_font);
+  for (int cp = 0; cp < 256; ++cp) {
+    const bool printable = (cp >= 0x20 && cp < 0x7f) || cp >= 0xa0;
+    m_latin[cp] = printable ? fm.horizontalAdvance(QChar(cp)) : m_cell;
+  }
+}
+
+qreal FontWrapMeasure::advance(char32_t cp) const {
+  if (cp < 256)
+    return m_latin[cp];
+  if (isClusterExtender(cp))
+    return 0;
+  const QMutexLocker lock(&m_mutex);
+  if (const auto it = m_cache.constFind(cp); it != m_cache.constEnd())
+    return it.value();
+  const qreal width = QFontMetricsF(m_font).horizontalAdvance(QString::fromUcs4(&cp, 1));
+  m_cache.insert(cp, width);
+  return width;
+}
+
 } // namespace qce

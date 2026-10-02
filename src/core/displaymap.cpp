@@ -1,5 +1,8 @@
 #include "core/displaymap.h"
 
+#include <QtCore/QPromise>
+#include <QtCore/QThreadPool>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -23,13 +26,29 @@ DisplayMap::DisplayMap(const TextDocument *document, QObject *parent)
     resetWrap();
     emit reset();
   });
+  connect(&m_watcher, &QFutureWatcher<ChunkResult>::finished, this, [this] {
+    m_running = false;
+    const ChunkResult result = m_watcher.result();
+    if (result.generation == m_generation && result.version == m_document->version())
+      applyChunk(result);
+    pumpBackground();
+  });
+}
+
+void DisplayMap::setBackgroundWrapping(bool enabled) {
+  m_background = enabled;
+  if (enabled)
+    pumpBackground();
 }
 
 void DisplayMap::resetWrap() {
+  ++m_generation;
+  m_cursor = 0;
   m_breaks.clear();
   m_wrap = WrapMap();
   if (wrapEnabled())
     m_wrap.reset(m_fold.lineCount(), 1, true);
+  pumpBackground();
 }
 
 void DisplayMap::setWrapConfig(const WrapConfig &config) {
@@ -116,6 +135,7 @@ void DisplayMap::onChanged(const TextChange &change) {
     m_wrap.splice(first, oldLines, entries);
   const qsizetype newRows = m_wrap.firstRowOfLine(first + newLines) - firstRow;
   emit rowsChanged(firstRow, oldRows, newRows);
+  pumpBackground();
 }
 
 // Drops what was known about the replaced lines and renumbers the lines after them. Edits inside
@@ -148,6 +168,10 @@ DisplayMap::LineBreaks &DisplayMap::breaksFor(qsizetype line) const {
   const Rope &rope = m_document->rope();
   LineBreaks &lb = m_breaks[line];
   lb.indent = wrapIndent(m_config, rope, rope.lineStart(line), rope.lineLength(line));
+  // A line known to be exact has lost its break columns to eviction or never had them (a worker
+  // counted its rows): find them again.
+  if (!m_wrap.isEstimated(line))
+    extend(line, lb, -1);
   return lb;
 }
 
@@ -264,6 +288,108 @@ qsizetype DisplayMap::rowForPosition(TextPosition position) const {
     rowInLine = std::upper_bound(starts.begin(), starts.end(), position.column) - starts.begin();
   }
   return m_wrap.firstRowOfLine(line) + rowInLine;
+}
+
+} // namespace qce
+
+namespace qce {
+
+namespace {
+constexpr qsizetype kChunkUnits = 1 << 20;
+constexpr qsizetype kChunkLines = 20000;
+constexpr qsizetype kHugeStepRows = 4000;
+} // namespace
+
+// Starts a worker on the next stretch of estimated lines unless one is running. The worker reads a
+// snapshot and the config, nothing else of ours; its answer is applied on this thread, and dropped
+// when the text or the config has moved on.
+void DisplayMap::pumpBackground() {
+  if (!m_background || m_running || !wrapEnabled())
+    return;
+  qsizetype line = m_wrap.nextEstimated(m_cursor);
+  if (line < 0)
+    line = m_wrap.nextEstimated(0);
+  if (line < 0) {
+    emit wrapProgress(0);
+    return;
+  }
+
+  const TextSnapshot snapshot = m_document->snapshot();
+  const WrapConfig config = m_config;
+  const quint64 generation = m_generation;
+  const qsizetype lineCount = snapshot.rope().lineCount();
+  QList<qsizetype> knownStarts;
+  qreal knownIndent = 0;
+  bool huge = snapshot.rope().lineLength(line) > kHugeLine;
+  if (huge) {
+    const LineBreaks &lb = breaksFor(line);
+    knownStarts = lb.starts;
+    knownIndent = lb.indent;
+  }
+
+  auto promise = std::make_shared<QPromise<ChunkResult>>();
+  m_watcher.setFuture(promise->future());
+  promise->start();
+  m_running = true;
+  QThreadPool::globalInstance()->start([=] {
+    const Rope &rope = snapshot.rope();
+    ChunkResult result;
+    result.generation = generation;
+    result.version = snapshot.version();
+    result.firstLine = line;
+    if (huge) {
+      result.huge = true;
+      result.hugeStarts = knownStarts;
+      result.hugeKnown = knownStarts.size();
+      const qsizetype length = rope.lineLength(line);
+      const qsizetype scanned = knownStarts.isEmpty() ? 0 : knownStarts.last();
+      const qsizetype stopped = wrapRows(
+        rope, rope.lineStart(line), length, config, knownIndent, scanned, knownStarts.isEmpty(), kHugeStepRows,
+        result.hugeStarts
+      );
+      result.hugeComplete = stopped >= length;
+    } else {
+      qsizetype units = 0;
+      for (qsizetype l = line; l < lineCount && result.rows.size() < kChunkLines && units < kChunkUnits; ++l) {
+        const qsizetype length = rope.lineLength(l);
+        if (length > kHugeLine)
+          break; // the next chunk takes it on its own
+        QList<qsizetype> starts;
+        const qsizetype start = rope.lineStart(l);
+        wrapRows(rope, start, length, config, wrapIndent(config, rope, start, length), 0, true,
+                 std::numeric_limits<qsizetype>::max(), starts);
+        result.rows.append(quint32(starts.size() + 1));
+        units += length + 1;
+      }
+    }
+    promise->addResult(std::move(result));
+    promise->finish();
+  });
+}
+
+void DisplayMap::applyChunk(const ChunkResult &r) {
+  if (r.huge) {
+    LineBreaks &lb = breaksFor(r.firstLine);
+    if (lb.starts.size() != r.hugeKnown)
+      return; // a query scanned further meanwhile; the next chunk picks up from there
+    lb.starts = r.hugeStarts;
+    lb.complete = r.hugeComplete;
+    storeRows(r.firstLine, lb);
+    m_cursor = r.hugeComplete ? r.firstLine + 1 : r.firstLine;
+  } else {
+    QList<WrapMap::Entry> entries;
+    entries.reserve(r.rows.size());
+    for (quint32 rows : r.rows)
+      entries.append({rows, false});
+    const qsizetype firstRow = m_wrap.firstRowOfLine(r.firstLine);
+    const qsizetype oldRows = m_wrap.firstRowOfLine(r.firstLine + r.rows.size()) - firstRow;
+    m_wrap.setLines(r.firstLine, entries);
+    const qsizetype newRows = m_wrap.firstRowOfLine(r.firstLine + r.rows.size()) - firstRow;
+    m_cursor = r.firstLine + r.rows.size();
+    if (oldRows != newRows)
+      emit rowsReestimated(firstRow, oldRows, newRows);
+  }
+  emit wrapProgress(m_wrap.estimatedLineCount());
 }
 
 } // namespace qce

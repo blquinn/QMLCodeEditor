@@ -74,6 +74,14 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   m_host = std::make_unique<EditorHost>(this);
   m_font = qce::TextMetrics::defaultMonospaceFont();
   m_metrics.setFont(m_font);
+  updateWrapMeasure();
+  connect(&m_map, &qce::DisplayMap::rowsReestimated, this, &CodeEditor::onRowsReestimated);
+  connect(&m_map, &qce::DisplayMap::wrapProgress, this, [this](qsizetype left) {
+    if ((left > 0) != m_wrapping) {
+      m_wrapping = left > 0;
+      emit wrappingChanged();
+    }
+  });
   m_ownedTheme = m_theme = qce::Theme::createDark(this);
   connect(m_theme, &qce::Theme::changed, this, &CodeEditor::onThemeChanged);
 
@@ -120,6 +128,7 @@ void CodeEditor::setFont(const QFont &font) {
     return;
   m_font = font;
   m_metrics.setFont(font);
+  updateWrapMeasure();
   invalidateLayouts();
   updateContentSize();
   emit fontChanged();
@@ -130,6 +139,7 @@ void CodeEditor::setTabWidth(int columns) {
   if (columns == m_metrics.tabWidth())
     return;
   m_metrics.setTabWidth(columns);
+  updateWrapMeasure();
   invalidateLayouts();
   emit tabWidthChanged();
 }
@@ -140,6 +150,112 @@ void CodeEditor::setShowWhitespace(bool show) {
   m_showWhitespace = show;
   invalidateLayouts();
   emit showWhitespaceChanged();
+}
+
+void CodeEditor::updateWrapMeasure() {
+  m_wrapMeasure = std::make_shared<qce::FontWrapMeasure>(m_metrics.layoutFont(), m_metrics.tabWidth(), m_metrics.cellAdvance());
+  invalidateWrap();
+}
+
+void CodeEditor::setWrapMode(WrapMode mode) {
+  if (mode == m_wrapMode)
+    return;
+  m_wrapMode = mode;
+  invalidateWrap();
+  emit wrapModeChanged();
+}
+
+void CodeEditor::setWrapColumn(int column) {
+  column = qBound(1, column, 1000);
+  if (column == m_wrapColumn)
+    return;
+  m_wrapColumn = column;
+  invalidateWrap();
+  emit wrapColumnChanged();
+}
+
+void CodeEditor::setWordWrap(bool word) {
+  if (word == m_wordWrap)
+    return;
+  m_wordWrap = word;
+  invalidateWrap();
+  emit wordWrapChanged();
+}
+
+void CodeEditor::setWrapIndent(bool indent) {
+  if (indent == m_wrapIndent)
+    return;
+  m_wrapIndent = indent;
+  invalidateWrap();
+  emit wrapIndentChanged();
+}
+
+void CodeEditor::setWrapIndentExtra(int columns) {
+  columns = qBound(0, columns, 32);
+  if (columns == m_wrapIndentExtra)
+    return;
+  m_wrapIndentExtra = columns;
+  invalidateWrap();
+  emit wrapIndentExtraChanged();
+}
+
+void CodeEditor::invalidateWrap() {
+  m_wrapDirty = true;
+  polish();
+}
+
+qce::WrapConfig CodeEditor::wrapConfig() const {
+  qce::WrapConfig config;
+  // An item that has no size yet has nothing to wrap to.
+  if (m_wrapMode == NoWrap || (m_wrapMode == WrapAtViewport && width() <= 0))
+    return config;
+  config.mode = m_wrapMode == WrapAtViewport ? qce::WrapMode::Viewport : qce::WrapMode::Column;
+  config.width = m_wrapMode == WrapAtViewport ? width() : 0;
+  config.column = m_wrapColumn;
+  config.wordBreak = m_wordWrap;
+  config.hangingIndent = m_wrapIndent;
+  config.extraIndent = m_wrapIndentExtra;
+  config.measure = m_wrapMeasure;
+  return config;
+}
+
+// Makes the display map follow the settings. Cheap when nothing changed (a resize of a column-wrapped
+// editor, say); otherwise every line becomes an estimate again and the lines in view are wrapped as
+// they are asked for.
+void CodeEditor::applyWrap() {
+  m_wrapDirty = false;
+  const qce::WrapConfig config = wrapConfig();
+  if (config == m_map.wrapConfig())
+    return;
+  m_map.setWrapConfig(config);
+  m_layouts.clear();
+  m_maxLineWidth = 0;
+  m_planDirty = true;
+  updateContentSize();
+  restoreAnchor();
+  const bool wrapping = m_map.estimatedLineCount() > 0;
+  if (wrapping != m_wrapping) {
+    m_wrapping = wrapping;
+    emit wrappingChanged();
+  }
+}
+
+void CodeEditor::onRowsReestimated() {
+  m_reanchorPending = true;
+  invalidatePlan();
+}
+
+void CodeEditor::captureAnchor() {
+  const qsizetype row = qBound<qsizetype>(0, qsizetype(std::floor(m_contentY / m_metrics.lineHeight())), m_map.rowCount() - 1);
+  const qce::DisplayRow displayRow = m_map.rowAt(row);
+  m_anchor = {displayRow.line, displayRow.startColumn, m_contentY - qreal(row) * m_metrics.lineHeight()};
+}
+
+void CodeEditor::restoreAnchor() {
+  const qsizetype row = m_map.rowForPosition({m_anchor.line, m_anchor.column});
+  m_reanchoring = true;
+  setContentY(qreal(row) * m_metrics.lineHeight() + m_anchor.offset);
+  m_reanchoring = false;
 }
 
 void CodeEditor::setTheme(qce::Theme *theme) {
@@ -740,6 +856,8 @@ void CodeEditor::setContentY(qreal y) {
   if (y == m_contentY)
     return;
   m_contentY = y;
+  if (!m_reanchoring)
+    captureAnchor();
   emit contentYChanged();
   polish(); // cheap when the layout window still covers the viewport
 }
@@ -750,8 +868,11 @@ void CodeEditor::updateContentSize() {
     m_contentHeight = height;
     emit contentHeightChanged();
   }
-  // One cell of slack so a cursor at the end of the widest line is reachable.
-  const qreal width = m_maxLineWidth > 0 ? m_maxLineWidth + m_metrics.cellAdvance() : 0;
+  // One cell of slack so a cursor at the end of the widest line is reachable. Wrapped text is as
+  // wide as its rows, which are the item (or the column) wide.
+  qreal width = m_maxLineWidth > 0 ? m_maxLineWidth + m_metrics.cellAdvance() : 0;
+  if (m_map.wrapEnabled())
+    width = m_map.wrapConfig().mode == qce::WrapMode::Viewport ? this->width() : m_map.wrapConfig().rowWidth() + m_metrics.cellAdvance();
   if (width != m_contentWidth) {
     m_contentWidth = width;
     emit contentWidthChanged();
@@ -957,6 +1078,7 @@ void CodeEditor::onDocumentReset() {
   m_maxLineWidth = 0;
   emit lineCountChanged();
   updateContentSize();
+  captureAnchor();
   invalidatePlan();
 }
 
@@ -1138,6 +1260,16 @@ void CodeEditor::updatePolish() {
       self->m_polishMaxNs = qMax(self->m_polishMaxNs, ns);
     }
   } record{this, polishTimer};
+  if (m_wrapDirty)
+    applyWrap();
+  if (m_reanchorPending) {
+    // Wrapping showed some lines to be taller or shorter than assumed: the text at the top of the
+    // view stays where it was and the row number it is on moves.
+    m_reanchorPending = false;
+    updateContentSize();
+    restoreAnchor();
+    m_planDirty = true;
+  }
   const qsizetype rowCount = m_map.rowCount();
   const qreal lineHeight = m_metrics.lineHeight();
   const qsizetype visibleRows = qsizetype(std::ceil(height() / lineHeight)) + 1;
@@ -1174,6 +1306,8 @@ void CodeEditor::updatePolish() {
 void CodeEditor::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) {
   QQuickItem::geometryChange(newGeometry, oldGeometry);
   if (newGeometry.size() != oldGeometry.size()) {
+    if (m_wrapMode == WrapAtViewport && newGeometry.width() != oldGeometry.width())
+      invalidateWrap();
     updateContentSize();
     invalidatePlan();
   }

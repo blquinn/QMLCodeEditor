@@ -34,3 +34,8 @@ race:qmlcache_loader.cpp
 # runnable's vptr change during construction. The captured data is immutable rope snapshots; their own
 # synchronization is covered by tst_snapshot.
 race:QtConcurrent::RunFunctionTaskBase
+
+# Same handoff for QThreadPool::start(callable), used by DisplayMap's background wrapping: the callable's
+# captures (a text snapshot, the wrap config) are written on the GUI thread and read by the worker through the
+# pool's queue lock, which TSan cannot see.
+race:QRunnable::QGenericRunnable

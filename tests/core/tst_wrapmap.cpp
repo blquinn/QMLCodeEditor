@@ -419,6 +419,73 @@ private slots:
     QCOMPARE(map.rowCountOfLine(500), 3);
   }
 
+  // ---- Background wrapping -------------------------------------------------------------------
+
+  static void expectSameRows(DisplayMap &map, const TextDocument &doc, const WrapConfig &config) {
+    TextDocument fresh;
+    fresh.setText(doc.rope().toString());
+    DisplayMap expected(&fresh);
+    expected.setBackgroundWrapping(false);
+    expected.setWrapConfig(config);
+    const QList<DisplayRow> want = allRows(expected);
+    const QList<DisplayRow> got = allRows(map);
+    QCOMPARE(got.size(), want.size());
+    for (qsizetype r = 0; r < got.size(); ++r)
+      QVERIFY2(
+        got[r].line == want[r].line && got[r].startColumn == want[r].startColumn &&
+          got[r].endColumn == want[r].endColumn && got[r].rowsInLine == want[r].rowsInLine &&
+          qFuzzyCompare(got[r].indent + 1, want[r].indent + 1),
+        qPrintable(u"row %1"_s.arg(r))
+      );
+  }
+
+  void backgroundWrappingConverges() {
+    QRandomGenerator rng(8);
+    TextDocument doc;
+    doc.setText(randomText(rng, 6000, 60));
+    DisplayMap map(&doc);
+    QSignalSpy progress(&map, &DisplayMap::wrapProgress);
+    QSignalSpy refined(&map, &DisplayMap::rowsReestimated);
+    const WrapConfig config = gridConfig(12, true, true);
+    map.setWrapConfig(config);
+    QCOMPARE(map.estimatedLineCount(), 6000);
+    QTRY_COMPARE_WITH_TIMEOUT(map.estimatedLineCount(), 0, 20000);
+    QVERIFY(progress.count() >= 1);
+    QCOMPARE(progress.last().first().toLongLong(), 0);
+    QVERIFY(refined.count() >= 1);
+    expectSameRows(map, doc, config);
+  }
+
+  void editsWhileWrappingInTheBackground() {
+    QRandomGenerator rng(9);
+    TextDocument doc;
+    doc.setText(randomText(rng, 8000, 40));
+    DisplayMap map(&doc);
+    const WrapConfig config = gridConfig(9);
+    map.setWrapConfig(config);
+    for (int step = 0; step < 40; ++step) {
+      const qsizetype length = doc.length();
+      const qsizetype a = rng.bounded(length + 1);
+      QString text = randomText(rng, rng.bounded(3), 10);
+      text.remove(u'\r');
+      doc.replace(a, qMin<qsizetype>(length, a + rng.bounded(30)), text);
+      QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(map.estimatedLineCount(), 0, 20000);
+    expectSameRows(map, doc, config);
+  }
+
+  void changingTheConfigDropsStaleChunks() {
+    QRandomGenerator rng(10);
+    TextDocument doc;
+    doc.setText(randomText(rng, 4000, 50));
+    DisplayMap map(&doc);
+    map.setWrapConfig(gridConfig(8));
+    map.setWrapConfig(gridConfig(20));
+    QTRY_COMPARE_WITH_TIMEOUT(map.estimatedLineCount(), 0, 20000);
+    expectSameRows(map, doc, gridConfig(20));
+  }
+
   void turningWrapOffRestoresIdentity() {
     TextDocument doc;
     doc.setText(u"hello world foo bar\nx"_s);
@@ -435,5 +502,5 @@ private slots:
 
 };
 
-QTEST_APPLESS_MAIN(TstWrapMap)
+QTEST_GUILESS_MAIN(TstWrapMap)
 #include "tst_wrapmap.moc"
