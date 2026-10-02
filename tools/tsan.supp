@@ -27,3 +27,10 @@ race:pthread_cond_destroy
 # while the QML engine loads files, and that is destroyed at process exit. The thread is joined inside
 # uninstrumented Qt, so TSan sees no ordering between the last read and the static destructor.
 race:qmlcache_loader.cpp
+
+# QtConcurrent::run hands its stored lambda to a pool thread through QThreadPool's queue, which is locked
+# inside uninstrumented Qt. TSan sees the task object (and what the lambda captured by value, e.g. the clipboard
+# slices of CodeEditor::copy) written on the GUI thread and read on the worker without ordering, and the
+# runnable's vptr change during construction. The captured data is immutable rope snapshots; their own
+# synchronization is covered by tst_snapshot.
+race:QtConcurrent::RunFunctionTaskBase
