@@ -32,19 +32,35 @@ ApplicationWindow {
         placeholderText: darkMode ? "#8a8d91" : "#808080"
     }
 
-    // A tool button that lights up under the pointer (the Basic style only reacts to presses).
-    // Buttons with nothing to do are dimmed rather than disabled: a disabled item gets no hover events,
-    // and the highlight is still useful feedback.
-    component DemoToolButton: ToolButton {
-        id: button
-        property bool available: true
-        opacity: available ? 1 : 0.45
-        background: Rectangle {
-            implicitWidth: 40
-            implicitHeight: 40
-            color: button.down ? window.palette.highlight
-                 : button.hovered ? (window.darkMode ? "#4d5258" : "#cfd3d8")
-                                  : "transparent"
+    // A labelled spin box as a menu entry. It is a plain item, not a MenuItem, so using it does not close the menu.
+    component MenuSpin: Item {
+        id: spinRow
+        property alias label: caption.text
+        property alias from: box.from
+        property alias to: box.to
+        property alias value: box.value
+        signal modified(int value)
+        // A Menu sizes itself from its text entries only, so menus holding one of these set their own width.
+        width: parent ? parent.width : implicitWidth
+        implicitWidth: row.implicitWidth + 24
+        implicitHeight: 48
+        RowLayout {
+            id: row
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 24
+            Label {
+                id: caption
+                Layout.fillWidth: true
+                Layout.minimumWidth: implicitWidth
+                enabled: spinRow.enabled
+            }
+            SpinBox {
+                id: box
+                enabled: spinRow.enabled
+                onValueModified: spinRow.modified(value)
+            }
         }
     }
 
@@ -81,165 +97,186 @@ ApplicationWindow {
         editor.forceActiveFocus()
     }
 
-    header: ToolBar {
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 12
-
-            DemoToolButton {
-                text: qsTr("Open…")
-                onClicked: openDialog.open()
+    // Everything but the editor itself lives in the menus.
+    menuBar: MenuBar {
+        Menu {
+            title: qsTr("&File")
+            MenuItem {
+                text: qsTr("&Open…")
+                onTriggered: openDialog.open()
             }
-            DemoToolButton {
-                text: qsTr("Save")
-                available: window.currentFile.toString() !== ""
-                onClicked: if (available) editor.save(window.currentFile)
+            MenuItem {
+                text: qsTr("&Save")
+                enabled: window.currentFile.toString() !== ""
+                onTriggered: editor.save(window.currentFile)
             }
-            DemoToolButton {
-                text: qsTr("Undo")
-                available: editor.canUndo
-                onClicked: editor.undo()
+        }
+        Menu {
+            title: qsTr("&Edit")
+            MenuItem {
+                text: qsTr("&Undo")
+                enabled: editor.canUndo
+                onTriggered: editor.undo()
             }
-            DemoToolButton {
-                text: qsTr("Redo")
-                available: editor.canRedo
-                onClicked: editor.redo()
+            MenuItem {
+                text: qsTr("&Redo")
+                enabled: editor.canRedo
+                onTriggered: editor.redo()
             }
-            DemoToolButton {
-                text: qsTr("Cut")
-                onClicked: editor.cut()
+            MenuSeparator {}
+            MenuItem { text: qsTr("Cu&t"); onTriggered: editor.cut() }
+            MenuItem { text: qsTr("&Copy"); onTriggered: editor.copy() }
+            MenuItem { text: qsTr("&Paste"); onTriggered: editor.paste() }
+            MenuSeparator {}
+            MenuItem { text: qsTr("Select &All"); onTriggered: editor.selectAll() }
+        }
+        Menu {
+            title: qsTr("&View")
+            width: 300 // room for a label and a spin box
+            MenuItem {
+                text: qsTr("Dark theme")
+                checkable: true
+                checked: window.darkMode
+                onToggled: {
+                    window.darkMode = checked
+                    editor.theme.applyPreset(checked ? "dark" : "light")
+                }
             }
-            DemoToolButton {
-                text: qsTr("Copy")
-                onClicked: editor.copy()
+            MenuItem {
+                text: qsTr("Show whitespace")
+                checkable: true
+                onToggled: editor.showWhitespace = checked
             }
-            DemoToolButton {
-                text: qsTr("Paste")
-                onClicked: editor.paste()
+            MenuItem {
+                text: qsTr("Read-only")
+                checkable: true
+                onToggled: editor.readOnly = checked
             }
-            Item { Layout.fillWidth: true }
-            Label {
-                text: qsTr("%1 lines").arg(editor.lineCount.toLocaleString())
+            MenuSeparator {}
+            MenuSpin {
+                label: qsTr("Font size")
+                from: 6; to: 48; value: editor.font.pointSize
+                onModified: (v) => {
+                    var f = editor.font
+                    f.pointSize = v
+                    editor.font = f
+                }
+            }
+        }
+        Menu {
+            title: qsTr("&Indentation")
+            width: 300 // room for a label and a spin box
+            MenuItem {
+                text: qsTr("Indent with tabs")
+                checkable: true
+                onToggled: editor.insertSpaces = !checked
+            }
+            MenuSeparator {}
+            MenuSpin {
+                label: qsTr("Tab width")
+                from: 1; to: 16; value: editor.tabWidth
+                onModified: (v) => editor.tabWidth = v
+            }
+        }
+        Menu {
+            title: qsTr("&Wrapping")
+            width: 300 // room for a label and a spin box
+            MenuItem {
+                text: qsTr("No wrap")
+                checkable: true; autoExclusive: true
+                checked: editor.wrapMode === CodeEditor.NoWrap
+                onTriggered: editor.wrapMode = CodeEditor.NoWrap
+            }
+            MenuItem {
+                text: qsTr("Wrap at window")
+                checkable: true; autoExclusive: true
+                checked: editor.wrapMode === CodeEditor.WrapAtViewport
+                onTriggered: editor.wrapMode = CodeEditor.WrapAtViewport
+            }
+            MenuItem {
+                text: qsTr("Wrap at column")
+                checkable: true; autoExclusive: true
+                checked: editor.wrapMode === CodeEditor.WrapAtColumn
+                onTriggered: editor.wrapMode = CodeEditor.WrapAtColumn
+            }
+            MenuSeparator {}
+            MenuSpin {
+                label: qsTr("Wrap column")
+                enabled: editor.wrapMode === CodeEditor.WrapAtColumn
+                from: 10; to: 400; value: editor.wrapColumn
+                onModified: (v) => editor.wrapColumn = v
+            }
+            MenuItem {
+                text: qsTr("Break at words")
+                checkable: true
+                checked: editor.wordWrap
+                onToggled: editor.wordWrap = checked
+            }
+            MenuItem {
+                text: qsTr("Hanging indent")
+                checkable: true
+                checked: editor.wrapIndent
+                onToggled: editor.wrapIndent = checked
+            }
+            MenuSpin {
+                label: qsTr("Extra indent")
+                from: 0; to: 16; value: editor.wrapIndentExtra
+                onModified: (v) => editor.wrapIndentExtra = v
+            }
+        }
+        Menu {
+            title: qsTr("&Gutter")
+            MenuItem {
+                text: qsTr("Line numbers")
+                checkable: true
+                checked: lineNumbers.visible
+                onToggled: lineNumbers.visible = checked
+            }
+            MenuItem {
+                text: qsTr("Absolute numbers")
+                enabled: lineNumbers.visible
+                checkable: true; autoExclusive: true
+                checked: lineNumbers.mode === LineNumberColumn.Absolute
+                onTriggered: lineNumbers.mode = LineNumberColumn.Absolute
+            }
+            MenuItem {
+                text: qsTr("Relative numbers")
+                enabled: lineNumbers.visible
+                checkable: true; autoExclusive: true
+                checked: lineNumbers.mode === LineNumberColumn.Relative
+                onTriggered: lineNumbers.mode = LineNumberColumn.Relative
+            }
+            MenuItem {
+                text: qsTr("Hybrid numbers")
+                enabled: lineNumbers.visible
+                checkable: true; autoExclusive: true
+                checked: lineNumbers.mode === LineNumberColumn.Hybrid
+                onTriggered: lineNumbers.mode = LineNumberColumn.Hybrid
+            }
+            MenuSeparator {}
+            MenuItem {
+                text: qsTr("Change bars")
+                checkable: true
+                checked: changeBars.visible
+                onToggled: changeBars.visible = checked
+            }
+            MenuItem {
+                text: qsTr("Breakpoints")
+                checkable: true
+                checked: breakpoints.visible
+                onToggled: breakpoints.visible = checked
+            }
+            MenuItem {
+                text: qsTr("Bookmarks")
+                checkable: true
+                checked: bookmarkColumn.visible
+                onToggled: bookmarkColumn.visible = checked
             }
         }
     }
 
     footer: ColumnLayout {
         spacing: 0
-
-        // Editor options.
-        ToolBar {
-            Layout.fillWidth: true
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 12
-
-                CheckBox {
-                    text: qsTr("Read-only")
-                    onToggled: editor.readOnly = checked
-                }
-                CheckBox {
-                    text: qsTr("Tabs")
-                    onToggled: editor.insertSpaces = !checked
-                }
-                CheckBox {
-                    text: qsTr("Dark")
-                    checked: window.darkMode
-                    onToggled: {
-                        window.darkMode = checked
-                        editor.theme.applyPreset(checked ? "dark" : "light")
-                    }
-                }
-                CheckBox {
-                    text: qsTr("Whitespace")
-                    onToggled: editor.showWhitespace = checked
-                }
-                Label { text: qsTr("Tab") }
-                SpinBox {
-                    from: 1; to: 16; value: editor.tabWidth
-                    onValueModified: editor.tabWidth = value
-                }
-                Label { text: qsTr("Font") }
-                SpinBox {
-                    from: 6; to: 48; value: editor.font.pointSize
-                    onValueModified: {
-                        var f = editor.font
-                        f.pointSize = value
-                        editor.font = f
-                    }
-                }
-                Item { Layout.fillWidth: true }
-            }
-        }
-
-        // Soft wrap.
-        ToolBar {
-            Layout.fillWidth: true
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 12
-
-                Label { text: qsTr("Wrap") }
-                ComboBox {
-                    model: [qsTr("Off"), qsTr("Window"), qsTr("Column")]
-                    currentIndex: editor.wrapMode
-                    onActivated: (index) => editor.wrapMode = index
-                }
-                SpinBox {
-                    visible: editor.wrapMode === CodeEditor.WrapAtColumn
-                    from: 10; to: 400; value: editor.wrapColumn
-                    onValueModified: editor.wrapColumn = value
-                }
-                CheckBox {
-                    text: qsTr("Words")
-                    checked: editor.wordWrap
-                    onToggled: editor.wordWrap = checked
-                }
-                CheckBox {
-                    text: qsTr("Hanging indent")
-                    checked: editor.wrapIndent
-                    onToggled: editor.wrapIndent = checked
-                }
-                Label { text: qsTr("Extra") }
-                SpinBox {
-                    from: 0; to: 16; value: editor.wrapIndentExtra
-                    onValueModified: editor.wrapIndentExtra = value
-                }
-                Label { text: qsTr("Numbers") }
-                ComboBox {
-                    model: [qsTr("Absolute"), qsTr("Relative"), qsTr("Hybrid")]
-                    currentIndex: lineNumbers.mode
-                    onActivated: (index) => lineNumbers.mode = index
-                }
-                CheckBox {
-                    text: qsTr("Line numbers")
-                    checked: lineNumbers.visible
-                    onToggled: lineNumbers.visible = checked
-                }
-                CheckBox {
-                    text: qsTr("Changes")
-                    checked: changeBars.visible
-                    onToggled: changeBars.visible = checked
-                }
-                CheckBox {
-                    text: qsTr("Breakpoints")
-                    checked: breakpoints.visible
-                    onToggled: breakpoints.visible = checked
-                }
-                CheckBox {
-                    text: qsTr("Bookmarks")
-                    checked: bookmarkColumn.visible
-                    onToggled: bookmarkColumn.visible = checked
-                }
-                Item { Layout.fillWidth: true }
-            }
-        }
 
         // Status.
         ToolBar {
@@ -255,6 +292,7 @@ ApplicationWindow {
                     id: statusLabel
                 }
                 Item { Layout.fillWidth: true }
+                Label { text: qsTr("%1 lines").arg(editor.lineCount.toLocaleString()) }
                 Label {
                     text: qsTr("Ln %1, Col %2").arg(editor.cursorLine + 1).arg(editor.cursorColumn + 1)
                           + (editor.selectionEnd > editor.selectionStart
@@ -294,6 +332,7 @@ ApplicationWindow {
             fps.frames = 0
         }
     }
+
 
     CodeEditor {
         id: editor
