@@ -174,7 +174,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - Only affected lines are re-wrapped; row count deltas propagate through the summary tree.
 - [x] **WRAP-04** Re-wrap on resize — done 2026-10-02 (b3ccdd5)
   - Viewport lines first, remainder in the background; scroll position anchored to the top visible buffer position so content doesn't jump.
-- [~] **WRAP-05** Wrap modes
+- [x] **WRAP-05** Wrap modes — done 2026-10-02 (7f51a6b)
   - Off, at viewport width, at a fixed column; word-boundary vs. character wrapping.
 - [ ] **WRAP-06** Hanging indent option
   - Continuation rows align under the line's indentation (optionally plus an extra indent).
