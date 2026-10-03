@@ -32,6 +32,8 @@ public:
 
   AnchorId create(qsizetype offset, Gravity gravity = Gravity::Left);
   void remove(AnchorId id);
+  // Puts an anchor at `offset` keeping its id and gravity (no edit semantics: it just goes there).
+  void move(AnchorId id, qsizetype offset);
   bool contains(AnchorId id) const;
   qsizetype offset(AnchorId id) const;
   Gravity gravity(AnchorId id) const;
@@ -63,6 +65,8 @@ private:
   size_t firstBlockEndingAtOrAfter(qsizetype offset) const;
   void reindex(Block *block, size_t from);
   void splitBlock(size_t blockIndex);
+  void insertEntry(AnchorId id, qsizetype offset, Gravity gravity);
+  void eraseEntry(AnchorId id); // leaves the slot bookkeeping to the caller
 
   std::vector<std::unique_ptr<Block>> m_blocks;
   std::vector<Slot> m_slots; // id - 1

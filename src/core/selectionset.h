@@ -38,6 +38,19 @@ public:
   void setSingle(qsizetype anchor, qsizetype head) { set({{anchor, head}}); }
   void setSingle(qsizetype cursor) { set({{cursor, cursor}}); }
 
+  // Makes another selection the primary one.
+  void setPrimary(int index);
+  // Adds one selection and makes it primary. Without an overlap this touches only its own anchors
+  // (merging, if it does overlap, is the same as set()).
+  void add(Selection selection);
+  // Drops every selection but the primary.
+  void collapseToPrimary();
+
+  // The first selection that ends at or after `offset` (count() if none), by binary search.
+  int lowerBound(qsizetype offset) const;
+  // The selection holding `offset` (touching its ends counts), or -1.
+  int indexAt(qsizetype offset) const;
+
   // Sticky x for vertical movement (INPUT-03), per selection; NoGoal when unset.
   qreal goalX(int index) const { return m_entries[size_t(index)].goalX; }
   void setGoalX(int index, qreal x) { m_entries[size_t(index)].goalX = x; }
@@ -70,7 +83,9 @@ private:
 
   void removeAnchors();
   void notify();
-  void onDocumentChanged();
+  void assign(const SelectionList &list, int primary);
+  void normalize();
+  void onDocumentChanged(const TextChange &change);
   void onDocumentReset();
 
   TextDocument *m_document;
@@ -78,6 +93,7 @@ private:
   int m_primary = 0;
   int m_batch = 0;
   bool m_dirty = false;
+  bool m_needsNormalize = false;
 };
 
 } // namespace qce

@@ -5,6 +5,8 @@
 
 #include <QElapsedTimer>
 
+#include <random>
+
 using namespace qce;
 
 namespace {
@@ -163,6 +165,33 @@ private slots:
       QVERIFY(set.offset(id) >= prev);
       prev = set.offset(id);
     }
+  }
+
+  void moveKeepsIdAndOrder() {
+    AnchorSet set;
+    std::vector<AnchorId> ids;
+    std::vector<qsizetype> expected;
+    std::mt19937_64 rng(7);
+    for (int i = 0; i < 3000; ++i) {
+      expected.push_back(qsizetype(rng() % 10000));
+      ids.push_back(set.create(expected.back(), i % 2 ? Gravity::Left : Gravity::Right));
+    }
+    for (int round = 0; round < 20000; ++round) {
+      const size_t k = size_t(rng() % ids.size());
+      expected[k] = qsizetype(rng() % 12000);
+      set.move(ids[k], expected[k]);
+      if (round % 997 == 0)
+        QVERIFY(set.validate());
+    }
+    QVERIFY(set.validate());
+    for (size_t k = 0; k < ids.size(); ++k)
+      QCOMPARE(set.offset(ids[k]), expected[k]);
+    QCOMPARE(set.size(), qsizetype(ids.size()));
+    // Gravity is kept, and moved anchors still follow edits.
+    set.applyEdit(0, 0, 5);
+    for (size_t k = 0; k < ids.size(); ++k)
+      QCOMPARE(set.offset(ids[k]), expected[k] + (expected[k] == 0 ? (k % 2 ? 0 : 5) : 5));
+    QVERIFY(set.validate());
   }
 };
 

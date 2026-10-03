@@ -48,17 +48,7 @@ void AnchorSet::splitBlock(size_t blockIndex) {
   );
 }
 
-AnchorId AnchorSet::create(qsizetype offset, Gravity gravity) {
-  offset = qMax<qsizetype>(offset, 0);
-  AnchorId id;
-  if (m_freeSlot >= 0) {
-    id = AnchorId(m_freeSlot + 1);
-    m_freeSlot = m_slots[size_t(m_freeSlot)].nextFree;
-  } else {
-    m_slots.emplace_back();
-    id = AnchorId(m_slots.size());
-  }
-
+void AnchorSet::insertEntry(AnchorId id, qsizetype offset, Gravity gravity) {
   size_t b;
   if (m_blocks.empty()) {
     m_blocks.push_back(std::make_unique<Block>());
@@ -75,27 +65,75 @@ AnchorId AnchorSet::create(qsizetype offset, Gravity gravity) {
   const size_t index = size_t(pos - block->items.begin());
   block->items.insert(pos, Entry{offset - block->shift, id, gravity});
   reindex(block, index);
-  ++m_count;
   splitBlock(b);
-  return id;
 }
 
-void AnchorSet::remove(AnchorId id) {
-  if (!contains(id))
-    return;
+void AnchorSet::eraseEntry(AnchorId id) {
   Slot &slot = m_slots[id - 1];
   Block *block = slot.block;
   const size_t index = size_t(slot.index);
   block->items.erase(block->items.begin() + qptrdiff(index));
   reindex(block, index);
-  slot = Slot{};
-  slot.nextFree = m_freeSlot;
-  m_freeSlot = int(id - 1);
-  --m_count;
+  slot.block = nullptr;
   if (block->items.empty()) {
     auto it = std::find_if(m_blocks.begin(), m_blocks.end(), [&](const auto &p) { return p.get() == block; });
     m_blocks.erase(it);
   }
+}
+
+AnchorId AnchorSet::create(qsizetype offset, Gravity gravity) {
+  offset = qMax<qsizetype>(offset, 0);
+  AnchorId id;
+  if (m_freeSlot >= 0) {
+    id = AnchorId(m_freeSlot + 1);
+    m_freeSlot = m_slots[size_t(m_freeSlot)].nextFree;
+  } else {
+    m_slots.emplace_back();
+    id = AnchorId(m_slots.size());
+  }
+  insertEntry(id, offset, gravity);
+  ++m_count;
+  return id;
+}
+
+void AnchorSet::move(AnchorId id, qsizetype offset) {
+  if (!contains(id))
+    return;
+  offset = qMax<qsizetype>(offset, 0);
+  const Slot &slot = m_slots[id - 1];
+  Block *block = slot.block;
+  const size_t index = size_t(slot.index);
+  // Staying between its neighbours needs no restructuring. Only the ends of a block have to look
+  // into the neighbouring blocks.
+  bool inPlace = (index == 0 || block->real(block->items[index - 1]) <= offset) &&
+                 (index + 1 >= block->items.size() || block->real(block->items[index + 1]) >= offset);
+  if (inPlace && (index == 0 || index + 1 == block->items.size())) {
+    size_t b = 0;
+    while (m_blocks[b].get() != block)
+      ++b;
+    if (index == 0 && b > 0)
+      inPlace = m_blocks[b - 1]->real(m_blocks[b - 1]->items.back()) <= offset;
+    if (inPlace && index + 1 == block->items.size() && b + 1 < m_blocks.size())
+      inPlace = m_blocks[b + 1]->real(m_blocks[b + 1]->items.front()) >= offset;
+  }
+  if (inPlace) {
+    block->items[index].off = offset - block->shift;
+    return;
+  }
+  const Gravity gravity = block->items[index].gravity;
+  eraseEntry(id);
+  insertEntry(id, offset, gravity);
+}
+
+void AnchorSet::remove(AnchorId id) {
+  if (!contains(id))
+    return;
+  eraseEntry(id);
+  Slot &slot = m_slots[id - 1];
+  slot = Slot{};
+  slot.nextFree = m_freeSlot;
+  m_freeSlot = int(id - 1);
+  --m_count;
 }
 
 bool AnchorSet::contains(AnchorId id) const {

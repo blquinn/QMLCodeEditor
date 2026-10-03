@@ -266,7 +266,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria:** add cursors above/below, add next occurrence, select all occurrences, and alt-drag box select all work; typing with 10,000 cursors on a large file stays interactive; one undo reverts a multi-cursor edit.
 
-- [ ] **MULTI-01** `SelectionSet` as a sorted, merged set
+- [x] **MULTI-01** `SelectionSet` as a sorted, merged set — done 2026-10-03
   - Overlapping or touching selections merge; primary cursor tracked.
 - [ ] **MULTI-02** Add cursor above/below and by ctrl/alt-click
 - [ ] **MULTI-03** Add next occurrence and select all occurrences
