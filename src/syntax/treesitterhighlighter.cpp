@@ -7,6 +7,7 @@
 #include <QtCore/QThreadPool>
 
 #include <algorithm>
+#include <map>
 
 using namespace Qt::StringLiterals;
 
@@ -719,6 +720,102 @@ TreeSitterHighlighter::highlightLines(const TextSnapshot &text, qsizetype firstL
     const Block *b = block(line / BlockLines, rope);
     result[line - firstLine] = b->lines.value(line % BlockLines);
   }
+  return result;
+}
+
+// ---- Folds (FOLD-02) -------------------------------------------------------------------------
+
+TreeSitterFoldProvider::TreeSitterFoldProvider(TreeSitterHighlighter *owner) : FoldProvider(nullptr), m_owner(owner) {
+  connect(owner, &Highlighter::invalidated, this, &FoldProvider::invalidated);
+}
+
+QList<FoldRange> TreeSitterFoldProvider::foldRanges(const TextSnapshot &text, qsizetype firstLine, qsizetype lastLine) {
+  return m_owner->foldRangesImpl(text, firstLine, lastLine, m_fallback);
+}
+
+namespace {
+
+// Adds the ranges of every @fold capture of `query` in `root` whose header line is in
+// [firstLine, lastLine] to `out`, keyed by header (the longest range wins).
+void collectFolds(
+  TSQueryCursor *cursor, TSNode root, const CompiledLanguage &lang, const Rope &rope, qsizetype firstLine,
+  qsizetype lastLine, std::map<qsizetype, qsizetype> &out
+) {
+  const qsizetype from = rope.lineStart(firstLine);
+  const qsizetype to = lastLine + 1 < rope.lineCount() ? rope.lineStart(lastLine + 1) : rope.length();
+  ts_query_cursor_set_byte_range(cursor, toByte(from), toByte(to));
+  ts_query_cursor_exec(cursor, lang.folds, root);
+  TSQueryMatch match;
+  while (ts_query_cursor_next_match(cursor, &match)) {
+    if (!predicatesHold(lang.foldInfo, match, rope))
+      continue;
+    for (uint16_t i = 0; i < match.capture_count; ++i) {
+      uint32_t nameLength = 0;
+      const char *name = ts_query_capture_name_for_id(lang.folds, match.captures[i].index, &nameLength);
+      const QLatin1StringView captured(name, qsizetype(nameLength));
+      // @fold hides up to a closing token; @fold.keep_last always leaves the node's last line showing.
+      if (captured != "fold"_L1 && captured != "fold.keep_last"_L1)
+        continue;
+      const TSNode node = match.captures[i].node;
+      const qsizetype start = toUnit(ts_node_start_byte(node)), end = toUnit(ts_node_end_byte(node));
+      const qsizetype header = rope.lineAt(start);
+      if (header < firstLine || header > lastLine)
+        continue;
+      const TextPosition endPos = rope.positionAt(end);
+      if (endPos.line <= header)
+        continue;
+      const qsizetype endLine = foldEndLine(rope, endPos.line, endPos.column, captured == "fold.keep_last"_L1);
+      if (endLine <= header)
+        continue;
+      auto [it, added] = out.try_emplace(header, endLine);
+      if (!added && it->second < endLine)
+        it->second = endLine;
+    }
+  }
+}
+
+} // namespace
+
+QList<FoldRange> TreeSitterHighlighter::foldRangesImpl(
+  const TextSnapshot &text, qsizetype firstLine, qsizetype lastLine, IndentFoldProvider &fallback
+) {
+  firstLine = qMax<qsizetype>(0, firstLine);
+  lastLine = qMin(lastLine, text.lineCount() - 1);
+  if (firstLine > lastLine)
+    return {};
+  if (!m_doc || !m_tree || !m_lang || !m_lang->folds)
+    return fallback.foldRanges(text, firstLine, lastLine);
+
+  const Rope &rope = text.rope();
+  // Lines the tree covers: all of them, or those wholly inside a window.
+  qsizetype coverFirst = 0, coverLast = rope.lineCount() - 1;
+  if (m_treeWindowed) {
+    coverFirst = m_winStart > 0 ? rope.lineAt(m_winStart) + 1 : 0;
+    coverLast = m_winEnd >= m_doc->length() ? rope.lineCount() - 1 : rope.lineAt(m_winEnd) - 1;
+  }
+  const qsizetype treeFirst = qMax(firstLine, coverFirst), treeLast = qMin(lastLine, coverLast);
+
+  QList<FoldRange> result;
+  if (firstLine < treeFirst)
+    result += fallback.foldRanges(text, firstLine, qMin(lastLine, treeFirst - 1));
+  if (treeFirst <= treeLast) {
+    std::map<qsizetype, qsizetype> found;
+    TSQueryCursor *cursor = ts_query_cursor_new();
+    collectFolds(cursor, ts_tree_root_node(m_tree.get()), *m_lang, rope, treeFirst, treeLast, found);
+    for (const InjectedLayer &layer : m_layers) {
+      if (!layer.language || !layer.language->folds || !layer.tree)
+        continue;
+      const qsizetype a = qMax(treeFirst, rope.lineAt(layer.start)), b = qMin(treeLast, rope.lineAt(layer.end));
+      if (a <= b)
+        collectFolds(cursor, ts_tree_root_node(layer.tree.get()), *layer.language, rope, a, b, found);
+    }
+    ts_query_cursor_delete(cursor);
+    for (const auto &[header, end] : found)
+      result.append({header, end});
+  }
+  if (treeLast < lastLine)
+    result += fallback.foldRanges(text, qMax(firstLine, treeLast + 1), lastLine);
+  std::sort(result.begin(), result.end(), [](const FoldRange &a, const FoldRange &b) { return a.startLine < b.startLine; });
   return result;
 }
 

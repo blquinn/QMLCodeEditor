@@ -17,7 +17,7 @@ target_link_libraries(qce_syntax PUBLIC QMLCodeEditor::Core qce_grammars Qt6::Qm
 
 # Query files become resources at :/qce/syntax/<language>/<kind>.scm. A file in src/syntax/queries/<language>/
 # replaces the upstream one of the same name (for queries that don't compile against the pinned grammar).
-set(QCE_QUERY_KINDS highlights injections)
+set(QCE_QUERY_KINDS highlights injections folds)
 set(_query_files)
 foreach(pair IN LISTS QCE_TS_SOURCE_DIRS)
     string(REPLACE "=" ";" parts "${pair}")

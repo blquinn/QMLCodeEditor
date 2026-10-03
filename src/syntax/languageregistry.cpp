@@ -26,6 +26,8 @@ CompiledLanguage::~CompiledLanguage() {
     ts_query_delete(highlights);
   if (injections)
     ts_query_delete(injections);
+  if (folds)
+    ts_query_delete(folds);
 }
 
 namespace {
@@ -137,7 +139,8 @@ LanguageRegistry::LanguageRegistry() {
        {u"jsonc"_s},
        &tree_sitter_json,
        {u"json/highlights.scm"_s},
-       {}});
+       {},
+       {u"json/folds.scm"_s}});
   add({u"javascript"_s,
        u"JavaScript"_s,
        {u"js"_s, u"mjs"_s, u"cjs"_s, u"jsx"_s},
@@ -146,7 +149,8 @@ LanguageRegistry::LanguageRegistry() {
        {u"js"_s, u"node"_s},
        &tree_sitter_javascript,
        {u"javascript/highlights.scm"_s},
-       {}});
+       {},
+       {u"javascript/folds.scm"_s}});
   add({u"html"_s,
        u"HTML"_s,
        {u"html"_s, u"htm"_s, u"xhtml"_s},
@@ -155,7 +159,8 @@ LanguageRegistry::LanguageRegistry() {
        {u"htm"_s},
        &tree_sitter_html,
        {u"html/highlights.scm"_s},
-       {u"html/injections.scm"_s}});
+       {u"html/injections.scm"_s},
+       {u"html/folds.scm"_s}});
   add({u"xml"_s,
        u"XML"_s,
        {u"xml"_s, u"xsd"_s, u"xsl"_s, u"xslt"_s, u"svg"_s, u"plist"_s, u"rss"_s, u"atom"_s, u"xaml"_s,
@@ -165,7 +170,8 @@ LanguageRegistry::LanguageRegistry() {
        {u"svg"_s},
        &tree_sitter_xml,
        {u"xml/highlights.scm"_s},
-       {}});
+       {},
+       {u"xml/folds.scm"_s}});
   add({u"markdown"_s,
        u"Markdown"_s,
        {u"md"_s, u"markdown"_s, u"mdown"_s, u"mkd"_s},
@@ -174,10 +180,11 @@ LanguageRegistry::LanguageRegistry() {
        {u"md"_s},
        &tree_sitter_markdown,
        {u"markdown/highlights.scm"_s},
-       {u"markdown/injections.scm"_s}});
+       {u"markdown/injections.scm"_s},
+       {u"markdown/folds.scm"_s}});
   LanguageInfo inlineMd{
     u"markdown_inline"_s, u"Markdown (inline)"_s, {}, {}, {}, {},
-    &tree_sitter_markdown_inline, {u"markdown_inline/highlights.scm"_s}, {u"markdown_inline/injections.scm"_s}};
+    &tree_sitter_markdown_inline, {u"markdown_inline/highlights.scm"_s}, {u"markdown_inline/injections.scm"_s}, {}};
   inlineMd.selectable = false;
   add(std::move(inlineMd));
 }
@@ -265,10 +272,13 @@ std::shared_ptr<const CompiledLanguage> LanguageRegistry::compiled(const QString
   };
   result->highlights = build(info->highlightQueries);
   result->injections = build(info->injectionQueries);
+  result->folds = build(info->foldQueries);
   if (result->highlights)
     result->highlightInfo = QueryInfo::analyze(result->highlights);
   if (result->injections)
     result->injectionInfo = QueryInfo::analyze(result->injections);
+  if (result->folds)
+    result->foldInfo = QueryInfo::analyze(result->folds);
   cache.emplace(info->id, result);
   return result;
 }

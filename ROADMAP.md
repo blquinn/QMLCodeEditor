@@ -246,15 +246,15 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 - [x] **FOLD-01** Real `FoldMap` replacing the identity layer — done 2026-10-03
   - Hidden buffer ranges map to zero rows; O(log n) lookups ([ADR 0004](docs/adr/0004-display-map.md)).
-- [ ] **FOLD-02** Fold range provider from tree-sitter `folds.scm`
-- [ ] **FOLD-03** Indent-based fold fallback for languages without queries
+- [x] **FOLD-02** Fold range provider from tree-sitter `folds.scm` — done 2026-10-03
+- [x] **FOLD-03** Indent-based fold fallback for languages without queries — done 2026-10-03
 - [ ] **FOLD-04** Fold gutter column
   - Chevrons on foldable lines; click toggles; hover highlights the range.
 - [ ] **FOLD-05** Folded-region placeholder rendering
   - Inline "…" chip that expands on click.
 - [ ] **FOLD-06** Cursor/selection/edit semantics across folds
   - Cursor entering a fold unfolds it, or skips it, by setting; edits inside keep anchors valid.
-- [ ] **FOLD-07** Fold commands
+- [x] **FOLD-07** Fold commands — done 2026-10-03
   - Fold/unfold at cursor, fold all, unfold all, fold to level N.
 - [x] **FOLD-08** Fold state kept as anchored ranges ([ADR 0006](docs/adr/0006-anchored-decorations.md)) — done 2026-10-03
 - [ ] **FOLD-09** Folding benchmarks and ADR

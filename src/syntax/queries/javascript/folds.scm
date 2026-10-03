@@ -1,0 +1,10 @@
+(statement_block) @fold
+(class_body) @fold
+(switch_body) @fold
+(object) @fold
+(array) @fold
+(template_string) @fold
+(arguments) @fold
+(formal_parameters) @fold
+(jsx_element) @fold
+(comment) @fold

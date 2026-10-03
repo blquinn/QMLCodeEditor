@@ -25,6 +25,7 @@ struct LanguageInfo {
   const TSLanguage *(*grammar)() = nullptr;
   QStringList highlightQueries;
   QStringList injectionQueries;
+  QStringList foldQueries; // captures @fold: nodes that can be folded (FOLD-02)
   bool selectable = true; // false for languages only reached through injection
 };
 
@@ -35,8 +36,10 @@ struct CompiledLanguage {
   const TSLanguage *language = nullptr;
   TSQuery *highlights = nullptr; // null when there are no (compilable) queries
   TSQuery *injections = nullptr;
+  TSQuery *folds = nullptr;
   QueryInfo highlightInfo;  // capture styles and predicates, valid when `highlights` is
   QueryInfo injectionInfo;
+  QueryInfo foldInfo;
   QStringList warnings; // patterns that had to be dropped, with the reason
 
   CompiledLanguage() = default;

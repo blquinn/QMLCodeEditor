@@ -66,10 +66,10 @@ private:
   std::unordered_map<qsizetype, QList<FoldRange>> m_blocks;
 };
 
-// Where a range whose node ends at (endRow, endColumn) should stop hiding: the row before when the
-// node ends at column 0 or when the end row only holds a closing token (`}`, `)`, `</div>`, a code
-// fence, `*/`), so that line stays visible; the end row otherwise.
-qsizetype foldEndLine(const Rope &rope, qsizetype endRow, qsizetype endColumn);
+// Where a range whose node ends at (endRow, endColumn) should stop hiding. A node ending at column 0
+// ends on the row before. The last row stays visible when it only holds a closing token (`}`, `)`,
+// `</div>`, a code fence, `*/`), or always with `keepLastLine`.
+qsizetype foldEndLine(const Rope &rope, qsizetype endRow, qsizetype endColumn, bool keepLastLine = false);
 
 // Nesting level of each range, 1 for outermost. `ranges` must be ordered by header.
 QList<int> foldDepths(const QList<FoldRange> &ranges);

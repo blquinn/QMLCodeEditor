@@ -185,15 +185,18 @@ QList<FoldRange> IndentFoldProvider::foldRanges(const TextSnapshot &text, qsizet
   return out;
 }
 
-qsizetype foldEndLine(const Rope &rope, qsizetype endRow, qsizetype endColumn) {
-  if (endColumn <= 0)
-    return endRow - 1;
-  const qsizetype start = rope.lineStart(endRow);
-  const QString prefix = rope.toString(start, start + qMin(endColumn, rope.lineLength(endRow))).trimmed();
-  if (prefix.isEmpty())
-    return endRow - 1;
+qsizetype foldEndLine(const Rope &rope, qsizetype endRow, qsizetype endColumn, bool keepLastLine) {
   static const QRegularExpression closer(uR"(^(?:[)\]}>]+[;,]?|</[^<>]*>|`{3,}|~{3,}|\*/)$)"_s);
-  return closer.match(prefix).hasMatch() ? endRow - 1 : endRow;
+  // A node that ends at the start of a line really ends on the line before, wholly.
+  const bool wholeLine = endColumn <= 0;
+  const qsizetype row = wholeLine ? endRow - 1 : endRow;
+  if (row < 0)
+    return row;
+  if (wholeLine)
+    return keepLastLine ? row - 1 : row;
+  const qsizetype start = rope.lineStart(row);
+  const QString text = rope.toString(start, start + qMin(endColumn, rope.lineLength(row))).trimmed();
+  return keepLastLine || text.isEmpty() || closer.match(text).hasMatch() ? row - 1 : row;
 }
 
 QList<int> foldDepths(const QList<FoldRange> &ranges) {

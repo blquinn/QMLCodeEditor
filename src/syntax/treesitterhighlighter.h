@@ -1,6 +1,7 @@
 #ifndef QCE_TREESITTERHIGHLIGHTER_H
 #define QCE_TREESITTERHIGHLIGHTER_H
 
+#include "core/foldprovider.h"
 #include "core/highlighter.h"
 #include "core/textchange.h"
 #include "core/textdocument.h"
@@ -19,6 +20,22 @@
 namespace qce {
 
 struct HighlightMailbox;
+class TreeSitterHighlighter;
+
+// Fold ranges from the highlighter's syntax tree (FOLD-02): the nodes a language's folds.scm captures.
+// Lines the tree does not cover (no grammar queries, no tree yet, outside a windowed parse) fall back to
+// indentation. Created and owned by the highlighter.
+class TreeSitterFoldProvider : public FoldProvider {
+  Q_OBJECT
+public:
+  TreeSitterFoldProvider(TreeSitterHighlighter *owner);
+  QList<FoldRange> foldRanges(const TextSnapshot &text, qsizetype firstLine, qsizetype lastLine) override;
+  IndentFoldProvider *fallback() { return &m_fallback; }
+
+private:
+  TreeSitterHighlighter *m_owner;
+  IndentFoldProvider m_fallback;
+};
 
 // Highlights from tree-sitter (M6). The document is parsed on a worker thread over rope snapshots;
 // the GUI thread keeps the last tree, applies every edit to it at once (so spans stay in place
@@ -41,6 +58,8 @@ class TreeSitterHighlighter : public Highlighter {
   // Documents longer than this many UTF-16 units are only ever parsed one window at a time.
   Q_PROPERTY(qsizetype fullParseLimit READ fullParseLimit WRITE setFullParseLimit NOTIFY fullParseLimitChanged)
   Q_PROPERTY(bool parsing READ parsing NOTIFY parsingChanged)
+  // Where folds come from for CodeEditor.foldProvider.
+  Q_PROPERTY(qce::FoldProvider *folds READ folds CONSTANT)
 public:
   struct Stats {
     quint64 started = 0;
@@ -75,6 +94,7 @@ public:
   qsizetype windowSize() const { return m_windowCap; }
   void setWindowSize(qsizetype units);
 
+  FoldProvider *folds() { return &m_folds; }
   bool parsing() const { return m_running; }
   Stats stats() const { return m_stats; }
   // Extent of the current tree in UTF-16 units; the whole document when it is a full parse.
@@ -100,6 +120,11 @@ signals:
 
 private:
   friend struct HighlightMailbox;
+  friend class TreeSitterFoldProvider;
+  // Ranges for headers in [firstLine, lastLine] from the tree and injected layers; lines outside the
+  // tree's coverage come from `fallback`.
+  QList<FoldRange>
+  foldRangesImpl(const TextSnapshot &text, qsizetype firstLine, qsizetype lastLine, IndentFoldProvider &fallback);
 
   struct LoggedEdit {
     quint64 version;
@@ -162,6 +187,7 @@ private:
   QCache<qsizetype, Block> m_blocks{512};
   TSQueryCursor *m_cursor = nullptr;
   Stats m_stats;
+  TreeSitterFoldProvider m_folds{this};
 };
 
 } // namespace qce
