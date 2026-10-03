@@ -76,6 +76,30 @@ private slots:
     QCOMPARE(map.lineAtRow(99, &in), 2); // clamped
   }
 
+  void hiddenLinesHaveNoRows() {
+    WrapMap map;
+    map.reset(5000, 2, false);
+    map.setHidden(10, 3000, true);
+    QCOMPARE(map.rowCount(), 4000);
+    QCOMPARE(map.rowsOfLine(11), 0);
+    QCOMPARE(map.entry(11).rows, 2); // remembered for when it is shown again
+    QCOMPARE(map.firstRowOfLine(10), 20);
+    QCOMPARE(map.firstRowOfLine(3010), 20);
+    qsizetype in = -1;
+    QCOMPARE(map.lineAtRow(20, &in), 3010);
+    QCOMPARE(in, 0);
+    QCOMPARE(map.lineAtRow(19, &in), 9);
+    QCOMPARE(in, 1);
+    // Overwriting keeps the flag; splicing takes it from the entries.
+    map.setLine(11, {5, false});
+    QCOMPARE(map.rowCount(), 4000);
+    QCOMPARE(map.entry(11).rows, 5);
+    map.splice(11, 1, {{1, false, false}, {1, false, false}});
+    QCOMPARE(map.rowCount(), 4002);
+    map.setHidden(0, 100000, false);
+    QCOMPARE(map.rowCount(), 10000);
+  }
+
   void differentialAgainstList() {
     QRandomGenerator rng(7);
     WrapMap map;

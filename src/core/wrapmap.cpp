@@ -12,7 +12,7 @@ void WrapMap::summarize(Block &block) {
   block.rows = 0;
   block.estimated = 0;
   for (quint32 v : std::as_const(block.lines)) {
-    block.rows += v & ~kEstimated;
+    block.rows += visibleRows(v);
     block.estimated += (v & kEstimated) ? 1 : 0;
   }
 }
@@ -111,7 +111,7 @@ qsizetype WrapMap::firstRowOfLine(qsizetype line) const {
   qsizetype rows = fenwickPrefix(m_fenRows, b);
   const QList<quint32> &lines = m_blocks[b].lines;
   for (qsizetype i = 0; i < offset; ++i)
-    rows += lines[i] & ~kEstimated;
+    rows += visibleRows(lines[i]);
   return rows;
 }
 
@@ -127,7 +127,7 @@ qsizetype WrapMap::lineAtRow(qsizetype row, qsizetype *rowInLine) const {
   qsizetype line = fenwickPrefix(m_fenLines, b);
   const QList<quint32> &lines = m_blocks[b].lines;
   for (qsizetype i = 0; i < lines.size(); ++i) {
-    const qsizetype rows = lines[i] & ~kEstimated;
+    const qsizetype rows = visibleRows(lines[i]);
     if (rowOffset < rows) {
       if (rowInLine)
         *rowInLine = rowOffset;
@@ -165,8 +165,8 @@ void WrapMap::setLines(qsizetype first, const QList<Entry> &entries) {
     qsizetype deltaRows = 0, deltaEstimated = 0;
     for (; offset < block.lines.size() && i < entries.size(); ++offset, ++i) {
       const quint32 old = block.lines[offset];
-      const quint32 now = pack(entries[i]);
-      deltaRows += qsizetype(now & ~kEstimated) - qsizetype(old & ~kEstimated);
+      const quint32 now = pack(entries[i]) | (old & kHidden);
+      deltaRows += visibleRows(now) - visibleRows(old);
       deltaEstimated += ((now & kEstimated) ? 1 : 0) - ((old & kEstimated) ? 1 : 0);
       block.lines[offset] = now;
     }
@@ -176,6 +176,26 @@ void WrapMap::setLines(qsizetype first, const QList<Entry> &entries) {
     m_estimated += deltaEstimated;
     fenwickAdd(m_fenRows, b, deltaRows);
     fenwickAdd(m_fenEstimated, b, deltaEstimated);
+  }
+}
+
+void WrapMap::setHidden(qsizetype first, qsizetype count, bool hidden) {
+  first = qMax<qsizetype>(0, first);
+  const qsizetype end = qMin(first + count, m_lines);
+  while (first < end) {
+    qsizetype offset;
+    const qsizetype b = blockOfLine(first, &offset);
+    Block &block = m_blocks[b];
+    qsizetype deltaRows = 0;
+    for (; offset < block.lines.size() && first < end; ++offset, ++first) {
+      const quint32 old = block.lines[offset];
+      const quint32 now = hidden ? (old | kHidden) : (old & ~kHidden);
+      deltaRows += visibleRows(now) - visibleRows(old);
+      block.lines[offset] = now;
+    }
+    block.rows += deltaRows;
+    m_rows += deltaRows;
+    fenwickAdd(m_fenRows, b, deltaRows);
   }
 }
 

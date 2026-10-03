@@ -19,10 +19,11 @@ constexpr qsizetype kEagerUnits = 1 << 18; // text an edit wraps at once; more i
 
 } // namespace
 
-DisplayMap::DisplayMap(const TextDocument *document, QObject *parent)
+DisplayMap::DisplayMap(TextDocument *document, QObject *parent)
     : QObject(parent), m_document(document), m_fold(document) {
   connect(document, &TextDocument::changed, this, &DisplayMap::onChanged);
   connect(document, &TextDocument::textReset, this, [this] {
+    m_fold.unfoldAll();
     resetWrap();
     emit reset();
   });
@@ -47,7 +48,9 @@ void DisplayMap::resetWrap() {
   m_breaks.clear();
   m_wrap = WrapMap();
   if (wrapEnabled())
-    m_wrap.reset(m_fold.lineCount(), 1, true);
+    m_wrap.reset(m_document->rope().lineCount(), 1, true);
+  if (wrapEnabled() && m_fold.hasFolds())
+    syncHidden({0, m_wrap.lineCount() - 1});
   pumpBackground();
 }
 
@@ -71,13 +74,19 @@ void DisplayMap::onChanged(const TextChange &change) {
   const qsizetype oldLines = change.oldEndPos.line - first + 1;
   const qsizetype newLines = change.newEndPos.line - first + 1;
   if (!wrapEnabled()) {
-    // Rows are lines: the edit replaced the lines it touched with the lines it produced.
-    emit rowsChanged(first, oldLines, newLines);
+    // Rows are visible lines: the edit replaced those it touched with those it produced.
+    const qsizetype firstRow = m_fold.foldLineForBufferLine(first) + (m_fold.isHidden(first) ? 1 : 0);
+    const qsizetype oldRows = m_fold.visibleLinesIn(first, first + oldLines - 1);
+    const LineRange moved = m_fold.applyChange(change);
+    emit rowsChanged(firstRow, oldRows, m_fold.visibleLinesIn(first, first + newLines - 1));
+    if (!moved.isEmpty())
+      emit foldsChanged();
     return;
   }
 
   const qsizetype firstRow = m_wrap.firstRowOfLine(first);
   const qsizetype oldRows = m_wrap.firstRowOfLine(first + oldLines) - firstRow;
+  const LineRange moved = m_fold.applyChange(change);
 
   // An edit inside one huge line leaves the rows that start well before it as they were (wrapping
   // looks only a little beyond the end of a row). The indent can't have changed if the edit is
@@ -138,8 +147,15 @@ void DisplayMap::onChanged(const TextChange &change) {
     m_wrap.setLines(first, entries);
   else
     m_wrap.splice(first, oldLines, entries);
+  if (m_fold.hasFolds() || !moved.isEmpty()) {
+    LineRange sync = moved;
+    sync.unite(first, first + newLines - 1);
+    syncHidden(sync);
+  }
   const qsizetype newRows = m_wrap.firstRowOfLine(first + newLines) - firstRow;
   emit rowsChanged(firstRow, oldRows, newRows);
+  if (!moved.isEmpty())
+    emit foldsChanged();
   pumpBackground();
 }
 
@@ -156,6 +172,58 @@ void DisplayMap::shiftBreaks(qsizetype first, qsizetype oldCount, qsizetype newC
   }
   m_breaks = std::move(moved);
 }
+
+void DisplayMap::syncHidden(LineRange range) const {
+  if (!wrapEnabled() || range.isEmpty())
+    return;
+  range.last = qMin(range.last, m_wrap.lineCount() - 1);
+  range.first = qMax<qsizetype>(range.first, 0);
+  if (range.isEmpty())
+    return;
+  m_wrap.setHidden(range.first, range.last - range.first + 1, false);
+  for (const FoldMap::Hidden &h : m_fold.hiddenRanges()) {
+    if (h.last < range.first)
+      continue;
+    if (h.first > range.last)
+      break;
+    const qsizetype a = qMax(h.first, range.first), b = qMin(h.last, range.last);
+    m_wrap.setHidden(a, b - a + 1, true);
+  }
+}
+
+void DisplayMap::foldsDidChange(LineRange changed) {
+  if (changed.isEmpty())
+    return;
+  syncHidden(changed);
+  emit foldsChanged();
+  pumpBackground();
+}
+
+bool DisplayMap::fold(qsizetype header, qsizetype lastLine) {
+  const LineRange changed = m_fold.fold(header, lastLine);
+  foldsDidChange(changed);
+  return !changed.isEmpty();
+}
+
+bool DisplayMap::unfold(qsizetype header) {
+  const LineRange changed = m_fold.unfold(header);
+  foldsDidChange(changed);
+  return !changed.isEmpty();
+}
+
+bool DisplayMap::unfoldContaining(qsizetype line) {
+  const LineRange changed = m_fold.unfoldContaining(line);
+  foldsDidChange(changed);
+  return !changed.isEmpty();
+}
+
+bool DisplayMap::unfoldAll() {
+  const LineRange changed = m_fold.unfoldAll();
+  foldsDidChange(changed);
+  return !changed.isEmpty();
+}
+
+void DisplayMap::setFolds(const QList<FoldRange> &ranges) { foldsDidChange(m_fold.setFolds(ranges)); }
 
 qsizetype DisplayMap::rowCount() const { return wrapEnabled() ? m_wrap.rowCount() : m_fold.lineCount(); }
 
@@ -208,7 +276,7 @@ void DisplayMap::storeRows(qsizetype line, const LineBreaks &lb) const {
     return;
   const qsizetype firstRow = m_wrap.firstRowOfLine(line);
   m_wrap.setLine(line, {quint32(rows), !lb.complete});
-  if (old.rows != quint32(rows))
+  if (old.rows != quint32(rows) && !old.hidden)
     emit const_cast<DisplayMap *>(this)->rowsReestimated(firstRow, old.rows, rows);
 }
 
@@ -271,22 +339,32 @@ DisplayRow DisplayMap::rowAt(qsizetype row) const {
 }
 
 qsizetype DisplayMap::firstRowOfLine(qsizetype line) const {
-  line = m_fold.foldLineForBufferLine(line);
-  return wrapEnabled() ? m_wrap.firstRowOfLine(line) : line;
+  line = qBound<qsizetype>(0, line, m_document->rope().lineCount() - 1);
+  if (wrapEnabled())
+    return m_wrap.firstRowOfLine(line);
+  return m_fold.foldLineForBufferLine(line) + (m_fold.isHidden(line) ? 1 : 0);
 }
 
 qsizetype DisplayMap::rowCountOfLine(qsizetype line) const {
+  line = qBound<qsizetype>(0, line, m_document->rope().lineCount() - 1);
+  if (m_fold.isHidden(line))
+    return 0;
   if (!wrapEnabled())
     return 1;
-  line = m_fold.foldLineForBufferLine(line);
   resolve(line);
   return m_wrap.rowsOfLine(line);
 }
 
 qsizetype DisplayMap::rowForPosition(TextPosition position) const {
-  const qsizetype line = m_fold.foldLineForBufferLine(position.line);
+  position.line = qBound<qsizetype>(0, position.line, m_document->rope().lineCount() - 1);
+  if (m_fold.isHidden(position.line)) {
+    // Text inside a fold is shown by the end of its header.
+    position.line = m_fold.visibleHeaderOf(position.line);
+    position.column = lineLength(position.line);
+  }
+  const qsizetype line = position.line;
   if (!wrapEnabled())
-    return line;
+    return m_fold.foldLineForBufferLine(line);
   resolve(line, position.column);
   const WrapMap::Entry e = m_wrap.entry(line);
   qsizetype rowInLine = 0;

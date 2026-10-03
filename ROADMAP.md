@@ -244,7 +244,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria:** fold/unfold via gutter and keyboard on a large file; folds survive edits; wrap and folding compose correctly (a folded wrapped line is one row group); fold state doesn't slow scrolling.
 
-- [ ] **FOLD-01** Real `FoldMap` replacing the identity layer
+- [x] **FOLD-01** Real `FoldMap` replacing the identity layer — done 2026-10-03
   - Hidden buffer ranges map to zero rows; O(log n) lookups ([ADR 0004](docs/adr/0004-display-map.md)).
 - [ ] **FOLD-02** Fold range provider from tree-sitter `folds.scm`
 - [ ] **FOLD-03** Indent-based fold fallback for languages without queries
@@ -256,7 +256,11 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - Cursor entering a fold unfolds it, or skips it, by setting; edits inside keep anchors valid.
 - [ ] **FOLD-07** Fold commands
   - Fold/unfold at cursor, fold all, unfold all, fold to level N.
-- [ ] **FOLD-08** Fold state kept as anchored ranges ([ADR 0006](docs/adr/0006-anchored-decorations.md))
+- [x] **FOLD-08** Fold state kept as anchored ranges ([ADR 0006](docs/adr/0006-anchored-decorations.md)) — done 2026-10-03
+- [ ] **FOLD-09** Folding benchmarks and ADR
+  - Fold all / toggle / keystroke with many folds, scroll with folds on (with and without wrap) against the no-fold baseline; ADR 0014 records the design.
+- [ ] **FOLD-10** Demo integration
+  - `FoldColumn` in the demo gutter, a Fold menu (cursor, all, levels, cursor policy), tree-sitter ranges wired to the editor.
 
 ## M8 — Multi-cursor
 

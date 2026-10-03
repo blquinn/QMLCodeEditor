@@ -19,6 +19,8 @@ public:
   struct Entry {
     quint32 rows = 1; // at least 1
     bool estimated = false;
+    // Folded away: the line keeps its row count (for when it is shown again) but occupies no rows.
+    bool hidden = false;
   };
 
   qsizetype lineCount() const { return m_lines; }
@@ -29,7 +31,11 @@ public:
   void reset(qsizetype lines, quint32 rows, bool estimated);
 
   Entry entry(qsizetype line) const;
-  quint32 rowsOfLine(qsizetype line) const { return entry(line).rows; }
+  // Rows the line occupies now: none while hidden.
+  quint32 rowsOfLine(qsizetype line) const {
+    const Entry e = entry(line);
+    return e.hidden ? 0 : e.rows;
+  }
   bool isEstimated(qsizetype line) const { return entry(line).estimated; }
   // Row index of the first row of `line`; lineCount() gives rowCount().
   qsizetype firstRowOfLine(qsizetype line) const;
@@ -38,21 +44,31 @@ public:
   // First estimated line at or after `fromLine`, or -1.
   qsizetype nextEstimated(qsizetype fromLine) const;
 
-  // Overwrites the entries of lines [first, first + entries.size()).
+  // Hides or shows lines [first, first + count); their row counts are kept.
+  void setHidden(qsizetype first, qsizetype count, bool hidden);
+  // Overwrites the entries of lines [first, first + entries.size()), except that each line keeps its
+  // hidden flag.
   void setLines(qsizetype first, const QList<Entry> &entries);
   void setLine(qsizetype line, Entry entry) { setLines(line, {entry}); }
-  // Lines [first, first + oldCount) are replaced by `entries` (any number); later lines shift.
+  // Lines [first, first + oldCount) are replaced by `entries` (any number, hidden flags included);
+  // later lines shift.
   void splice(qsizetype first, qsizetype oldCount, const QList<Entry> &entries);
 
 private:
   struct Block {
-    QList<quint32> lines; // rows, with kEstimated set on estimates
+    QList<quint32> lines; // rows, with kEstimated / kHidden set on estimates / folded-away lines
     qsizetype rows = 0;
     qsizetype estimated = 0;
   };
   static constexpr quint32 kEstimated = 0x80000000u;
-  static quint32 pack(Entry e) { return qMax<quint32>(1, e.rows) | (e.estimated ? kEstimated : 0); }
-  static Entry unpack(quint32 v) { return {v & ~kEstimated, (v & kEstimated) != 0}; }
+  static constexpr quint32 kHidden = 0x40000000u;
+  static constexpr quint32 kRowsMask = 0x3fffffffu;
+  static quint32 pack(Entry e) {
+    return qMin(qMax<quint32>(1, e.rows), kRowsMask) | (e.estimated ? kEstimated : 0) | (e.hidden ? kHidden : 0);
+  }
+  static Entry unpack(quint32 v) { return {v & kRowsMask, (v & kEstimated) != 0, (v & kHidden) != 0}; }
+  // Rows a packed value adds to the sums.
+  static qsizetype visibleRows(quint32 v) { return (v & kHidden) ? 0 : qsizetype(v & kRowsMask); }
   static void summarize(Block &block);
 
   void rebuildIndex();

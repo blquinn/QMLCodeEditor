@@ -47,6 +47,7 @@ private slots:
     TextDocument doc;
     doc.setText(u"a\nb\nc"_s);
     FoldMap fold(&doc);
+    QVERIFY(!fold.hasFolds());
     QCOMPARE(fold.lineCount(), 3);
     QCOMPARE(fold.foldLineForBufferLine(2), 2);
     QCOMPARE(fold.bufferLineForFoldLine(9), 2);

@@ -33,8 +33,9 @@ struct DisplayRow {
 // The only authority on how buffer text maps to on-screen rows (ADR 0004, ADR 0011). Rendering,
 // scrolling, hit-testing and cursor movement ask it and never assume one buffer line is one row.
 //
-// Layers: buffer lines -> FoldMap (identity until FOLD-01) -> WrapMap -> display rows. With wrap off
-// a row is a line. With wrap on, a line's row count lives in a WrapMap and is exact once the line
+// Layers: buffer lines -> FoldMap -> WrapMap -> display rows. With wrap off a row is a visible line.
+// The WrapMap is indexed by buffer line; folded-away lines are flagged hidden in it and occupy no
+// rows. With wrap on, a line's row count lives in a WrapMap and is exact once the line
 // has been wrapped; until then it is an estimate. Queries wrap the lines they touch on demand, so
 // the answer for the row or position asked about is always exact, while rows far away may shift as
 // their lines get wrapped (see rowsReestimated).
@@ -44,9 +45,20 @@ public:
   // Lines longer than this are wrapped a few rows at a time instead of whole.
   static constexpr qsizetype kHugeLine = 1 << 16;
 
-  explicit DisplayMap(const TextDocument *document, QObject *parent = nullptr);
+  explicit DisplayMap(TextDocument *document, QObject *parent = nullptr);
 
   const TextDocument *document() const { return m_document; }
+
+  // Folding (ADR 0014). The fold layer decides which lines have rows; mutations here keep the wrap
+  // layer in step and report through foldsChanged().
+  const FoldMap &folds() const { return m_fold; }
+  bool fold(qsizetype header, qsizetype lastLine);
+  bool unfold(qsizetype header);
+  // Unfolds every fold hiding `line` (the way cursors and edits reveal text).
+  bool unfoldContaining(qsizetype line);
+  bool unfoldAll();
+  // Replaces all folds at once.
+  void setFolds(const QList<FoldRange> &ranges);
 
   // Turns wrapping on, off or changes its width. Every line becomes an estimate again.
   void setWrapConfig(const WrapConfig &config);
@@ -77,6 +89,8 @@ signals:
   // Everything is new (text reset or wrap settings changed); rebuild whatever you derived from row
   // numbers.
   void reset();
+  // Lines were folded or unfolded; rows after the first changed one moved. Nothing in the text changed.
+  void foldsChanged();
   // Background wrapping finished a chunk; this many lines are still estimates.
   void wrapProgress(qsizetype estimatedLines);
 
@@ -92,6 +106,9 @@ private:
 
   void onChanged(const TextChange &change);
   void resetWrap();
+  // Makes the WrapMap's hidden flags agree with the fold layer for lines [range.first, range.last].
+  void syncHidden(LineRange range) const;
+  void foldsDidChange(LineRange changed);
   qsizetype lineLength(qsizetype line) const;
   qsizetype estimateRows(qsizetype units, qreal indent) const;
   LineBreaks &breaksFor(qsizetype line) const;
@@ -119,7 +136,7 @@ private:
   void pumpBackground();
   void applyChunk(const ChunkResult &result);
 
-  const TextDocument *m_document;
+  TextDocument *m_document;
   FoldMap m_fold;
   bool m_background = true;
   quint64 m_generation = 1; // bumped when the config changes, so stale chunks are dropped
