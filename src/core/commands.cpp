@@ -525,6 +525,27 @@ bool selectAllOccurrences(EditContext &ctx, bool *capped) {
   return true;
 }
 
+bool boxSelect(EditContext &ctx, qsizetype anchorRow, qreal anchorX, qsizetype headRow, qreal headX) {
+  if (!ctx.map || !ctx.layout)
+    return false;
+  const qsizetype last = ctx.map->rowCount() - 1;
+  anchorRow = qBound<qsizetype>(0, anchorRow, last);
+  headRow = qBound<qsizetype>(0, headRow, last);
+  const qsizetype limit = qMax(1, ctx.settings.maxSelections);
+  if (qAbs(headRow - anchorRow) >= limit)
+    anchorRow = headRow + (anchorRow < headRow ? -(limit - 1) : limit - 1);
+  const qsizetype first = qMin(anchorRow, headRow), end = qMax(anchorRow, headRow);
+  SelectionList list;
+  list.reserve(end - first + 1);
+  for (qsizetype row = first; row <= end; ++row) {
+    const DisplayRow displayRow = ctx.map->rowAt(row);
+    list.append({ctx.layout->offsetForX(displayRow, anchorX), ctx.layout->offsetForX(displayRow, headX)});
+  }
+  ctx.document.breakUndoCoalescing();
+  ctx.selections.set(list, int(headRow - first));
+  return true;
+}
+
 bool collapseSelections(EditContext &ctx) {
   if (ctx.selections.count() < 2)
     return false;

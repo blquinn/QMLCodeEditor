@@ -698,6 +698,22 @@ void CodeEditor::handlePress(QMouseEvent *event, bool doubleClick) {
     return;
   }
 
+  // Alt (or Shift+Alt, which window managers leave alone) and drag: column selection.
+  if ((event->modifiers() & Qt::AltModifier) && !(event->modifiers() & Qt::ControlModifier)) {
+    m_document.breakUndoCoalescing();
+    m_clickCount = 0;
+    m_dragging = true;
+    m_dragUnit = DragUnit::Box;
+    m_dragPos = event->position();
+    m_boxAnchorRow = qBound<qsizetype>(
+      0, qsizetype(std::floor((event->position().y() + m_contentY) / m_metrics.lineHeight())), m_map.rowCount() - 1
+    );
+    m_boxAnchorX = qMax<qreal>(0, event->position().x() - m_gutterWidth + m_contentX);
+    updateDrag();
+    event->accept();
+    return;
+  }
+
   // Ctrl+click adds a cursor (and dragging makes it a selection); on an existing one it removes it.
   const Qt::KeyboardModifiers mods = event->modifiers();
   if ((mods & Qt::ControlModifier) && !(mods & (Qt::AltModifier | Qt::ShiftModifier))) {
@@ -761,7 +777,15 @@ void CodeEditor::mouseDoubleClickEvent(QMouseEvent *event) { handlePress(event, 
 // side of the first unit the pointer is.
 void CodeEditor::updateDrag() {
   const qsizetype offset = positionAt(m_dragPos.x(), m_dragPos.y());
-  if (m_dragUnit == DragUnit::Add) {
+  if (m_dragUnit == DragUnit::Box) {
+    const qsizetype row = qBound<qsizetype>(
+      0, qsizetype(std::floor((m_dragPos.y() + m_contentY) / m_metrics.lineHeight())), m_map.rowCount() - 1
+    );
+    qce::EditContext ctx = editContext();
+    qce::commands::boxSelect(
+      ctx, m_boxAnchorRow, m_boxAnchorX, row, qMax<qreal>(0, m_dragPos.x() - m_gutterWidth + m_contentX)
+    );
+  } else if (m_dragUnit == DragUnit::Add) {
     qce::SelectionList list = m_dragBase;
     list.append({m_dragAnchor, offset});
     m_selections.set(list, int(list.size()) - 1);

@@ -403,6 +403,8 @@ private:
   qsizetype m_dragAnchor = 0;
   QPair<qsizetype, qsizetype> m_dragInitial;
   QPointF m_dragPos;
+  qsizetype m_boxAnchorRow = 0; // Box: where the column selection began (display row, content x)
+  qreal m_boxAnchorX = 0;
   qce::SelectionList m_dragBase; // Add: the selections the drag adds to
   QTimer m_autoScrollTimer;
   int m_clickCount = 0;

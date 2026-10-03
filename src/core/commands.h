@@ -96,6 +96,12 @@ bool addNextOccurrence(EditContext &ctx);
 // up to settings.maxSelections; `*capped` says the limit cut it short. The primary stays the first
 // occurrence at or after the old one.
 bool selectAllOccurrences(EditContext &ctx, bool *capped = nullptr);
+// Column selection: one selection per display row from `anchorRow` to `headRow`, each from the
+// offset nearest `anchorX` to the one nearest `headX` (content x, per CursorLayout). Rows too short
+// to reach the box get a selection clamped to their end, so typing lands on every row. The primary
+// is the head row's. Clamped to settings.maxSelections rows around the head. No map or layout:
+// does nothing and returns false.
+bool boxSelect(EditContext &ctx, qsizetype anchorRow, qreal anchorX, qsizetype headRow, qreal headX);
 // Keeps only the primary selection; false when there is just one.
 bool collapseSelections(EditContext &ctx);
 

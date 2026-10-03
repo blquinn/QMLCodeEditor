@@ -695,6 +695,26 @@ private slots:
     QCOMPARE(editor->selectionCount(), 1);
   }
 
+  void altDragSelectsAColumn() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("abcdef\nab\nabcdef"));
+    QTest::mousePress(view.get(), Qt::LeftButton, Qt::AltModifier, cellPoint(editor, 0, 1), 10);
+    QTest::mouseMove(view.get(), cellPoint(editor, 2, 4));
+    QTest::mouseRelease(view.get(), Qt::LeftButton, Qt::AltModifier, cellPoint(editor, 2, 4), 10);
+    QCOMPARE(editor->selectionCount(), 3);
+    QCOMPARE(editor->selectionStart(), 7 + 3 + 1);
+    QCOMPARE(editor->selectionEnd(), 7 + 3 + 4);
+    editor->insert(QStringLiteral("|"));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("a|ef\na|\na|ef"));
+    editor->undo();
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("abcdef\nab\nabcdef"));
+    // an Alt click on its own leaves a single cursor
+    QTest::mouseClick(view.get(), Qt::LeftButton, Qt::AltModifier, cellPoint(editor, 0, 2), 10);
+    QCOMPARE(editor->selectionCount(), 1);
+    QCOMPARE(editor->cursorPosition(), 2);
+  }
+
   void addCursorApi() {
     auto [view, editor] = showEditor();
     QVERIFY(editor);

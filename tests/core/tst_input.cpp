@@ -540,6 +540,37 @@ private slots:
     QVERIFY(capped);
     QCOMPARE(g.sel.count(), 3);
   }
+
+  void boxSelectCoversRowsAndClampsShortOnes() {
+    Fixture f(u"abcdef\nab\nabcdefgh\nxyz"_s);
+    QVERIFY(commands::boxSelect(f.ctx, 0, 1, 2, 4));
+    QCOMPARE(f.sel.selections(), (SelectionList{{1, 4}, {8, 9}, {11, 14}}));
+    QCOMPARE(f.sel.primaryIndex(), 2);
+    f.type(u"-"_s); // replaces the box on every row
+    QCOMPARE(f.text(), u"a-ef\na-\na-efgh\nxyz"_s);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+    f.key(Qt::Key_Z, Qt::ControlModifier);
+
+    // dragging up and to the left flips the selections and moves the primary to the top row
+    QVERIFY(commands::boxSelect(f.ctx, 2, 4, 0, 1));
+    QCOMPARE(f.sel.selections(), (SelectionList{{4, 1}, {9, 8}, {14, 11}}));
+    QCOMPARE(f.sel.primaryIndex(), 0);
+
+    // no width: a column of cursors, short rows get one at their end
+    QVERIFY(commands::boxSelect(f.ctx, 0, 5, 3, 5));
+    QCOMPARE(f.sel.selections(), (SelectionList{{5, 5}, {9, 9}, {15, 15}, {22, 22}}));
+  }
+
+  void boxSelectFollowsTabsAndFolds() {
+    Fixture f(u"\tab\nabcdef"_s);
+    QVERIFY(commands::boxSelect(f.ctx, 0, 4, 1, 5));
+    QCOMPARE(f.sel.selections(), (SelectionList{{1, 2}, {8, 9}}));
+
+    Fixture g(u"a\nb\nc\nd"_s);
+    g.map.fold(0, 2);
+    QVERIFY(commands::boxSelect(g.ctx, 0, 0, 1, 1));
+    QCOMPARE(g.sel.selections(), (SelectionList{{0, 1}, {6, 7}})); // the display rows: line 0 and line 3
+  }
 };
 
 QTEST_MAIN(TstInput)
