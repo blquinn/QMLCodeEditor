@@ -1308,16 +1308,28 @@ void CodeEditor::buildOverlays() {
   };
   const qreal cell = m_metrics.cellAdvance();
 
-  // Selections are sorted, so rows outside the plan are skipped without looking at their text.
+  // Selections are sorted, so the ones that can show are found by binary search and the rest (there
+  // may be tens of thousands) are never looked at. The range runs from the first plan row's line to
+  // the start of the visible line after the last one, which takes in the text folded under it.
+  if (m_planLast < m_planFirst || m_planFirst < 0)
+    return;
+  const qsizetype firstLine = m_map.rowAt(m_planFirst).line;
+  const qsizetype afterLine = m_map.folds().nextVisibleLine(m_map.rowAt(m_planLast).line);
+  const qsizetype lowOffset = rope.lineStart(firstLine);
+  const qsizetype highOffset = afterLine < rope.lineCount() ? rope.lineStart(afterLine) : rope.length();
+  const qreal viewLeft = m_contentX - cell, viewRight = m_contentX + textViewportWidth() + cell;
   const int primary = m_selections.primaryIndex();
-  for (int i = 0; i < m_selections.count(); ++i) {
+  for (int i = m_selections.lowerBound(lowOffset); i < m_selections.count(); ++i) {
     const qce::Selection sel = m_selections.at(i);
+    if (sel.start() > highOffset)
+      break;
     const qce::TextPosition head = m_map.visiblePosition(rope.positionAt(sel.head));
     const qsizetype headRow = m_map.rowForPosition(head);
     if (const qce::LineLayout *layout = planLayout(headRow)) {
       const qreal x = i == primary && layout->preeditLength > 0 ? preeditCursorX(*layout)
                                                                   : xForColumn(*layout, head.column);
-      m_cursorSpans.append({headRow, x, x + 2});
+      if (x >= viewLeft && x <= viewRight)
+        m_cursorSpans.append({headRow, x, x + 2});
     }
     if (i == primary && sel.isEmpty()) {
       // The highlight covers every row of the cursor's line.
@@ -1339,7 +1351,7 @@ void CodeEditor::buildOverlays() {
       // as one more cell.
       const qreal x1 = row == endRow ? xForColumn(*layout, end.column)
                                      : layout->indentX + layout->width + (layout->endsLine ? cell : 0);
-      if (x1 > x0)
+      if (x1 > x0 && x1 >= viewLeft && x0 <= viewRight)
         m_selectionSpans.append({row, x0, x1});
     }
   }

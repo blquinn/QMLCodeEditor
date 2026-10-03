@@ -1,0 +1,333 @@
+{
+    "meta": {
+        "compiler": "clang 22.1.8 (Fedora 22.1.8-4.fc44)",
+        "cores": 20,
+        "cpu": "AMD Ryzen AI 9 365 w/ Radeon 880M",
+        "date": "2026-10-03T17:08:14Z",
+        "optimized": true,
+        "os": "Fedora Linux 44 (Workstation Edition)",
+        "qt": "6.11.2",
+        "suite": "bench_typing"
+    },
+    "results": [
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 1610035,
+            "median_ns": 1610035,
+            "median_ns_per_item": 1610035,
+            "min_ns": 1610035,
+            "name": "short_100MB/lines",
+            "p95_ns": 1610035,
+            "unit": "count"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 1062311.13,
+            "median_ns": 945881.5,
+            "median_ns_per_item": 945881.5,
+            "min_ns": 459392,
+            "name": "typing/short_100MB/type_char/key_to_frame",
+            "p95_ns": 1776917,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 191104.45,
+            "median_ns": 177628.5,
+            "median_ns_per_item": 177628.5,
+            "min_ns": 81730,
+            "name": "typing/short_100MB/type_char/key_handling",
+            "p95_ns": 363663,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 5045983,
+            "median_ns": 5045983,
+            "median_ns_per_item": 5045983,
+            "min_ns": 5045983,
+            "name": "typing/short_100MB/type_char/key_to_frame_max",
+            "p95_ns": 5045983,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 687021.5778894472,
+            "median_ns": 687021.5778894472,
+            "median_ns_per_item": 687021.5778894472,
+            "min_ns": 687021.5778894472,
+            "name": "typing/short_100MB/type_char/polish_mean",
+            "p95_ns": 687021.5778894472,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 199,
+            "mean_ns": 540954.6582914573,
+            "median_ns": 254400,
+            "median_ns_per_item": 254400,
+            "min_ns": 22484,
+            "name": "typing/short_100MB/type_char/frame/sync",
+            "p95_ns": 1482680,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 199,
+            "mean_ns": 343995.743718593,
+            "median_ns": 330188,
+            "median_ns_per_item": 330188,
+            "min_ns": 105357,
+            "name": "typing/short_100MB/type_char/frame/render",
+            "p95_ns": 522415,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 198,
+            "mean_ns": 20577197.37878788,
+            "median_ns": 20355054,
+            "median_ns_per_item": 20355054,
+            "min_ns": 4132671,
+            "name": "typing/short_100MB/type_char/frame/interval",
+            "p95_ns": 36571806,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 1237330.95,
+            "median_ns": 1150192.5,
+            "median_ns_per_item": 1150192.5,
+            "min_ns": 556111,
+            "name": "typing/short_100MB/type_run/key_to_frame",
+            "p95_ns": 2140631,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 243146.62,
+            "median_ns": 210894,
+            "median_ns_per_item": 210894,
+            "min_ns": 78424,
+            "name": "typing/short_100MB/type_run/key_handling",
+            "p95_ns": 492818,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 2367256,
+            "median_ns": 2367256,
+            "median_ns_per_item": 2367256,
+            "min_ns": 2367256,
+            "name": "typing/short_100MB/type_run/key_to_frame_max",
+            "p95_ns": 2367256,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 46862.4,
+            "median_ns": 46862.4,
+            "median_ns_per_item": 46862.4,
+            "min_ns": 46862.4,
+            "name": "typing/short_100MB/type_run/polish_mean",
+            "p95_ns": 46862.4,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 128978.42,
+            "median_ns": 122866.5,
+            "median_ns_per_item": 122866.5,
+            "min_ns": 37333,
+            "name": "typing/short_100MB/type_run/frame/sync",
+            "p95_ns": 230873,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 312229.19,
+            "median_ns": 305610,
+            "median_ns_per_item": 305610,
+            "min_ns": 130166,
+            "name": "typing/short_100MB/type_run/frame/render",
+            "p95_ns": 467397,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 99,
+            "mean_ns": 41248289.93939394,
+            "median_ns": 41170351,
+            "median_ns_per_item": 41170351,
+            "min_ns": 40561445,
+            "name": "typing/short_100MB/type_run/frame/interval",
+            "p95_ns": 42213648,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 5706319.27,
+            "median_ns": 5629719,
+            "median_ns_per_item": 5629719,
+            "min_ns": 4449863,
+            "name": "typing/short_100MB/type_run_1000_cursors/key_to_frame",
+            "p95_ns": 6656213,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 3555786.44,
+            "median_ns": 3521756.5,
+            "median_ns_per_item": 3521756.5,
+            "min_ns": 3167446,
+            "name": "typing/short_100MB/type_run_1000_cursors/key_handling",
+            "p95_ns": 3874184,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 8728019,
+            "median_ns": 8728019,
+            "median_ns_per_item": 8728019,
+            "min_ns": 8728019,
+            "name": "typing/short_100MB/type_run_1000_cursors/key_to_frame_max",
+            "p95_ns": 8728019,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 509094.1,
+            "median_ns": 509094.1,
+            "median_ns_per_item": 509094.1,
+            "min_ns": 509094.1,
+            "name": "typing/short_100MB/type_run_1000_cursors/polish_mean",
+            "p95_ns": 509094.1,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 589012.21,
+            "median_ns": 620904,
+            "median_ns_per_item": 620904,
+            "min_ns": 225573,
+            "name": "typing/short_100MB/type_run_1000_cursors/frame/sync",
+            "p95_ns": 832724,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 523684.85,
+            "median_ns": 502831.5,
+            "median_ns_per_item": 502831.5,
+            "min_ns": 271493,
+            "name": "typing/short_100MB/type_run_1000_cursors/frame/render",
+            "p95_ns": 773358,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 99,
+            "mean_ns": 45703947.13131313,
+            "median_ns": 45617880,
+            "median_ns_per_item": 45617880,
+            "min_ns": 44470147,
+            "name": "typing/short_100MB/type_run_1000_cursors/frame/interval",
+            "p95_ns": 46650536,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 27614301.76,
+            "median_ns": 27658332,
+            "median_ns_per_item": 27658332,
+            "min_ns": 23980524,
+            "name": "typing/short_100MB/type_run_10000_cursors/key_to_frame",
+            "p95_ns": 29954669,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 23584973.71,
+            "median_ns": 23656212.5,
+            "median_ns_per_item": 23656212.5,
+            "min_ns": 20674005,
+            "name": "typing/short_100MB/type_run_10000_cursors/key_handling",
+            "p95_ns": 25282880,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 41476702,
+            "median_ns": 41476702,
+            "median_ns_per_item": 41476702,
+            "min_ns": 41476702,
+            "name": "typing/short_100MB/type_run_10000_cursors/key_to_frame_max",
+            "p95_ns": 41476702,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 1270165.97,
+            "median_ns": 1270165.97,
+            "median_ns_per_item": 1270165.97,
+            "min_ns": 1270165.97,
+            "name": "typing/short_100MB/type_run_10000_cursors/polish_mean",
+            "p95_ns": 1270165.97,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 1196034.9,
+            "median_ns": 1244482,
+            "median_ns_per_item": 1244482,
+            "min_ns": 703952,
+            "name": "typing/short_100MB/type_run_10000_cursors/frame/sync",
+            "p95_ns": 1501627,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 100,
+            "mean_ns": 794949.99,
+            "median_ns": 781513.5,
+            "median_ns_per_item": 781513.5,
+            "min_ns": 461075,
+            "name": "typing/short_100MB/type_run_10000_cursors/frame/render",
+            "p95_ns": 1058097,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 99,
+            "mean_ns": 67657357.91919191,
+            "median_ns": 67710939,
+            "median_ns_per_item": 67710939,
+            "min_ns": 63992541,
+            "name": "typing/short_100MB/type_run_10000_cursors/frame/interval",
+            "p95_ns": 70020092,
+            "unit": "ns"
+        }
+    ]
+}

@@ -141,6 +141,22 @@ private slots:
     doc.remove(1, 2);
     QCOMPARE(set.selections(), (SelectionList{{1, 1}, {3, 3}}));
   }
+
+  void manyAddsStaySorted() {
+    TextDocument doc;
+    doc.setText(QString(u"MMMMMMMMMM\n").repeated(5000));
+    SelectionSet set(&doc);
+    set.setSingle(0);
+    for (int line = 1; line < 5000; ++line)
+      set.add({line * 11 + 4, line * 11 + 4});
+    set.add({2500 * 11 + 1, 2500 * 11 + 3});
+    QCOMPARE(set.count(), 5001);
+    const SelectionList list = set.selections();
+    for (qsizetype i = 1; i < list.size(); ++i)
+      QVERIFY2(list[i].start() > list[i - 1].end(), qPrintable(QString::number(i)));
+    QCOMPARE(set.indexAt(2500 * 11 + 2), set.primaryIndex());
+    QCOMPARE(set.lowerBound(2500 * 11 + 1), set.primaryIndex());
+  }
 };
 
 QTEST_APPLESS_MAIN(TstSelectionSet)

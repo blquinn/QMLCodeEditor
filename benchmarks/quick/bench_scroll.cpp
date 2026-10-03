@@ -339,6 +339,10 @@ int main(int argc, char **argv) {
   parser.addOption({QStringLiteral("gutter"), QStringLiteral("Show line numbers, change bars and markers.")});
   parser.addOption({QStringLiteral("relative"), QStringLiteral("With --gutter: relative line numbers.")});
   parser.addOption({QStringLiteral("wrap"), QStringLiteral("Wrap at the viewport width.")});
+  parser.addOption(
+    {QStringLiteral("cursors"), QStringLiteral("Keep N cursors (one per line, spread through the file) while scrolling."),
+     QStringLiteral("n"), QStringLiteral("0")}
+  );
   parser.addOption({QStringLiteral("folds"), QStringLiteral("Fold 20,000 regions spread through the file.")});
   parser.addOption(
     {{QStringLiteral("f"), QStringLiteral("filter")},
@@ -388,6 +392,9 @@ int main(int argc, char **argv) {
     variant += QStringLiteral("gutter/");
   }
   const bool folds = parser.isSet(QStringLiteral("folds"));
+  const int cursors = parser.value(QStringLiteral("cursors")).toInt();
+  if (cursors > 0)
+    variant += QStringLiteral("cursors%1/").arg(cursors);
   if (folds)
     variant += QStringLiteral("folds/");
   if (parser.isSet(QStringLiteral("wrap"))) {
@@ -418,6 +425,14 @@ int main(int argc, char **argv) {
       if (markers)
         for (int i = 0; i < 100; ++i)
           markers->addMarker(editor->lineCount() / 100 * i, {{QStringLiteral("color"), QColor(Qt::red)}});
+      if (cursors > 0) {
+        const qce::Rope &rope = editor->document()->rope();
+        const qsizetype lines = editor->lineCount(), step = qMax<qsizetype>(1, lines / cursors);
+        editor->setCursorPosition(0);
+        for (int i = 1; i < cursors && i * step < lines; ++i)
+          editor->addSelection(rope.lineStart(i * step), rope.lineStart(i * step));
+        editor->setContentY(0);
+      }
       if (folds) {
         QElapsedTimer foldTimer;
         foldTimer.start();

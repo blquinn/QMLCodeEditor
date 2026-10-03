@@ -133,6 +133,19 @@ ApplicationWindow {
             MenuItem { text: qsTr("Select &All"); onTriggered: editor.selectAll() }
         }
         Menu {
+            title: qsTr("&Selection")
+            MenuItem { text: qsTr("Add cursor &above\tCtrl+Alt+Up"); onTriggered: editor.addCursorAbove() }
+            MenuItem { text: qsTr("Add cursor &below\tCtrl+Alt+Down"); onTriggered: editor.addCursorBelow() }
+            MenuItem { text: qsTr("Add &next occurrence\tCtrl+D"); onTriggered: editor.addNextOccurrence() }
+            MenuItem { text: qsTr("Select all &occurrences\tCtrl+Shift+L"); onTriggered: editor.selectAllOccurrences() }
+            MenuSeparator {}
+            MenuItem {
+                text: qsTr("&Single cursor\tEsc")
+                enabled: editor.selectionCount > 1
+                onTriggered: editor.collapseSelections()
+            }
+        }
+        Menu {
             title: qsTr("&View")
             width: 300 // room for a label and a spin box
             MenuItem {
@@ -354,7 +367,8 @@ ApplicationWindow {
                 }
                 Label { text: qsTr("%1 lines").arg(editor.lineCount.toLocaleString()) }
                 Label {
-                    text: qsTr("Ln %1, Col %2").arg(editor.cursorLine + 1).arg(editor.cursorColumn + 1)
+                    text: qsTr("Ln %1, Col %2").arg(editor.cursorLine + 1).arg(editor.cursorColumn + 1) +
+                          (editor.selectionCount > 1 ? qsTr(" (%1 cursors)").arg(editor.selectionCount) : "")
                           + (editor.selectionEnd > editor.selectionStart
                              ? qsTr("  (%1 selected)").arg(editor.selectionEnd - editor.selectionStart) : "")
                 }

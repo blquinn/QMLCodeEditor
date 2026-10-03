@@ -224,6 +224,26 @@ int main(int argc, char **argv) {
                     }}
           << Action{QStringLiteral("arrow_down"), [](QQuickView &v, CodeEditor &, std::mt19937_64 &) { sendKey(v, Qt::Key_Down); }, keepCursor};
 
+  // Multi-cursor (M8): a cursor at the start of each of N consecutive lines in the middle of the
+  // file, typing one character at all of them. The cursors are placed once and stay between
+  // samples, so every sample is a run of typing at N places (one undo step).
+  for (const int cursors : {1000, 10000}) {
+    auto place = [cursors](QQuickView &, CodeEditor &editor, std::mt19937_64 &) {
+      if (editor.selectionCount() == cursors)
+        return;
+      const qce::Rope &rope = editor.document()->rope();
+      const qsizetype first = editor.lineCount() / 2;
+      editor.setCursorPosition(rope.lineStart(first));
+      for (int i = 1; i < cursors; ++i)
+        editor.addSelection(rope.lineStart(first + i), rope.lineStart(first + i));
+      editor.ensureCursorVisible();
+    };
+    actions << Action{
+      QStringLiteral("type_run_%1_cursors").arg(cursors),
+      [](QQuickView &v, CodeEditor &, std::mt19937_64 &) { sendKey(v, Qt::Key_X, QStringLiteral("x")); }, place
+    };
+  }
+
   struct Input {
     QString label, path;
   };

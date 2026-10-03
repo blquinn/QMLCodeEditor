@@ -344,6 +344,52 @@ private slots:
     QCOMPARE(pixel(adv * 7, 0), theme->background());
   }
 
+  void manySelectionsDrawOnlyWhereVisible() {
+    QQuickView view(&m_engine, nullptr);
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->forceActiveFocus();
+    editor->setCursorBlinkInterval(0);
+    QString text;
+    for (int i = 0; i < 5000; ++i)
+      text += QStringLiteral("MMMMMMMMMM\n");
+    editor->setText(text);
+    const qce::Rope &rope = editor->document()->rope();
+    // A cursor on every line.
+    editor->setCursorPosition(4);
+    for (int line = 1; line < 5000; ++line)
+      editor->addSelection(rope.lineStart(line) + 4, rope.lineStart(line) + 4);
+    QCOMPARE(editor->selectionCount(), 5000);
+    const qreal lh = editor->metrics().lineHeight();
+    const qreal adv = editor->metrics().cellAdvance();
+    const auto *theme = editor->theme();
+    auto pixel = [&](qreal x, int row) {
+      return view.grabWindow().pixelColor(int(x), int((row + 1) * lh) - 1);
+    };
+    // Far from the top, the cursors in view are drawn.
+    editor->setContentY(2500 * lh - 3 * lh);
+    QTRY_VERIFY(editor->renderStats().rowsInPlan >= 3);
+    QTRY_COMPARE(pixel(adv * 4 + 1, 2), theme->cursor());
+    QCOMPARE(pixel(adv * 4 + 1, 4), theme->cursor());
+    QCOMPARE(pixel(adv * 1 + 1, 3), theme->background());
+    // A selection joins them on line 2500 (row 3 of the view). It is added in two steps: the software
+    // backend does not paint a rectangle node created in the same sync as a scroll offset change.
+    editor->addSelection(rope.lineStart(2500) + 1, rope.lineStart(2500) + 2);
+    QTest::qWait(100);
+    editor->addSelection(rope.lineStart(2500) + 1, rope.lineStart(2500) + 3);
+    QCOMPARE(editor->selectionCount(), 5001);
+    QTRY_COMPARE(pixel(adv * 1 + 1, 3), theme->selection());
+    QCOMPARE(pixel(adv * 6, 3), theme->background());
+    QCOMPARE(pixel(adv * 4 + 1, 2), theme->cursor());
+    // Back at the top, and at the very bottom.
+    editor->setContentY(0);
+    QTRY_COMPARE(pixel(adv * 4 + 1, 0), theme->cursor());
+    editor->setContentY(editor->contentHeight());
+    QTRY_COMPARE(pixel(adv * 4 + 1, 0), theme->cursor());
+  }
+
   void selectionFollowsEdits() {
     CodeEditor editor;
     editor.setText(QStringLiteral("0123456789"));
