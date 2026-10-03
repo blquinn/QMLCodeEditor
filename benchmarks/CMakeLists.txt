@@ -1,5 +1,8 @@
 add_subdirectory(harness)
 add_subdirectory(quick)
+if(QCE_SYNTAX)
+    add_subdirectory(syntax)
+endif()
 
 qt_add_executable(qce_datagen datagen/main.cpp)
 target_link_libraries(qce_datagen PRIVATE qce_bench qce_warnings)
