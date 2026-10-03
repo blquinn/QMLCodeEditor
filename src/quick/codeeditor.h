@@ -2,6 +2,7 @@
 #define CODEEDITOR_H
 
 #include "core/displaymap.h"
+#include "core/foldprovider.h"
 #include "core/highlighter.h"
 #include "core/commands.h"
 #include "core/cursorlayout.h"
@@ -36,6 +37,12 @@ struct HighlighterForeign {
   QML_FOREIGN(qce::Highlighter)
   QML_ANONYMOUS
 };
+// Same for FoldProvider (CodeEditor::foldProvider).
+struct FoldProviderForeign {
+  Q_GADGET
+  QML_FOREIGN(qce::FoldProvider)
+  QML_ANONYMOUS
+};
 } // namespace qce
 
 class CodeEditor : public QQuickItem {
@@ -50,6 +57,13 @@ public:
     WrapAtColumn    // rows are `wrapColumn` characters wide
   };
   Q_ENUM(WrapMode)
+
+  // What cursor movement does at a folded region (M7).
+  enum FoldCursorPolicy {
+    SkipFolds,    // movement steps over folded lines; the fold stays closed
+    UnfoldOnEnter // movement into a fold opens it
+  };
+  Q_ENUM(FoldCursorPolicy)
 
   Q_PROPERTY(qsizetype lineCount READ lineCount NOTIFY lineCountChanged FINAL)
   Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged FINAL)
@@ -91,6 +105,10 @@ public:
   Q_PROPERTY(bool wrapIndent READ wrapIndent WRITE setWrapIndent NOTIFY wrapIndentChanged FINAL)
   Q_PROPERTY(int wrapIndentExtra READ wrapIndentExtra WRITE setWrapIndentExtra NOTIFY wrapIndentExtraChanged FINAL)
   Q_PROPERTY(bool wrapping READ wrapping NOTIFY wrappingChanged FINAL)
+  Q_PROPERTY(qce::FoldProvider *foldProvider READ foldProvider WRITE setFoldProvider NOTIFY foldProviderChanged FINAL)
+  Q_PROPERTY(
+    FoldCursorPolicy foldCursorPolicy READ foldCursorPolicy WRITE setFoldCursorPolicy NOTIFY foldCursorPolicyChanged FINAL
+  )
   Q_PROPERTY(QQmlListProperty<qce::GutterColumn> gutterColumns READ gutterColumns FINAL)
   Q_PROPERTY(qreal gutterWidth READ gutterWidth NOTIFY gutterWidthChanged FINAL)
 public:
@@ -153,6 +171,30 @@ public:
   qreal textViewportWidth() const { return qMax<qreal>(0, width() - m_gutterWidth); }
   // What the columns painted for the last frame plan.
   const qce::GutterPlan &gutterPlan() const { return m_gutter; }
+
+  // Folding (M7). The provider says what can be folded; the default folds by indentation, and a
+  // SyntaxHighlighter's `folds` follows its grammar. Folds hide whole lines after a header line, keep
+  // following edits, and are opened by anything that puts the cursor inside them (except when the
+  // cursor policy is SkipFolds and the move was by keyboard, which steps over them instead).
+  // Never null: passing nullptr restores the default. The editor does not take ownership.
+  qce::FoldProvider *foldProvider() const { return m_foldProvider; }
+  void setFoldProvider(qce::FoldProvider *provider);
+  FoldCursorPolicy foldCursorPolicy() const { return m_foldPolicy; }
+  void setFoldCursorPolicy(FoldCursorPolicy policy);
+  // Fold ranges whose header line is in [firstLine, lastLine], for gutter columns.
+  QList<qce::FoldRange> foldRangesIn(qsizetype firstLine, qsizetype lastLine);
+  // All return whether anything changed. Lines are zero-based buffer lines.
+  Q_INVOKABLE bool fold(qsizetype line);
+  Q_INVOKABLE bool unfold(qsizetype line);
+  Q_INVOKABLE bool toggleFold(qsizetype line);
+  Q_INVOKABLE bool isFolded(qsizetype line) const;
+  // Fold the innermost region around the cursor that is open / open the fold at the cursor.
+  Q_INVOKABLE bool foldAtCursor();
+  Q_INVOKABLE bool unfoldAtCursor();
+  Q_INVOKABLE bool foldAll();
+  Q_INVOKABLE bool unfoldAll();
+  // Folds the regions of nesting level `level` (1 = outermost) and opens the rest.
+  Q_INVOKABLE bool foldToLevel(int level);
 
   const qce::DisplayMap &displayMap() const { return m_map; }
   const qce::TextMetrics &metrics() const { return m_metrics; }
@@ -285,6 +327,8 @@ signals:
   void wrapIndentExtraChanged();
   void wrappingChanged();
   void gutterWidthChanged();
+  void foldProviderChanged();
+  void foldCursorPolicyChanged();
   void loadFailed(const QString &error);
   void saved(const QString &path);
   void saveFailed(const QString &error);
@@ -301,6 +345,7 @@ protected:
   void mouseReleaseEvent(QMouseEvent *event) override;
   void mouseUngrabEvent() override;
   void hoverMoveEvent(QHoverEvent *event) override;
+  void hoverLeaveEvent(QHoverEvent *event) override;
   void wheelEvent(QWheelEvent *event) override;
   QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
   void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
@@ -310,13 +355,15 @@ private:
   class EditorHost;
   enum class DragUnit : quint8 { Char, Word, Line };
   void handlePress(QMouseEvent *event, bool doubleClick);
-  void handleGutterPress(QMouseEvent *event);
+  void handleGutterPress(QMouseEvent *event, bool doubleClick);
+  ulong m_lastGutterPress = 0;
   qce::GutterColumn *columnAt(qreal x) const;
   qce::GutterContext gutterContext() const;
   // Lays the columns out; true when the gutter's width changed.
   bool updateGutterLayout();
   void buildGutter();
   void scrollGutter();
+  void updateHover(const QPointF &pos);
   void updateDrag();
   void endDrag();
   void autoScrollDrag();
@@ -362,6 +409,27 @@ private:
 
   qce::TextDocument m_document;
   qce::DisplayMap m_map{&m_document};
+  // Folding plumbing. Fold commands run through these so the view keeps its place and the cursor
+  // moves off lines that just got hidden.
+  void onFoldsChanged();
+  bool foldChanged(bool changed);
+  bool moveSelectionsOutOfFolds();
+  void buildFoldChips();
+  void revealCursor();
+  void foldCommand(qce::FoldCommand command);
+  qce::IndentFoldProvider *m_defaultFolds = nullptr;
+  qce::FoldProvider *m_foldProvider = nullptr;
+  FoldCursorPolicy m_foldPolicy = SkipFolds;
+  // Placeholder chips after folded lines for the rows of the plan, in content coordinates.
+  struct ChipHit {
+    qsizetype row;
+    qreal x0, x1;
+    qsizetype line;
+  };
+  QList<ChipHit> m_chipHits;
+  QList<qce::RowSpan> m_chipSpans, m_chipDotSpans;
+  qce::GutterColumn *m_hoverColumn = nullptr;
+  qsizetype m_hoverLine = -1;
   QList<qce::GutterColumn *> m_columns;
   qce::GutterPlan m_gutter;
   qreal m_gutterWidth = 0;

@@ -16,6 +16,8 @@ struct Host : InputHost {
   void cut() override { ++cuts; }
   void paste() override { ++pastes; }
   void scrollRows(qsizetype rows) override { scrolled += rows; }
+  void foldCommand(FoldCommand command) override { folds.append(command); }
+  QList<FoldCommand> folds;
 };
 
 struct Fixture {
@@ -390,6 +392,66 @@ private slots:
     f.key(Qt::Key_Right);
     f.key(Qt::Key_Right); // the first cursor crosses to the next line start; the second reaches the end
     QCOMPARE(f.sel.selections(), (SelectionList{{3, 3}, {5, 5}}));
+  }
+
+  // ---- Folds (M7) ----------------------------------------------------------------------------
+
+  void movementStepsOverFoldedLines() {
+    Fixture f(u"head {\nbody1\nbody2\n}\ntail"_s);
+    f.map.fold(0, 2); // hides "body1" and "body2"
+    f.sel.setSingle(f.doc.rope().lineEnd(0));
+    commands::move(f.ctx, Movement::CharRight);
+    QCOMPARE(f.doc.rope().lineAt(f.sel.primary().head), 3);
+    QCOMPARE(f.sel.primary().head, f.doc.rope().lineStart(3));
+    commands::move(f.ctx, Movement::CharLeft);
+    QCOMPARE(f.sel.primary().head, f.doc.rope().lineEnd(0));
+    commands::move(f.ctx, Movement::WordRight);
+    QVERIFY(!f.map.folds().isHidden(f.doc.rope().lineAt(f.sel.primary().head)));
+    f.sel.setSingle(f.doc.rope().lineStart(3));
+    commands::move(f.ctx, Movement::WordLeft);
+    QVERIFY(!f.map.folds().isHidden(f.doc.rope().lineAt(f.sel.primary().head)));
+    // Shift-selection across the fold keeps the head on a visible line.
+    f.sel.setSingle(f.doc.rope().lineEnd(0));
+    commands::move(f.ctx, Movement::CharRight, true);
+    QCOMPARE(f.sel.primary().anchor, f.doc.rope().lineEnd(0));
+    QCOMPARE(f.sel.primary().head, f.doc.rope().lineStart(3));
+  }
+
+  void foldKeysAskTheHost() {
+    Fixture f(u"x"_s);
+    constexpr auto cs = Qt::ControlModifier | Qt::ShiftModifier;
+    constexpr auto ca = Qt::ControlModifier | Qt::AltModifier;
+    QVERIFY(f.key(Qt::Key_BracketLeft, cs));
+    QVERIFY(f.key(Qt::Key_BraceRight, cs)); // Shift turns the bracket keys into braces on a US layout
+    QVERIFY(f.key(Qt::Key_BracketLeft, ca));
+    QVERIFY(f.key(Qt::Key_BracketRight, ca));
+    QCOMPARE(
+      f.host.folds, (QList<FoldCommand>{
+                      FoldCommand::FoldAtCursor, FoldCommand::UnfoldAtCursor, FoldCommand::FoldAll,
+                      FoldCommand::UnfoldAll})
+    );
+    QCOMPARE(f.text(), u"x"_s);
+  }
+
+  void movementEntersFoldsWhenSkippingIsOff() {
+    Fixture f(u"head {\nbody1\nbody2\n}\ntail"_s);
+    f.map.fold(0, 2);
+    f.ctx.settings.skipFolds = false;
+    f.sel.setSingle(f.doc.rope().lineEnd(0));
+    commands::move(f.ctx, Movement::CharRight);
+    QCOMPARE(f.doc.rope().lineAt(f.sel.primary().head), 1);
+  }
+
+  void verticalMovementSkipsFoldsAndDocEndStaysVisible() {
+    Fixture f(u"head {\nbody1\nbody2\n}\ntail\nlast {\n  in\n  more"_s);
+    f.map.fold(0, 2);
+    f.map.fold(5, 7); // folds to the end of the text
+    f.sel.setSingle(0);
+    commands::move(f.ctx, Movement::RowDown);
+    QCOMPARE(f.doc.rope().lineAt(f.sel.primary().head), 3);
+    commands::move(f.ctx, Movement::DocEnd);
+    QCOMPARE(f.doc.rope().lineAt(f.sel.primary().head), 5); // the end of the last visible line
+    QCOMPARE(f.sel.primary().head, f.doc.rope().lineEnd(5));
   }
 };
 

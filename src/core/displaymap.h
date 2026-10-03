@@ -77,6 +77,8 @@ public:
   // First row of `line` and how many rows it occupies (a folded-away line has none).
   qsizetype firstRowOfLine(qsizetype line) const;
   qsizetype rowCountOfLine(qsizetype line) const;
+  // `position`, or the end of the visible line it is folded into when it is in hidden text.
+  TextPosition visiblePosition(TextPosition position) const;
   // The row showing buffer `position`. A position at a soft break belongs to the row after it.
   qsizetype rowForPosition(TextPosition position) const;
 

@@ -12,7 +12,7 @@ qsizetype advance(QChar c, qsizetype cell, int tabWidth) {
 
 qreal GridCursorLayout::xForOffset(qsizetype offset) const {
   const Rope &rope = m_document->rope();
-  const TextPosition pos = rope.positionAt(offset);
+  const TextPosition pos = m_map ? m_map->visiblePosition(rope.positionAt(offset)) : rope.positionAt(offset);
   const DisplayRow row = m_map ? m_map->rowAt(m_map->rowForPosition(pos)) : DisplayRow{pos.line, 0, rope.lineLength(pos.line)};
   const qsizetype start = rope.lineStart(pos.line);
   qsizetype cell = 0;

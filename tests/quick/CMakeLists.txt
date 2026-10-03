@@ -3,3 +3,4 @@ qce_add_test(tst_codeeditor SOURCES tst_codeeditor.cpp LIBS Qt6::Quick QMLCodeEd
 qce_add_test(tst_textmetrics SOURCES tst_textmetrics.cpp LIBS Qt6::Quick QMLCodeEditor)
 qce_add_test(tst_linelayoutcache SOURCES tst_linelayoutcache.cpp LIBS Qt6::Quick QMLCodeEditor)
 qce_add_test(tst_gutter SOURCES tst_gutter.cpp LIBS Qt6::Quick QMLCodeEditor QMLCodeEditorplugin)
+qce_add_test(tst_folding SOURCES tst_folding.cpp LIBS Qt6::Quick QMLCodeEditor QMLCodeEditorplugin)

@@ -36,8 +36,9 @@ public:
   qreal autoWidth(const GutterContext &context) const override;
   void paintRows(const GutterContext &context, const QList<FramePlanRow> &rows, GutterPainter &painter) override;
 
-  // The number shown for `line` with the cursor on `cursorLine`.
-  qsizetype numberFor(qsizetype line, qsizetype cursorLine) const;
+  // The number shown for `line` with the cursor on `cursorLine`. Relative numbers count visible
+  // lines when `folds` is given: lines folded away are not stepped over.
+  qsizetype numberFor(qsizetype line, qsizetype cursorLine, const FoldMap *folds = nullptr) const;
 
 signals:
   void modeChanged();

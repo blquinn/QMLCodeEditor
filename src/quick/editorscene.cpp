@@ -66,10 +66,14 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_currentLineBatch = std::make_unique<RectBatch>(window);
   m_selectionBatch = std::make_unique<RectBatch>(window);
   m_markBatch = std::make_unique<RectBatch>(window);
+  m_chipBatch = std::make_unique<RectBatch>(window);
+  m_chipDotBatch = std::make_unique<RectBatch>(window);
   m_cursorBatch = std::make_unique<RectBatch>(window);
   m_backdrop->appendChildNode(m_currentLineBatch->node());
   m_backdrop->appendChildNode(m_selectionBatch->node());
   m_backdrop->appendChildNode(m_markBatch->node());
+  m_backdrop->appendChildNode(m_chipBatch->node());
+  m_backdrop->appendChildNode(m_chipDotBatch->node());
   m_cursorFade->appendChildNode(m_cursorBatch->node());
   m_textPool.parent = m_rows;
 
@@ -184,6 +188,8 @@ void EditorScene::syncOverlays(const FrameParams &p) {
   bool changed = m_currentLineBatch->update(rects(p.currentLine), p.currentLineColor);
   changed |= m_selectionBatch->update(rects(p.selection), p.selectionColor);
   changed |= m_markBatch->update(rects(p.marks), p.markColor);
+  changed |= m_chipBatch->update(rects(p.chips), p.chipColor);
+  changed |= m_chipDotBatch->update(rects(p.chipDots), p.chipDotColor);
   changed |= m_cursorBatch->update(rects(p.cursors), p.cursorColor);
   if (changed)
     ++m_stats.overlayUpdates;

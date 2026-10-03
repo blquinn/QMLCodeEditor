@@ -443,7 +443,7 @@ private slots:
     QTest::mouseClick(view.get(), Qt::LeftButton, Qt::ShiftModifier, at(2), 10);
     QCOMPARE(editor->selectionStart(), 0);
     QCOMPARE(editor->selectionEnd(), rope.lineStart(3));
-    QCOMPARE(clicked.count(), 6);
+    QCOMPARE(clicked.count(), 5); // five presses; a double-click event repeating a press is not another click
 
     // The pointer is a plain arrow over the gutter and a text cursor over the text.
     QCOMPARE(editor->cursor().shape(), Qt::ArrowCursor);

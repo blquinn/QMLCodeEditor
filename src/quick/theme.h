@@ -29,6 +29,11 @@ class Theme : public QObject {
   Q_PROPERTY(QColor currentLineNumber MEMBER m_currentLineNumber NOTIFY changed)
   Q_PROPERTY(QColor changeModified MEMBER m_changeModified NOTIFY changed)
   Q_PROPERTY(QColor changeDeleted MEMBER m_changeDeleted NOTIFY changed)
+  Q_PROPERTY(QColor foldMarker MEMBER m_foldMarker NOTIFY changed)
+  Q_PROPERTY(QColor foldMarkerHover MEMBER m_foldMarkerHover NOTIFY changed)
+  Q_PROPERTY(QColor foldRangeHover MEMBER m_foldRangeHover NOTIFY changed)
+  Q_PROPERTY(QColor foldPlaceholder MEMBER m_foldPlaceholder NOTIFY changed)
+  Q_PROPERTY(QColor foldPlaceholderText MEMBER m_foldPlaceholderText NOTIFY changed)
   // Style name -> { color, bold, italic }; names are the TokenStyle names from core/highlighter.h
   // in lower case ("keyword", "string", ...). Unlisted styles use the foreground color.
   Q_PROPERTY(QVariantMap tokenStyles READ tokenStyles WRITE setTokenStyles NOTIFY changed)
@@ -50,6 +55,11 @@ public:
   QColor currentLineNumber() const { return m_currentLineNumber; }
   QColor changeModified() const { return m_changeModified; }
   QColor changeDeleted() const { return m_changeDeleted; }
+  QColor foldMarker() const { return m_foldMarker; }
+  QColor foldMarkerHover() const { return m_foldMarkerHover; }
+  QColor foldRangeHover() const { return m_foldRangeHover; }
+  QColor foldPlaceholder() const { return m_foldPlaceholder; }
+  QColor foldPlaceholderText() const { return m_foldPlaceholderText; }
 
   QVariantMap tokenStyles() const { return m_tokenStyles; }
   void setTokenStyles(const QVariantMap &styles);
@@ -82,6 +92,11 @@ private:
   QColor m_currentLineNumber{0xc6, 0xc6, 0xc6};
   QColor m_changeModified{0x1b, 0x81, 0xa8};
   QColor m_changeDeleted{0xf1, 0x4c, 0x4c};
+  QColor m_foldMarker{0x85, 0x85, 0x85};         // chevrons in the fold column
+  QColor m_foldMarkerHover{0xc6, 0xc6, 0xc6};    // the chevron under the pointer
+  QColor m_foldRangeHover{0xff, 0xff, 0xff, 0x12}; // band over the hovered fold's rows
+  QColor m_foldPlaceholder{0x4b, 0x4b, 0x4b};    // the chip after a folded line
+  QColor m_foldPlaceholderText{0xd4, 0xd4, 0xd4}; // its dots
   void rebuildFormats();
 
   QVariantMap m_tokenStyles;

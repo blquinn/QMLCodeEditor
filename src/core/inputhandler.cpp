@@ -83,6 +83,22 @@ bool DefaultInputHandler::keyPress(QKeyEvent *event, EditContext &ctx, InputHost
     return true;
   }
 
+  // Folding: Ctrl+Shift+[ / ] at the cursor, Ctrl+Alt+[ / ] for all.
+  {
+    const Qt::KeyboardModifiers mods = event->modifiers() & ~Qt::KeypadModifier;
+    const int key = event->key();
+    const bool left = key == Qt::Key_BracketLeft || key == Qt::Key_BraceLeft;
+    const bool right = key == Qt::Key_BracketRight || key == Qt::Key_BraceRight;
+    if ((left || right) && mods == (Qt::ControlModifier | Qt::ShiftModifier)) {
+      host.foldCommand(left ? FoldCommand::FoldAtCursor : FoldCommand::UnfoldAtCursor);
+      return true;
+    }
+    if ((left || right) && mods == (Qt::ControlModifier | Qt::AltModifier)) {
+      host.foldCommand(left ? FoldCommand::FoldAll : FoldCommand::UnfoldAll);
+      return true;
+    }
+  }
+
   if (event->matches(QKeySequence::DeleteStartOfWord)) {
     deleteWordBackward(ctx);
     return true;

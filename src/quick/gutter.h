@@ -88,6 +88,8 @@ public:
   virtual void paintRows(const GutterContext &, const QList<FramePlanRow> &, GutterPainter &) {}
   // The view scrolled without the rows changing; columns made of items move them here.
   virtual void scrolled(const GutterContext &) {}
+  // The pointer is over the buffer line `line` in this column, or left it (-1).
+  virtual void hoverLine(qsizetype) {}
 
 signals:
   void visibleChanged();

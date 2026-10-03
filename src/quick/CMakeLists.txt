@@ -5,7 +5,7 @@ qt_add_qml_module(QMLCodeEditor
     VERSION 1.0
     SOURCES codeeditor.cpp codeeditor.h theme.cpp theme.h textmetrics.cpp textmetrics.h linelayoutcache.cpp linelayoutcache.h editorscene.cpp editorscene.h
     gutter.cpp gutter.h linenumbercolumn.cpp linenumbercolumn.h markercolumn.cpp markercolumn.h
-    changecolumn.cpp changecolumn.h delegatecolumn.cpp delegatecolumn.h
+    changecolumn.cpp changecolumn.h delegatecolumn.cpp delegatecolumn.h foldcolumn.cpp foldcolumn.h
 )
 
 target_compile_definitions(QMLCodeEditor

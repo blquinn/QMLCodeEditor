@@ -45,14 +45,17 @@ qreal LineNumberColumn::autoWidth(const GutterContext &context) const {
   return std::ceil(qreal(digits + 2) * cell);
 }
 
-qsizetype LineNumberColumn::numberFor(qsizetype line, qsizetype cursorLine) const {
+qsizetype LineNumberColumn::numberFor(qsizetype line, qsizetype cursorLine, const FoldMap *folds) const {
+  const qsizetype distance = folds && folds->hasFolds()
+                               ? qAbs(folds->foldLineForBufferLine(line) - folds->foldLineForBufferLine(cursorLine))
+                               : qAbs(line - cursorLine);
   switch (m_mode) {
   case Absolute:
     return line + 1;
   case Relative:
-    return qAbs(line - cursorLine);
+    return distance;
   case Hybrid:
-    return line == cursorLine ? line + 1 : qAbs(line - cursorLine);
+    return line == cursorLine ? line + 1 : distance;
   }
   return line + 1;
 }
@@ -75,7 +78,7 @@ void LineNumberColumn::paintRows(const GutterContext &context, const QList<Frame
     if (!row.display.isFirst())
       continue;
     const bool current = row.display.line == context.cursorLine;
-    const std::shared_ptr<LineLayout> label = labelFor(numberFor(row.display.line, context.cursorLine), font);
+    const std::shared_ptr<LineLayout> label = labelFor(numberFor(row.display.line, context.cursorLine, &context.map->folds()), font);
     // Right-aligned, one cell from the edge. Hybrid mode puts the absolute number on the left
     // instead, as vim does.
     const bool leftAligned = m_mode == Hybrid && current;

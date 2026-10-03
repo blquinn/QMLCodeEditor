@@ -289,6 +289,19 @@ qsizetype firstNonBlank(const Rope &rope, qsizetype line) {
 bool move(EditContext &ctx, Movement movement, bool extend) {
   const Rope &rope = ctx.document.rope();
   const TextBoundaries bounds(rope);
+  // A head that landed in a folded line moves past the fold (forward) or back to its header's end.
+  auto outOfFold = [&](qsizetype head, bool forward) {
+    if (!ctx.map || !ctx.settings.skipFolds || !ctx.map->folds().hasFolds())
+      return head;
+    const FoldMap &folds = ctx.map->folds();
+    const qsizetype line = rope.lineAt(head);
+    if (!folds.isHidden(line))
+      return head;
+    const qsizetype next = folds.nextVisibleLine(line);
+    if (forward && next < rope.lineCount())
+      return rope.lineStart(next);
+    return rope.lineEnd(folds.visibleHeaderOf(line));
+  };
   const bool vertical = movement == Movement::RowUp || movement == Movement::RowDown ||
                         movement == Movement::PageUp || movement == Movement::PageDown;
   if (vertical && (!ctx.map || !ctx.layout))
@@ -312,12 +325,13 @@ bool move(EditContext &ctx, Movement movement, bool extend) {
       } else {
         head = movement == Movement::CharLeft ? bounds.previousGrapheme(s.head) : bounds.nextGrapheme(s.head);
       }
+      head = outOfFold(head, movement == Movement::CharRight);
       break;
     case Movement::WordLeft:
-      head = bounds.previousWordStart(s.head);
+      head = outOfFold(bounds.previousWordStart(s.head), false);
       break;
     case Movement::WordRight:
-      head = bounds.nextWordStart(s.head);
+      head = outOfFold(bounds.nextWordStart(s.head), true);
       break;
     case Movement::LineStart: {
       const qsizetype line = rope.lineAt(s.head);
@@ -358,7 +372,7 @@ bool move(EditContext &ctx, Movement movement, bool extend) {
       head = 0;
       break;
     case Movement::DocEnd:
-      head = rope.length();
+      head = outOfFold(rope.length(), false);
       break;
     case Movement::RowUp:
     case Movement::RowDown:

@@ -355,13 +355,18 @@ qsizetype DisplayMap::rowCountOfLine(qsizetype line) const {
   return m_wrap.rowsOfLine(line);
 }
 
-qsizetype DisplayMap::rowForPosition(TextPosition position) const {
+TextPosition DisplayMap::visiblePosition(TextPosition position) const {
   position.line = qBound<qsizetype>(0, position.line, m_document->rope().lineCount() - 1);
   if (m_fold.isHidden(position.line)) {
     // Text inside a fold is shown by the end of its header.
     position.line = m_fold.visibleHeaderOf(position.line);
     position.column = lineLength(position.line);
   }
+  return position;
+}
+
+qsizetype DisplayMap::rowForPosition(TextPosition position) const {
+  position = visiblePosition(position);
   const qsizetype line = position.line;
   if (!wrapEnabled())
     return m_fold.foldLineForBufferLine(line);

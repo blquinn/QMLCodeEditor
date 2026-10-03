@@ -7,6 +7,9 @@
 
 namespace qce {
 
+// Fold commands a key can ask the host for (the host owns the folds, the provider and the cursor).
+enum class FoldCommand : quint8 { FoldAtCursor, UnfoldAtCursor, FoldAll, UnfoldAll };
+
 // What an input handler needs from the item that core cannot do itself.
 class InputHost {
 public:
@@ -16,6 +19,7 @@ public:
   virtual void paste() = 0;
   // Scrolls the view by whole rows (positive scrolls down), for page up/down.
   virtual void scrollRows(qsizetype rows) = 0;
+  virtual void foldCommand(FoldCommand) {}
 };
 
 // Turns events into commands (ADR 0005, ADR 0010). The default keymap and vim are two

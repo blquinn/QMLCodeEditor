@@ -1,6 +1,7 @@
 #include "codeeditor.h"
 
 #include "core/filesaver.h"
+#include "core/folding.h"
 #include "core/textboundaries.h"
 
 #include <QtConcurrent/QtConcurrentRun>
@@ -28,7 +29,7 @@ public:
 
   qreal xForOffset(qsizetype offset) const override {
     const qce::TextSnapshot snapshot = m_editor->m_document.snapshot();
-    const qce::TextPosition pos = snapshot.rope().positionAt(offset);
+    const qce::TextPosition pos = m_editor->m_map.visiblePosition(snapshot.rope().positionAt(offset));
     return m_editor->xForColumn(*m_editor->layoutForRow(m_editor->rowOfPosition(pos), snapshot), pos.column);
   }
   qsizetype offsetForX(const qce::DisplayRow &row, qreal x) const override {
@@ -57,6 +58,7 @@ public:
   void scrollRows(qsizetype rows) override {
     m_editor->setContentY(m_editor->m_contentY + qreal(rows) * m_editor->m_metrics.lineHeight());
   }
+  void foldCommand(qce::FoldCommand command) override { m_editor->foldCommand(command); }
 
 private:
   CodeEditor *m_editor;
@@ -77,6 +79,10 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   m_metrics.setFont(m_font);
   updateWrapMeasure();
   connect(&m_map, &qce::DisplayMap::rowsReestimated, this, &CodeEditor::onRowsReestimated);
+  connect(&m_map, &qce::DisplayMap::foldsChanged, this, &CodeEditor::onFoldsChanged);
+  m_defaultFolds = new qce::IndentFoldProvider(this);
+  m_foldProvider = m_defaultFolds;
+  connect(m_defaultFolds, &qce::FoldProvider::invalidated, this, &CodeEditor::invalidatePlan);
   connect(&m_map, &qce::DisplayMap::wrapProgress, this, [this](qsizetype left) {
     if ((left > 0) != m_wrapping) {
       m_wrapping = left > 0;
@@ -160,6 +166,8 @@ void CodeEditor::addGutterColumn(qce::GutterColumn *column) {
   m_columns.append(column);
   connect(column, &qce::GutterColumn::contentChanged, this, &CodeEditor::invalidatePlan);
   connect(column, &QObject::destroyed, this, [this, column] {
+    if (m_hoverColumn == column)
+      m_hoverColumn = nullptr;
     if (m_columns.removeOne(column))
       invalidatePlan();
   });
@@ -170,6 +178,8 @@ void CodeEditor::addGutterColumn(qce::GutterColumn *column) {
 void CodeEditor::removeGutterColumn(qce::GutterColumn *column) {
   if (!m_columns.removeOne(column))
     return;
+  if (m_hoverColumn == column)
+    m_hoverColumn = nullptr;
   disconnect(column, nullptr, this, nullptr);
   column->detach(this);
   invalidatePlan();
@@ -252,6 +262,7 @@ void CodeEditor::setTabWidth(int columns) {
   if (columns == m_metrics.tabWidth())
     return;
   m_metrics.setTabWidth(columns);
+  m_defaultFolds->setTabWidth(columns);
   updateWrapMeasure();
   invalidateLayouts();
   emit tabWidthChanged();
@@ -443,7 +454,7 @@ void CodeEditor::select(qsizetype anchor, qsizetype head) {
 
 qce::EditContext CodeEditor::editContext() {
   return {
-    m_document, m_selections, {m_insertSpaces, m_indentWidth, m_metrics.tabWidth(), m_readOnly}, &m_map,
+    m_document, m_selections, {m_insertSpaces, m_indentWidth, m_metrics.tabWidth(), m_readOnly, m_foldPolicy == SkipFolds}, &m_map,
     m_cursorLayout.get()
   };
 }
@@ -523,15 +534,24 @@ QPair<qsizetype, qsizetype> CodeEditor::unitRangeAt(qsizetype offset, DragUnit u
   if (unit == DragUnit::Line) {
     const qsizetype line = rope.lineAt(offset);
     // The line break goes with the line, so a triple-click selects what Delete would remove.
-    return {rope.lineStart(line), line + 1 < rope.lineCount() ? rope.lineStart(line + 1) : rope.length()};
+    // A folded line takes the lines folded into it along.
+    const qsizetype next = m_map.folds().nextVisibleLine(line);
+    return {rope.lineStart(line), next < rope.lineCount() ? rope.lineStart(next) : rope.length()};
   }
   return {offset, offset};
 }
 
 // A press in the gutter: tells the column's host, and in a column that selects lines starts a drag by
 // whole lines (shift extends the selection from where it began).
-void CodeEditor::handleGutterPress(QMouseEvent *event) {
+void CodeEditor::handleGutterPress(QMouseEvent *event, bool doubleClick) {
   forceActiveFocus(Qt::MouseFocusReason);
+  // The second press of a double click arrives as a press and again as a double-click event; it is
+  // one click.
+  if (doubleClick && event->timestamp() == m_lastGutterPress) {
+    event->accept();
+    return;
+  }
+  m_lastGutterPress = event->timestamp();
   qce::GutterColumn *column = columnAt(event->position().x());
   if (!column) {
     event->accept();
@@ -562,20 +582,67 @@ void CodeEditor::handleGutterPress(QMouseEvent *event) {
   event->accept();
 }
 
-void CodeEditor::hoverMoveEvent(QHoverEvent *event) {
-  const bool inGutter = event->position().x() < m_gutterWidth;
-  if (inGutter == m_cursorInGutter)
-    return;
+void CodeEditor::hoverMoveEvent(QHoverEvent *event) { updateHover(event->position()); }
+
+void CodeEditor::hoverLeaveEvent(QHoverEvent *event) {
+  QQuickItem::hoverLeaveEvent(event);
+  updateHover(QPointF(-1, -1));
+}
+
+// The pointer cursor follows what is under the pointer, and the gutter column under it hears which
+// line that is.
+void CodeEditor::updateHover(const QPointF &pos) {
+  const bool inGutter = pos.x() >= 0 && pos.x() < m_gutterWidth;
+  qce::GutterColumn *column = inGutter ? columnAt(pos.x()) : nullptr;
+  qsizetype line = -1;
+  bool onChip = false;
+  if (column || (!inGutter && pos.x() >= 0 && !m_chipHits.isEmpty())) {
+    const qsizetype row = qsizetype(std::floor((pos.y() + m_contentY) / m_metrics.lineHeight()));
+    if (row >= 0 && row < m_map.rowCount()) {
+      if (column) {
+        line = m_map.rowAt(row).line;
+      } else {
+        const qreal x = pos.x() - m_gutterWidth + m_contentX;
+        for (const ChipHit &chip : std::as_const(m_chipHits))
+          if (chip.row == row && x >= chip.x0 && x < chip.x1)
+            onChip = true;
+      }
+    }
+  }
+  if (column != m_hoverColumn || line != m_hoverLine) {
+    qce::GutterColumn *previous = m_hoverColumn;
+    m_hoverColumn = column;
+    m_hoverLine = line;
+    if (previous && previous != column)
+      previous->hoverLine(-1);
+    if (column)
+      column->hoverLine(line);
+  }
+  const Qt::CursorShape shape = onChip ? Qt::PointingHandCursor : inGutter ? Qt::ArrowCursor : Qt::IBeamCursor;
+  if (shape != cursor().shape())
+    setCursor(shape);
   m_cursorInGutter = inGutter;
-  setCursor(inGutter ? Qt::ArrowCursor : Qt::IBeamCursor);
 }
 
 void CodeEditor::handlePress(QMouseEvent *event, bool doubleClick) {
   if (event->position().x() < m_gutterWidth) {
-    handleGutterPress(event);
+    handleGutterPress(event, doubleClick);
     return;
   }
   forceActiveFocus(Qt::MouseFocusReason);
+  if (event->button() == Qt::LeftButton && !m_chipHits.isEmpty()) {
+    // A press on a fold's placeholder opens it.
+    const qsizetype row = qsizetype(std::floor((event->position().y() + m_contentY) / m_metrics.lineHeight()));
+    const qreal x = event->position().x() - m_gutterWidth + m_contentX;
+    for (const ChipHit &chip : std::as_const(m_chipHits)) {
+      if (chip.row == row && x >= chip.x0 && x < chip.x1) {
+        const qsizetype line = chip.line;
+        m_map.unfold(line);
+        event->accept();
+        return;
+      }
+    }
+  }
   const qsizetype offset = positionAt(event->position().x(), event->position().y());
   if (event->button() == Qt::MiddleButton) {
     // Middle click pastes the selection clipboard where it was clicked (X11/Wayland convention).
@@ -934,7 +1001,7 @@ void CodeEditor::pasteFrom(QClipboard::Mode mode) {
 
 void CodeEditor::ensureCursorVisible() {
   const qce::TextSnapshot snapshot = m_document.snapshot();
-  const qce::TextPosition pos = snapshot.rope().positionAt(cursorPosition());
+  const qce::TextPosition pos = m_map.visiblePosition(snapshot.rope().positionAt(cursorPosition()));
   const auto layout = layoutForRow(rowOfPosition(pos), snapshot);
   if (layout->indentX + layout->width > m_maxLineWidth) {
     m_maxLineWidth = layout->indentX + layout->width;
@@ -967,6 +1034,7 @@ void CodeEditor::onSelectionsChanged() {
     QGuiApplication::inputMethod()->reset();
   }
   invalidatePlan();
+  revealCursor();
   if (same)
     return;
   emit selectionChanged();
@@ -1118,6 +1186,7 @@ void CodeEditor::buildOverlays() {
   if (m_showWhitespace)
     buildTabMarks();
   m_cursorSpans.clear();
+  buildFoldChips();
   const qce::Rope &rope = m_document.rope();
   auto planLayout = [&](qsizetype row) -> const qce::LineLayout * {
     return row >= m_planFirst && row <= m_planLast ? m_plan[row - m_planFirst].layout.get() : nullptr;
@@ -1128,7 +1197,7 @@ void CodeEditor::buildOverlays() {
   const int primary = m_selections.primaryIndex();
   for (int i = 0; i < m_selections.count(); ++i) {
     const qce::Selection sel = m_selections.at(i);
-    const qce::TextPosition head = rope.positionAt(sel.head);
+    const qce::TextPosition head = m_map.visiblePosition(rope.positionAt(sel.head));
     const qsizetype headRow = m_map.rowForPosition(head);
     if (const qce::LineLayout *layout = planLayout(headRow)) {
       const qreal x = i == primary && layout->preeditLength > 0 ? preeditCursorX(*layout)
@@ -1144,8 +1213,8 @@ void CodeEditor::buildOverlays() {
     }
     if (sel.isEmpty())
       continue;
-    const qce::TextPosition start = rope.positionAt(sel.start());
-    const qce::TextPosition end = rope.positionAt(sel.end());
+    const qce::TextPosition start = m_map.visiblePosition(rope.positionAt(sel.start()));
+    const qce::TextPosition end = m_map.visiblePosition(rope.positionAt(sel.end()));
     const qsizetype startRow = m_map.rowForPosition(start);
     const qsizetype endRow = m_map.rowForPosition(end);
     for (qsizetype row = qMax(startRow, m_planFirst); row <= qMin(endRow, m_planLast); ++row) {
@@ -1195,7 +1264,7 @@ qsizetype CodeEditor::positionAt(qreal x, qreal y) {
 
 QRectF CodeEditor::rectForPosition(qsizetype offset) {
   const qce::TextSnapshot snapshot = m_document.snapshot();
-  const qce::TextPosition position = snapshot.rope().positionAt(offset);
+  const qce::TextPosition position = m_map.visiblePosition(snapshot.rope().positionAt(offset));
   const qsizetype row = m_map.rowForPosition(position);
   const auto layout = layoutForRow(m_map.rowAt(row), snapshot);
   const qreal cursorX = xForColumn(*layout, position.column);
@@ -1203,6 +1272,152 @@ QRectF CodeEditor::rectForPosition(qsizetype offset) {
     cursorX - m_contentX + m_gutterWidth, qreal(row) * m_metrics.lineHeight() - m_contentY, m_metrics.cellAdvance(),
     m_metrics.lineHeight()
   );
+}
+
+// Folding ------------------------------------------------------------------------------------
+
+void CodeEditor::setFoldProvider(qce::FoldProvider *provider) {
+  if (!provider)
+    provider = m_defaultFolds;
+  if (provider == m_foldProvider)
+    return;
+  disconnect(m_foldProvider, &qce::FoldProvider::invalidated, this, &CodeEditor::invalidatePlan);
+  disconnect(m_foldProvider, &QObject::destroyed, this, nullptr);
+  m_foldProvider = provider;
+  connect(provider, &qce::FoldProvider::invalidated, this, &CodeEditor::invalidatePlan);
+  if (provider != m_defaultFolds)
+    connect(provider, &QObject::destroyed, this, [this] { setFoldProvider(nullptr); });
+  invalidatePlan();
+  emit foldProviderChanged();
+}
+
+void CodeEditor::setFoldCursorPolicy(FoldCursorPolicy policy) {
+  if (policy == m_foldPolicy)
+    return;
+  m_foldPolicy = policy;
+  emit foldCursorPolicyChanged();
+}
+
+QList<qce::FoldRange> CodeEditor::foldRangesIn(qsizetype firstLine, qsizetype lastLine) {
+  return m_foldProvider->foldRanges(m_document.snapshot(), firstLine, lastLine);
+}
+
+// Rows moved because lines were hidden or shown: keep the text at the top of the view where it was.
+void CodeEditor::onFoldsChanged() {
+  m_planDirty = true;
+  updateContentSizeKeepingAnchor();
+  polish();
+}
+
+// After a fold command: the cursor must not stay in text that just disappeared, and rows moved.
+bool CodeEditor::foldChanged(bool changed) {
+  if (!changed)
+    return false;
+  if (moveSelectionsOutOfFolds())
+    ensureCursorVisible();
+  return true;
+}
+
+// Selections with an end inside a folded line move to the end of the line that holds the fold.
+bool CodeEditor::moveSelectionsOutOfFolds() {
+  if (!m_map.folds().hasFolds())
+    return false;
+  const qce::Rope &rope = m_document.rope();
+  qce::SelectionList list = m_selections.selections();
+  bool moved = false;
+  auto fix = [&](qsizetype &offset) {
+    const qsizetype line = rope.lineAt(offset);
+    if (m_map.folds().isHidden(line)) {
+      offset = rope.lineEnd(m_map.folds().visibleHeaderOf(line));
+      moved = true;
+    }
+  };
+  for (qce::Selection &s : list) {
+    fix(s.anchor);
+    fix(s.head);
+  }
+  if (moved)
+    m_selections.set(list, m_selections.primaryIndex());
+  return moved;
+}
+
+// A cursor that ended up inside a fold (a click can't; a programmatic move, undo, or a key with the
+// UnfoldOnEnter policy can) opens it.
+void CodeEditor::revealCursor() {
+  if (!m_map.folds().hasFolds())
+    return;
+  const qce::Rope &rope = m_document.rope();
+  for (int i = 0; i < m_selections.count(); ++i) {
+    const qce::Selection sel = m_selections.at(i);
+    if (!sel.isEmpty())
+      continue;
+    const qsizetype line = rope.lineAt(sel.head);
+    if (m_map.folds().isHidden(line))
+      m_map.unfoldContaining(line);
+  }
+}
+
+bool CodeEditor::fold(qsizetype line) {
+  const auto range = m_foldProvider->rangeAt(m_document.snapshot(), line);
+  return range && foldChanged(m_map.fold(range->startLine, range->endLine));
+}
+
+bool CodeEditor::unfold(qsizetype line) { return m_map.unfold(line); }
+
+bool CodeEditor::toggleFold(qsizetype line) {
+  return foldChanged(qce::folding::toggle(m_map, *m_foldProvider, m_document.snapshot(), line));
+}
+
+bool CodeEditor::isFolded(qsizetype line) const { return m_map.folds().isFolded(line); }
+
+bool CodeEditor::foldAtCursor() {
+  return foldChanged(qce::folding::foldAt(m_map, *m_foldProvider, m_document.snapshot(), cursorLine()));
+}
+
+bool CodeEditor::unfoldAtCursor() { return qce::folding::unfoldAt(m_map, cursorLine()); }
+
+bool CodeEditor::foldAll() {
+  return foldChanged(qce::folding::foldAll(m_map, *m_foldProvider, m_document.snapshot()));
+}
+
+bool CodeEditor::unfoldAll() { return qce::folding::unfoldAll(m_map); }
+
+bool CodeEditor::foldToLevel(int level) {
+  return foldChanged(qce::folding::foldToLevel(m_map, *m_foldProvider, m_document.snapshot(), level));
+}
+
+void CodeEditor::foldCommand(qce::FoldCommand command) {
+  switch (command) {
+  case qce::FoldCommand::FoldAtCursor: foldAtCursor(); break;
+  case qce::FoldCommand::UnfoldAtCursor: unfoldAtCursor(); break;
+  case qce::FoldCommand::FoldAll: foldAll(); break;
+  case qce::FoldCommand::UnfoldAll: unfoldAll(); break;
+  }
+}
+
+// A chip after the last row of every folded line in the plan: a rounded-looking pill with three dots.
+void CodeEditor::buildFoldChips() {
+  m_chipSpans.clear();
+  m_chipDotSpans.clear();
+  m_chipHits.clear();
+  if (!m_map.folds().hasFolds())
+    return;
+  const qreal cell = m_metrics.cellAdvance(), lh = m_metrics.lineHeight();
+  const qreal dot = qMax<qreal>(2, std::round(lh / 9));
+  const qreal inset = std::round(lh / 6);
+  for (const qce::FramePlanRow &planRow : std::as_const(m_plan)) {
+    if (!planRow.display.isLast() || !m_map.folds().isFolded(planRow.display.line))
+      continue;
+    const qreal x0 = planRow.layout->indentX + planRow.layout->width + cell;
+    const qreal x1 = x0 + 4 * cell;
+    m_chipSpans.append({planRow.row, x0, x1, inset, lh - 2 * inset});
+    const qreal dy = std::round((lh - dot) / 2) + 1;
+    for (int i = 0; i < 3; ++i) {
+      const qreal x = x0 + 2 * cell + (i - 1) * 1.1 * cell - dot / 2;
+      m_chipDotSpans.append({planRow.row, std::round(x), std::round(x) + dot, dy, dot});
+    }
+    m_chipHits.append({planRow.row, x0, x1, planRow.display.line});
+  }
 }
 
 CodeEditor::RenderStats CodeEditor::renderStats() const {
@@ -1470,10 +1685,13 @@ void CodeEditor::updatePolish() {
   const qce::TextSnapshot snapshot = m_document.snapshot();
   m_plan.reserve(lastRow - firstRow + 1);
   qreal widest = m_maxLineWidth;
+  const bool hasFolds = m_map.folds().hasFolds();
   for (qsizetype row = firstRow; row <= lastRow; ++row) {
     const qce::DisplayRow displayRow = m_map.rowAt(row);
     auto layout = layoutForRow(displayRow, snapshot);
     widest = qMax(widest, layout->indentX + layout->width);
+    if (hasFolds && displayRow.isLast() && m_map.folds().isFolded(displayRow.line))
+      widest = qMax(widest, layout->indentX + layout->width + 5 * m_metrics.cellAdvance());
     m_plan.append({row, std::move(layout), displayRow});
   }
   m_planFirst = firstRow;
@@ -1516,6 +1734,10 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.selection = &m_selectionSpans;
   params.markColor = m_theme->whitespace();
   params.marks = &m_markSpans;
+  params.chipColor = m_theme->foldPlaceholder();
+  params.chips = &m_chipSpans;
+  params.chipDotColor = m_theme->foldPlaceholderText();
+  params.chipDots = &m_chipDotSpans;
   params.cursors = &m_cursorSpans;
   params.cursorVisible = m_cursorVisible && m_hasFocus;
   params.gutterWidth = m_gutterWidth;

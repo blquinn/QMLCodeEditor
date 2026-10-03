@@ -72,6 +72,11 @@ void Theme::assign(const Theme &o) {
   m_currentLineNumber = o.m_currentLineNumber;
   m_changeModified = o.m_changeModified;
   m_changeDeleted = o.m_changeDeleted;
+  m_foldMarker = o.m_foldMarker;
+  m_foldMarkerHover = o.m_foldMarkerHover;
+  m_foldRangeHover = o.m_foldRangeHover;
+  m_foldPlaceholder = o.m_foldPlaceholder;
+  m_foldPlaceholderText = o.m_foldPlaceholderText;
   m_tokenStyles = o.m_tokenStyles;
   emit changed();
 }
@@ -123,6 +128,11 @@ Theme *Theme::createLight(QObject *parent) {
   t->m_currentLineNumber = QColor(0x0b, 0x21, 0x6f);
   t->m_changeModified = QColor(0x2e, 0x7d, 0xd1);
   t->m_changeDeleted = QColor(0xc7, 0x2e, 0x2e);
+  t->m_foldMarker = QColor(0x80, 0x80, 0x80);
+  t->m_foldMarkerHover = QColor(0x20, 0x20, 0x20);
+  t->m_foldRangeHover = QColor(0x00, 0x00, 0x00, 0x0d);
+  t->m_foldPlaceholder = QColor(0xe0, 0xe0, 0xe0);
+  t->m_foldPlaceholderText = QColor(0x55, 0x55, 0x55);
   t->m_tokenStyles = {
     {"keyword", style("#0000ff")},
     {"string", style("#a31515")},

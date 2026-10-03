@@ -16,6 +16,9 @@ struct EditorSettings {
   int indentWidth = 4;
   int tabWidth = 4;
   bool readOnly = false;
+  // Movement steps over folded lines instead of landing in them (needs `map`). Off, the cursor can
+  // enter a fold, and the editor then unfolds it.
+  bool skipFolds = true;
 };
 
 // What a command acts on (ADR 0005): the document, the selections that always exist, and settings.
