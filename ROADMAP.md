@@ -244,22 +244,22 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria (demonstrated 2026-10-03: tests tst_folding, tst_foldmap, tst_foldquery; ADR 0014 benchmarks; hands-on mouse use in a real window not done):** fold/unfold via gutter and keyboard on a large file; folds survive edits; wrap and folding compose correctly (a folded wrapped line is one row group); fold state doesn't slow scrolling.
 
-- [x] **FOLD-01** Real `FoldMap` replacing the identity layer — done 2026-10-03
+- [x] **FOLD-01** Real `FoldMap` replacing the identity layer — done 2026-10-03 (5cc4887)
   - Hidden buffer ranges map to zero rows; O(log n) lookups ([ADR 0004](docs/adr/0004-display-map.md)).
-- [x] **FOLD-02** Fold range provider from tree-sitter `folds.scm` — done 2026-10-03
-- [x] **FOLD-03** Indent-based fold fallback for languages without queries — done 2026-10-03
-- [x] **FOLD-04** Fold gutter column — done 2026-10-03
+- [x] **FOLD-02** Fold range provider from tree-sitter `folds.scm` — done 2026-10-03 (c3cb41e)
+- [x] **FOLD-03** Indent-based fold fallback for languages without queries — done 2026-10-03 (6c5c00c)
+- [x] **FOLD-04** Fold gutter column — done 2026-10-03 (d5c439c)
   - Chevrons on foldable lines; click toggles; hover highlights the range.
-- [x] **FOLD-05** Folded-region placeholder rendering — done 2026-10-03
+- [x] **FOLD-05** Folded-region placeholder rendering — done 2026-10-03 (d5c439c)
   - Inline "…" chip that expands on click.
-- [x] **FOLD-06** Cursor/selection/edit semantics across folds — done 2026-10-03
+- [x] **FOLD-06** Cursor/selection/edit semantics across folds — done 2026-10-03 (d5c439c)
   - Cursor entering a fold unfolds it, or skips it, by setting; edits inside keep anchors valid.
-- [x] **FOLD-07** Fold commands — done 2026-10-03
+- [x] **FOLD-07** Fold commands — done 2026-10-03 (d5c439c)
   - Fold/unfold at cursor, fold all, unfold all, fold to level N.
-- [x] **FOLD-08** Fold state kept as anchored ranges ([ADR 0006](docs/adr/0006-anchored-decorations.md)) — done 2026-10-03
-- [x] **FOLD-09** Folding benchmarks and ADR — done 2026-10-03
+- [x] **FOLD-08** Fold state kept as anchored ranges ([ADR 0006](docs/adr/0006-anchored-decorations.md)) — done 2026-10-03 (5cc4887)
+- [x] **FOLD-09** Folding benchmarks and ADR — done 2026-10-03 (60d95d0)
   - Fold all / toggle / keystroke with many folds, scroll with folds on (with and without wrap) against the no-fold baseline; ADR 0014 records the design.
-- [x] **FOLD-10** Demo integration — done 2026-10-03
+- [x] **FOLD-10** Demo integration — done 2026-10-03 (60d95d0)
   - `FoldColumn` in the demo gutter, a Fold menu (cursor, all, levels, cursor policy), tree-sitter ranges wired to the editor.
 
 ## M8 — Multi-cursor
