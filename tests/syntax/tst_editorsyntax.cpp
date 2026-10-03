@@ -46,7 +46,7 @@ import me.blq.qmlcodeeditor
 import me.blq.qmlcodeeditor.syntax
 CodeEditor {
     width: 400; height: 120
-    highlighter: SyntaxHighlighter { objectName: "hl"; fileName: "a.cpp" }
+    highlighter: SyntaxHighlighter { objectName: "hl"; fileName: "a.js" }
 })",
       QUrl());
     QScopedPointer<QObject> root(component.create());
@@ -55,14 +55,14 @@ CodeEditor {
     QVERIFY(editor);
     auto *highlighter = qobject_cast<qce::TreeSitterHighlighter *>(editor->highlighter());
     QVERIFY(highlighter);
-    QCOMPARE(highlighter->detectedLanguage(), u"cpp"_s);
+    QCOMPARE(highlighter->detectedLanguage(), u"javascript"_s);
 
     QQuickView view(&m_engine, nullptr);
     editor->setParentItem(view.contentItem());
     view.resize(400, 120);
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
-    editor->setText(u"int main() { return 0; }\n// done\n"_s);
+    editor->setText(u"function main() { return 0; }\n// done\n"_s);
 
     const QColor keyword(0x56, 0x9c, 0xd6), comment(0x6a, 0x99, 0x55);
     QTRY_VERIFY_WITH_TIMEOUT(countColor(view.grabWindow(), keyword) > 0, 10000);

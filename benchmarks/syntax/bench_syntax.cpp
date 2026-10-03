@@ -17,11 +17,8 @@
 
 #include <QtCore/QCommandLineParser>
 #include <QtCore/QCoreApplication>
-#include <QtCore/QDir>
-#include <QtCore/QDirIterator>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEventLoop>
-#include <QtCore/QFile>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSaveFile>
 
@@ -46,27 +43,6 @@ qint64 heapBytes() {
 
 // --- inputs ---------------------------------------------------------------------------------------------------
 
-// This repository's own C++ sources, concatenated.
-const QString &repoCpp() {
-  static const QString text = [] {
-    QString out;
-    QDirIterator it(
-      QStringLiteral(QCE_SOURCE_DIR "/src"), {u"*.cpp"_s, u"*.h"_s}, QDir::Files, QDirIterator::Subdirectories
-    );
-    QStringList files;
-    while (it.hasNext())
-      files << it.next();
-    files.sort();
-    for (const QString &path : files) {
-      QFile f(path);
-      if (f.open(QIODevice::ReadOnly))
-        out += QString::fromUtf8(f.readAll());
-    }
-    return out;
-  }();
-  return text;
-}
-
 QString jsonSample(qint64 chars) {
   QString out = u"[\n"_s;
   for (int i = 0; out.size() < chars; ++i)
@@ -74,45 +50,49 @@ QString jsonSample(qint64 chars) {
   return out + u"  {}\n]\n"_s;
 }
 
-QString pythonSample(qint64 chars) {
+QString javascriptSample(qint64 chars) {
   QString out;
   for (int i = 0; out.size() < chars; ++i)
-    out += u"class Thing%1(Base):\n    \"\"\"Doc %1.\"\"\"\n    def run(self, x, y=%1):\n        # compute\n"
-           u"        total = [v * 2 for v in range(x) if v %% 3]\n        return {\"k\": total, \"n\": y}\n\n"_s.arg(i);
+    out += u"// helper %1\nfunction compute%1(x, y = %1) {\n  const total = [1, 2, 3].map((v) => v * x).filter(Boolean);\n"
+           u"  return { name: \"item %1\", total, ok: y > 0 && /ab+c/.test(\"abbc\") };\n}\n\n"_s.arg(i);
   return out;
+}
+
+QString htmlSample(qint64 chars) {
+  QString out = u"<!DOCTYPE html>\n<html><body>\n"_s;
+  for (int i = 0; out.size() < chars; ++i)
+    out += u"  <div class=\"row r%1\" id=\"d%1\"><p>Hello &amp; welcome %1</p><!-- note --></div>\n"
+           u"  <script>var n%1 = %1; function f%1() { return n%1 * 2; }</script>\n"_s.arg(i);
+  return out + u"</body></html>\n"_s;
+}
+
+QString xmlSample(qint64 chars) {
+  QString out = u"<?xml version=\"1.0\"?>\n<root>\n"_s;
+  for (int i = 0; out.size() < chars; ++i)
+    out += u"  <item id=\"%1\" kind=\"a\"><name>Item %1</name><!-- c --><v>&lt;%1&gt;</v></item>\n"_s.arg(i);
+  return out + u"</root>\n"_s;
 }
 
 QString markdownSample(qint64 chars) {
   QString out;
   for (int i = 0; out.size() < chars; ++i)
     out += u"## Section %1\n\nSome *emphasis*, **strong** text, `code` and a [link](https://example.com/%1).\n\n"
-           u"```cpp\nint f%1(int x) { return x * %1; } // fenced\n```\n\n- item one\n- item two\n\n"_s.arg(i);
-  return out;
-}
-
-QString qmlSample(qint64 chars) {
-  QString out = u"import QtQuick 2.15\n\n"_s;
-  for (int i = 0; out.size() < chars; ++i)
-    out += u"Rectangle {\n    id: box%1\n    width: %1; height: 20\n    color: \"#ff0000\"\n"
-           u"    onWidthChanged: console.log(\"w\", width * 2)\n    function twice(a) { return a * 2 }\n}\n"_s.arg(i);
+           u"```javascript\nfunction f%1(x) { return x * %1; } // fenced\n```\n\n- item one\n- item two\n\n"_s.arg(i);
   return out;
 }
 
 QString sampleFor(const QString &language, qint64 chars) {
   QString text;
-  if (language == u"cpp"_s) {
-    const QString &base = repoCpp();
-    while (text.size() < chars)
-      text += base;
-  } else if (language == u"json"_s) {
+  if (language == u"javascript"_s)
+    text = javascriptSample(chars);
+  else if (language == u"json"_s)
     text = jsonSample(chars);
-  } else if (language == u"python"_s) {
-    text = pythonSample(chars);
-  } else if (language == u"markdown"_s) {
+  else if (language == u"html"_s)
+    text = htmlSample(chars);
+  else if (language == u"xml"_s)
+    text = xmlSample(chars);
+  else
     text = markdownSample(chars);
-  } else {
-    text = qmlSample(chars);
-  }
   if (text.size() > chars + 4096) { // cut at a line end so the text stays well-formed-ish
     const qsizetype nl = text.indexOf(u'\n', chars);
     text.truncate(nl < 0 ? chars : nl + 1);
@@ -127,8 +107,8 @@ Rope ropeOf(const QString &text) {
   return builder.finish();
 }
 
-const QStringList kLanguages = {u"cpp"_s, u"json"_s, u"python"_s, u"markdown"_s, u"qml"_s};
-const QString kFile[] = {u"a.cpp"_s, u"a.json"_s, u"a.py"_s, u"a.md"_s, u"a.qml"_s};
+const QStringList kLanguages = {u"javascript"_s, u"json"_s, u"html"_s, u"xml"_s, u"markdown"_s};
+const QString kFile[] = {u"a.js"_s, u"a.json"_s, u"a.html"_s, u"a.xml"_s, u"a.md"_s};
 
 QString fileNameFor(const QString &language) { return kFile[kLanguages.indexOf(language)]; }
 
@@ -231,12 +211,12 @@ int main(int argc, char **argv) {
 
   // The window parse a huge document starts with: 100 MB (50 M units) of C++, window in the middle.
   runner.add(
-    quick ? u"parse/window/cpp/2M_units_of_6M"_s : u"parse/window/cpp/2M_units_of_50M"_s,
+    quick ? u"parse/window/javascript/2M_units_of_6M"_s : u"parse/window/javascript/2M_units_of_50M"_s,
     [=](Context &ctx) {
-      static const Rope rope = ropeOf(sampleFor(u"cpp"_s, quick ? 6'000'000 : 50'000'000));
+      static const Rope rope = ropeOf(sampleFor(u"javascript"_s, quick ? 6'000'000 : 50'000'000));
       const qsizetype middle = rope.lineStart(rope.lineCount() / 2);
       const qsizetype size = 2'000'000;
-      ParseResult result = parseWhole(TextSnapshot(rope, 1), u"cpp"_s, true, middle, middle + size);
+      ParseResult result = parseWhole(TextSnapshot(rope, 1), u"javascript"_s, true, middle, middle + size);
       doNotOptimize(result.tree.get());
       ctx.setItems(1);
     },

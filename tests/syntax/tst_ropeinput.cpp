@@ -6,7 +6,7 @@ using namespace qce;
 using namespace Qt::StringLiterals;
 
 namespace {
-extern "C" const TSLanguage *tree_sitter_cpp();
+extern "C" const TSLanguage *tree_sitter_javascript();
 
 QString sexp(TSTree *tree) {
   char *s = ts_node_string(ts_tree_root_node(tree));
@@ -32,13 +32,13 @@ private slots:
     QVERIFY(rope.stats().leaves > 1);
 
     ParserPtr parser(ts_parser_new());
-    ts_parser_set_language(parser.get(), tree_sitter_cpp());
+    ts_parser_set_language(parser.get(), tree_sitter_javascript());
     RopeInput input(rope);
     TreePtr viaRope(ts_parser_parse(parser.get(), nullptr, input.input()));
     QVERIFY(viaRope);
 
     ParserPtr parser2(ts_parser_new());
-    ts_parser_set_language(parser2.get(), tree_sitter_cpp());
+    ts_parser_set_language(parser2.get(), tree_sitter_javascript());
     TreePtr flat(ts_parser_parse_string_encoding(
       parser2.get(), nullptr, reinterpret_cast<const char *>(text.utf16()), uint32_t(text.size() * 2),
       TSInputEncodingUTF16LE
@@ -50,7 +50,7 @@ private slots:
 
   void emptyRope() {
     ParserPtr parser(ts_parser_new());
-    ts_parser_set_language(parser.get(), tree_sitter_cpp());
+    ts_parser_set_language(parser.get(), tree_sitter_javascript());
     RopeInput input{Rope()};
     TreePtr tree(ts_parser_parse(parser.get(), nullptr, input.input()));
     QVERIFY(tree);

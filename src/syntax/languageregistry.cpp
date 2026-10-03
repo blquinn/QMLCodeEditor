@@ -9,12 +9,8 @@
 #include <map>
 
 extern "C" {
-const TSLanguage *tree_sitter_c();
-const TSLanguage *tree_sitter_cpp();
 const TSLanguage *tree_sitter_json();
 const TSLanguage *tree_sitter_javascript();
-const TSLanguage *tree_sitter_qmljs();
-const TSLanguage *tree_sitter_python();
 const TSLanguage *tree_sitter_html();
 const TSLanguage *tree_sitter_xml();
 const TSLanguage *tree_sitter_markdown();
@@ -133,18 +129,6 @@ TSQuery *compileQuery(const TSLanguage *language, const QString &source, QString
 
 LanguageRegistry::LanguageRegistry() {
   auto add = [this](LanguageInfo info) { m_languages.append(std::move(info)); };
-  add({u"c"_s, u"C"_s, {u"c"_s, u"h"_s}, {}, {}, {u"c"_s}, &tree_sitter_c, {u"c/highlights.scm"_s}, {}});
-  add(
-    {u"cpp"_s,
-     u"C++"_s,
-     {u"cpp"_s, u"cc"_s, u"cxx"_s, u"hpp"_s, u"hh"_s, u"hxx"_s, u"ipp"_s, u"inl"_s, u"tpp"_s},
-     {},
-     {},
-     {u"c++"_s, u"cplusplus"_s},
-     &tree_sitter_cpp,
-     {u"c/highlights.scm"_s, u"cpp/highlights.scm"_s},
-     {u"cpp/injections.scm"_s}}
-  );
   add({u"json"_s,
        u"JSON"_s,
        {u"json"_s, u"jsonc"_s, u"geojson"_s, u"webmanifest"_s},
@@ -162,26 +146,6 @@ LanguageRegistry::LanguageRegistry() {
        {u"js"_s, u"node"_s},
        &tree_sitter_javascript,
        {u"javascript/highlights.scm"_s},
-       {}});
-  // The QML grammar parses JavaScript natively inside bindings and functions, so no injection is
-  // needed for it; its queries build on the JavaScript and TypeScript ones.
-  add({u"qml"_s,
-       u"QML"_s,
-       {u"qml"_s},
-       {},
-       {u"qml"_s, u"qmlscene"_s},
-       {u"qml"_s},
-       &tree_sitter_qmljs,
-       {u"javascript/highlights.scm"_s, u"typescript/highlights.scm"_s, u"qml/highlights.scm"_s},
-       {}});
-  add({u"python"_s,
-       u"Python"_s,
-       {u"py"_s, u"pyw"_s, u"pyi"_s, u"bzl"_s},
-       {u"sconstruct"_s, u"sconscript"_s},
-       {u"python"_s, u"python2"_s, u"python3"_s},
-       {u"py"_s, u"python3"_s},
-       &tree_sitter_python,
-       {u"python/highlights.scm"_s},
        {}});
   add({u"html"_s,
        u"HTML"_s,

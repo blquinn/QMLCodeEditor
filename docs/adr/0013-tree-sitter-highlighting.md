@@ -23,6 +23,10 @@ Highlighting must never block typing, must work on a 100 MB file, and must not f
 
 **Injections (SYNTAX-08).** After a parse the worker runs the language's `injections.scm` over a region around the viewport (the whole text up to 300 k units) and parses each content range, or each `injection.combined` group, with its language (name from `#set!` or a capture, resolved through registry aliases), nested up to 3 deep. Layer trees are painted over the host. QML needs none: the qmljs grammar parses JavaScript itself. Plain `.js` uses the JavaScript grammar.
 
+## Languages
+
+Shipped: JSON, JavaScript, HTML (with JavaScript from `<script>`), XML, Markdown. C, C++, QML and Python were built and tested but removed (SYNTAX-14) because their parse tables made the demo binary 8 MB; the benchmark numbers below for those languages were taken before the removal. The QML grammar parses JavaScript natively, so it needed no injection.
+
 ## Consequences
 
 - A keystroke costs the GUI thread an edit plus a few block fills (0.15-0.5 ms measured on 1 M units); parsing never runs there.

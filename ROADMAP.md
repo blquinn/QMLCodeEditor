@@ -209,7 +209,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 ## M6 — Syntax highlighting
 
-**Exit criteria:** C++, JSON, QML/JS, Python and Markdown highlight correctly; typing never waits on the parser; a 100 MB file highlights the visible region without a full parse blocking the UI.
+**Exit criteria:** C++, JSON, QML/JS, Python and Markdown highlight correctly (C, C++, QML and Python were dropped again in SYNTAX-14 to save binary size); typing never waits on the parser; a 100 MB file highlights the visible region without a full parse blocking the UI.
 
 - [x] **SYNTAX-01** Vendor tree-sitter core and grammars via CMake — done 2026-10-03 (a965b9e)
   - `FetchContent` / `third_party/`: C/C++, JSON, JavaScript/QML, Python, Markdown. Pinned versions.
@@ -237,6 +237,8 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - Auto-detects by file name; `language` override; `CodeEditor.highlighter` settable from QML.
 - [x] **SYNTAX-13** HTML and XML grammars — done 2026-10-03 (aa3162c)
   - HTML (with JavaScript in `<script>`) and XML (also SVG, Qt `.ui`/`.qrc`, plist); `<style>` content stays plain until a CSS grammar is added.
+- [x] **SYNTAX-14** Drop C, C++, QML and Python grammars for now — done 2026-10-03
+  - They made the demo 8 MB (C++ alone 3.5 MB of parse tables). Shipped languages: JSON, JavaScript, HTML, XML, Markdown. To restore one, revert the SYNTAX-14 commit and re-add its registry entry and `QceTreeSitter.cmake` fetch (pinned versions are in git history); a per-language build option is the alternative.
 
 ## M7 — Code folding
 
