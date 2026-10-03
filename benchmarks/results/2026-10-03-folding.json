@@ -1,0 +1,168 @@
+{
+    "meta": {
+        "compiler": "clang 22.1.8 (Fedora 22.1.8-4.fc44)",
+        "cores": 20,
+        "cpu": "AMD Ryzen AI 9 365 w/ Radeon 880M",
+        "date": "2026-10-03T15:39:47Z",
+        "optimized": true,
+        "os": "Fedora Linux 44 (Workstation Edition)",
+        "qt": "6.11.2",
+        "suite": "bench_fold"
+    },
+    "results": [
+        {
+            "items": 2000005,
+            "iterations": 5,
+            "mean_ns": 39773393.4,
+            "median_ns": 40706200,
+            "median_ns_per_item": 20.353049117377207,
+            "min_ns": 35280613,
+            "name": "ranges/indent_all_2M_lines",
+            "p95_ns": 44739054,
+            "unit": "ns"
+        },
+        {
+            "items": 100,
+            "iterations": 10,
+            "mean_ns": 662556.3,
+            "median_ns": 661864,
+            "median_ns_per_item": 6618.64,
+            "min_ns": 639746,
+            "name": "ranges/indent_viewport_cold",
+            "p95_ns": 693651,
+            "unit": "ns"
+        },
+        {
+            "items": 666668,
+            "iterations": 5,
+            "mean_ns": 169850142.8,
+            "median_ns": 166092012,
+            "median_ns_per_item": 249.13751972496055,
+            "min_ns": 165417799,
+            "name": "fold/all_666k",
+            "p95_ns": 183632462,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 5,
+            "mean_ns": 80594050.4,
+            "median_ns": 80350417,
+            "median_ns_per_item": 80350417,
+            "min_ns": 79383840,
+            "name": "fold/unfold_all_666k",
+            "p95_ns": 82715467,
+            "unit": "ns"
+        },
+        {
+            "items": 200,
+            "iterations": 5,
+            "mean_ns": 12363070.4,
+            "median_ns": 12373581,
+            "median_ns_per_item": 61867.905,
+            "min_ns": 12173208,
+            "name": "fold/toggle_one_of_100k",
+            "p95_ns": 12681455,
+            "unit": "ns"
+        },
+        {
+            "items": 200,
+            "iterations": 5,
+            "mean_ns": 1327454.8,
+            "median_ns": 1111742,
+            "median_ns_per_item": 5558.71,
+            "min_ns": 1085139,
+            "name": "fold/keystroke_with_100k_folds",
+            "p95_ns": 1728812,
+            "unit": "ns"
+        },
+        {
+            "items": 50,
+            "iterations": 5,
+            "mean_ns": 6083139.2,
+            "median_ns": 6063199,
+            "median_ns_per_item": 121263.98,
+            "min_ns": 6021025,
+            "name": "fold/enter_with_100k_folds",
+            "p95_ns": 6174686,
+            "unit": "ns"
+        },
+        {
+            "items": 3000,
+            "iterations": 10,
+            "mean_ns": 2751756.9,
+            "median_ns": 2771854.5,
+            "median_ns_per_item": 923.9515,
+            "min_ns": 1672091,
+            "name": "fold/row_queries_100k_folds",
+            "p95_ns": 3817411,
+            "unit": "ns"
+        },
+        {
+            "items": 666668,
+            "iterations": 5,
+            "mean_ns": 173119688,
+            "median_ns": 171946400,
+            "median_ns_per_item": 257.9190841618317,
+            "min_ns": 170638323,
+            "name": "fold/all_666k_wrap",
+            "p95_ns": 178293405,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 5,
+            "mean_ns": 82474838.8,
+            "median_ns": 82569540,
+            "median_ns_per_item": 82569540,
+            "min_ns": 81986346,
+            "name": "fold/unfold_all_666k_wrap",
+            "p95_ns": 83036177,
+            "unit": "ns"
+        },
+        {
+            "items": 200,
+            "iterations": 5,
+            "mean_ns": 14599144.8,
+            "median_ns": 14521807,
+            "median_ns_per_item": 72609.035,
+            "min_ns": 14344469,
+            "name": "fold/toggle_one_of_100k_wrap",
+            "p95_ns": 15047449,
+            "unit": "ns"
+        },
+        {
+            "items": 200,
+            "iterations": 5,
+            "mean_ns": 4606281.8,
+            "median_ns": 4620939,
+            "median_ns_per_item": 23104.695,
+            "min_ns": 4326982,
+            "name": "fold/keystroke_with_100k_folds_wrap",
+            "p95_ns": 4949032,
+            "unit": "ns"
+        },
+        {
+            "items": 50,
+            "iterations": 5,
+            "mean_ns": 6909350.6,
+            "median_ns": 7001669,
+            "median_ns_per_item": 140033.38,
+            "min_ns": 6614340,
+            "name": "fold/enter_with_100k_folds_wrap",
+            "p95_ns": 7185510,
+            "unit": "ns"
+        },
+        {
+            "items": 3000,
+            "iterations": 10,
+            "mean_ns": 7550611.1,
+            "median_ns": 7368003.5,
+            "median_ns_per_item": 2456.0011666666664,
+            "min_ns": 5926460,
+            "name": "fold/row_queries_100k_folds_wrap",
+            "p95_ns": 8924784,
+            "unit": "ns"
+        }
+    ]
+}

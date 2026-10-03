@@ -3,10 +3,12 @@
 // much layout and node churn scrolling causes, and memory growth.
 //
 //   bench_scroll [--json out.json] [--frames N] [--quick] [--filter REGEX] [--gutter] [--relative] [--wrap]
+//                [--folds]
 //
 // --gutter adds line numbers, a change column and a marker column (M5); --relative makes the numbers
 // relative to the cursor; --wrap wraps at the viewport. The "cursor" scenarios move the cursor one line per
-// frame, which renumbers every row in relative mode.
+// frame, which renumbers every row in relative mode. --folds folds 20,000 regions spread through the file
+// (M7) once it is open; with --gutter the fold column joins the others.
 //
 // Inputs are generated once into $QCE_BENCH_DIR (default: the system temp dir) and reused. Run from a release
 // build on a real display for meaningful numbers; --quick uses a small file and few frames (the ctest smoke
@@ -15,6 +17,7 @@
 #include "datagen.h"
 #include "frametimer.h"
 #include "quick/changecolumn.h"
+#include "quick/foldcolumn.h"
 #include "quick/codeeditor.h"
 #include "quick/linenumbercolumn.h"
 #include "quick/markercolumn.h"
@@ -336,6 +339,7 @@ int main(int argc, char **argv) {
   parser.addOption({QStringLiteral("gutter"), QStringLiteral("Show line numbers, change bars and markers.")});
   parser.addOption({QStringLiteral("relative"), QStringLiteral("With --gutter: relative line numbers.")});
   parser.addOption({QStringLiteral("wrap"), QStringLiteral("Wrap at the viewport width.")});
+  parser.addOption({QStringLiteral("folds"), QStringLiteral("Fold 20,000 regions spread through the file.")});
   parser.addOption(
     {{QStringLiteral("f"), QStringLiteral("filter")},
      QStringLiteral("Only scenarios whose name matches this regex."),
@@ -379,8 +383,13 @@ int main(int argc, char **argv) {
     editor->addGutterColumn(new qce::ChangeColumn(editor));
     markers = new qce::MarkerColumn(editor);
     editor->addGutterColumn(markers);
+    if (parser.isSet(QStringLiteral("folds")))
+      editor->addGutterColumn(new qce::FoldColumn(editor));
     variant += QStringLiteral("gutter/");
   }
+  const bool folds = parser.isSet(QStringLiteral("folds"));
+  if (folds)
+    variant += QStringLiteral("folds/");
   if (parser.isSet(QStringLiteral("wrap"))) {
     editor->setWrapMode(CodeEditor::WrapAtViewport);
     variant += QStringLiteral("wrap/");
@@ -409,6 +418,20 @@ int main(int argc, char **argv) {
       if (markers)
         for (int i = 0; i < 100; ++i)
           markers->addMarker(editor->lineCount() / 100 * i, {{QStringLiteral("color"), QColor(Qt::red)}});
+      if (folds) {
+        QElapsedTimer foldTimer;
+        foldTimer.start();
+        const qsizetype lines = editor->lineCount();
+        int made = 0;
+        for (int i = 0; i < 20000; ++i) {
+          const qsizetype from = lines / 20000 * i;
+          const auto ranges = editor->foldRangesIn(from, from + 30);
+          if (!ranges.isEmpty() && editor->fold(ranges.first().startLine))
+            ++made;
+        }
+        std::fprintf(stderr, "folded %d regions in %lld ms\n", made, foldTimer.elapsed());
+        results << valueResult(QStringLiteral("scroll/") + variant + s.name + QStringLiteral("/folds_made"), made, QStringLiteral("count"));
+      }
       currentPath = s.path;
     }
     results << bench.scroll(label, s.mode);

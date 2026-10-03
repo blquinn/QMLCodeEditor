@@ -256,6 +256,31 @@ ApplicationWindow {
             }
         }
         Menu {
+            title: qsTr("F&old")
+            MenuItem { text: qsTr("&Fold at cursor"); onTriggered: editor.foldAtCursor() }
+            MenuItem { text: qsTr("&Unfold at cursor"); onTriggered: editor.unfoldAtCursor() }
+            MenuSeparator {}
+            MenuItem { text: qsTr("Fold &all"); onTriggered: editor.foldAll() }
+            MenuItem { text: qsTr("U&nfold all"); onTriggered: editor.unfoldAll() }
+            MenuSeparator {}
+            MenuItem { text: qsTr("Fold level &1"); onTriggered: editor.foldToLevel(1) }
+            MenuItem { text: qsTr("Fold level &2"); onTriggered: editor.foldToLevel(2) }
+            MenuItem { text: qsTr("Fold level &3"); onTriggered: editor.foldToLevel(3) }
+            MenuSeparator {}
+            MenuItem {
+                text: qsTr("Open a fold when the cursor enters it")
+                checkable: true
+                checked: editor.foldCursorPolicy === CodeEditor.UnfoldOnEnter
+                onToggled: editor.foldCursorPolicy = checked ? CodeEditor.UnfoldOnEnter : CodeEditor.SkipFolds
+            }
+            MenuItem {
+                text: qsTr("Fold markers")
+                checkable: true
+                checked: foldMarkers.visible
+                onToggled: foldMarkers.visible = checked
+            }
+        }
+        Menu {
             title: qsTr("&Gutter")
             MenuItem {
                 text: qsTr("Line numbers")
@@ -374,6 +399,9 @@ ApplicationWindow {
         objectName: "editor"
         undoLimit: 10000 // keep a long session's history bounded
 
+        // Fold ranges come from the grammar (and from indentation where the language has none).
+        foldProvider: highlighter.folds
+
         // tree-sitter highlighting; the language follows the file name (or its shebang) unless chosen
         // in the Language menu.
         highlighter: SyntaxHighlighter {
@@ -394,6 +422,7 @@ ApplicationWindow {
                         addMarker(line, { color: "#e51400", barWidth: 12 })
                 }
             },
+            FoldColumn { id: foldMarkers },
             DelegateColumn {
                 id: bookmarkColumn
                 width: 18

@@ -111,7 +111,8 @@ private:
   qsizetype unclampedFoldLine(qsizetype bufferLine) const;
   void rebuildHidden();
   void dropAnchors(const Fold &fold);
-  Fold makeFold(qsizetype header, qsizetype lastLine);
+  // The offsets, when known, are the ends of the two lines.
+  Fold makeFold(qsizetype header, qsizetype lastLine, qsizetype headerEnd = -1, qsizetype lastEnd = -1);
   std::vector<Fold>::const_iterator findHeader(qsizetype header) const;
   // Index of the last hidden stretch starting at or before `line`, or -1.
   qsizetype stretchAtOrBefore(qsizetype line) const;

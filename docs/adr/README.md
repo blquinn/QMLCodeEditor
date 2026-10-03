@@ -17,6 +17,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0011](0011-soft-wrap.md) | Soft wrap: estimated row counts, refined on demand and in the background | Accepted |
 | [0012](0012-gutter.md) | Gutter inside the editor: columns paint into the frame plan | Accepted |
 | [0013](0013-tree-sitter-highlighting.md) | Tree-sitter highlighting: worker parses, edited trees, window parses | Accepted |
+| [0014](0014-code-folding.md) | Code folding: anchored folds, hidden lines in the wrap layer | Accepted |
 
 ## Adding one
 

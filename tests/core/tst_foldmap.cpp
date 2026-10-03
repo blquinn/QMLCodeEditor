@@ -217,6 +217,39 @@ private slots:
     verifyAgainstBruteForce(fold);
   }
 
+  void settingManyFoldsMatchesFoldingOneByOne() {
+    // More than 64 folds take the batched path; with mixed line endings both must anchor the same.
+    QRandomGenerator rng(19);
+    QString text;
+    for (int i = 0; i < 400; ++i)
+      text += u"line%1"_s.arg(i) + (rng.bounded(3) == 0 ? u"\r\n"_s : u"\n"_s);
+    text += u"end"_s;
+    QList<FoldRange> ranges;
+    for (int i = 0; i < 300; ++i) {
+      const qsizetype a = rng.bounded(380);
+      ranges.append({a, a + 1 + rng.bounded(15)});
+    }
+    TextDocument docA, docB;
+    docA.setText(text);
+    docB.setText(text);
+    DisplayMap batched(&docA), single(&docB);
+    batched.setFolds(ranges);
+    QList<FoldRange> unique;
+    for (const FoldRange &r : batched.folds().folds())
+      unique.append(r);
+    for (const FoldRange &r : std::as_const(unique))
+      single.fold(r.startLine, r.endLine);
+    QCOMPARE(single.folds().folds(), batched.folds().folds());
+    for (int step = 0; step < 100; ++step) {
+      const qsizetype a = rng.bounded(docA.length() + 1);
+      const qsizetype b = qMin<qsizetype>(docA.length(), a + rng.bounded(30));
+      const QString edit = rng.bounded(2) ? u"\n"_s : u"x"_s;
+      docA.replace(a, b, edit);
+      docB.replace(a, b, edit);
+      QCOMPARE(single.folds().folds(), batched.folds().folds());
+    }
+  }
+
   void resettingTheTextRemovesFolds() {
     TextDocument doc;
     doc.setText(numberedLines(6));

@@ -4,6 +4,38 @@
 
 namespace qce {
 
+namespace {
+
+// Rope::lineEnd for many lines at once, in one pass over the text: `lines` must ascend (repeats are
+// fine). Each lookup on its own scans a leaf, which adds up when folding hundreds of thousands of ranges.
+QList<qsizetype> lineEndOffsets(const Rope &rope, const QList<qsizetype> &lines) {
+  QList<qsizetype> out(lines.size(), rope.length());
+  qsizetype k = 0, line = 0, pos = 0;
+  QChar previous;
+  ChunkIterator it(rope);
+  QStringView chunk;
+  while (k < lines.size() && it.next(&chunk)) {
+    qsizetype i = 0;
+    while (k < lines.size()) {
+      const qsizetype nl = chunk.indexOf(u'\n', i);
+      if (nl < 0)
+        break;
+      const bool cr = (nl > 0 ? chunk[nl - 1] : previous) == u'\r';
+      const qsizetype end = pos + nl - (cr ? 1 : 0);
+      while (k < lines.size() && lines[k] <= line)
+        out[k++] = end;
+      ++line;
+      i = nl + 1;
+    }
+    if (!chunk.isEmpty())
+      previous = chunk.last();
+    pos += chunk.size();
+  }
+  return out;
+}
+
+} // namespace
+
 FoldMap::FoldMap(TextDocument *document) : m_document(document) {}
 
 FoldMap::~FoldMap() {
@@ -123,13 +155,13 @@ void FoldMap::rebuildHidden() {
   }
 }
 
-FoldMap::Fold FoldMap::makeFold(qsizetype header, qsizetype lastLine) {
+FoldMap::Fold FoldMap::makeFold(qsizetype header, qsizetype lastLine, qsizetype headerEnd, qsizetype lastEnd) {
   const Rope &rope = m_document->rope();
   Fold f;
   f.header = header;
   f.last = lastLine;
-  f.start = m_document->anchors().create(rope.lineEnd(header), Gravity::Left);
-  f.end = m_document->anchors().create(rope.lineEnd(lastLine), Gravity::Left);
+  f.start = m_document->anchors().create(headerEnd >= 0 ? headerEnd : rope.lineEnd(header), Gravity::Left);
+  f.end = m_document->anchors().create(lastEnd >= 0 ? lastEnd : rope.lineEnd(lastLine), Gravity::Left);
   return f;
 }
 
@@ -212,14 +244,31 @@ LineRange FoldMap::setFolds(const QList<FoldRange> &ranges) {
   });
   const qsizetype lines = bufferLineCount();
   m_folds.reserve(size_t(sorted.size()));
+  QList<FoldRange> valid;
+  valid.reserve(sorted.size());
   qsizetype lastHeader = -1;
   for (const FoldRange &r : std::as_const(sorted)) {
     if (r.startLine < 0 || r.endLine <= r.startLine || r.endLine >= lines || r.startLine == lastHeader)
       continue;
     lastHeader = r.startLine;
-    m_folds.push_back(makeFold(r.startLine, r.endLine));
+    valid.append(r);
     changed.unite(r.startLine + 1, r.endLine);
   }
+  // Many folds: find the line ends in one sweep of the text instead of one lookup each.
+  QList<qsizetype> wanted, ends;
+  if (valid.size() > 64) {
+    wanted.reserve(valid.size() * 2);
+    for (const FoldRange &r : std::as_const(valid))
+      wanted << r.startLine << r.endLine;
+    std::sort(wanted.begin(), wanted.end());
+    wanted.erase(std::unique(wanted.begin(), wanted.end()), wanted.end());
+    ends = lineEndOffsets(m_document->rope(), wanted);
+  }
+  auto endOf = [&](qsizetype line) {
+    return wanted.isEmpty() ? qsizetype(-1) : ends[std::lower_bound(wanted.begin(), wanted.end(), line) - wanted.begin()];
+  };
+  for (const FoldRange &r : std::as_const(valid))
+    m_folds.push_back(makeFold(r.startLine, r.endLine, endOf(r.startLine), endOf(r.endLine)));
   rebuildHidden();
   return changed;
 }

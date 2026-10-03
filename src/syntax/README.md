@@ -7,3 +7,4 @@ tree-sitter integration and the language registry (milestone M6, [ADR 0013](../.
 - `ropeinput`, `parsejob`: parsing rope snapshots on a worker, injections
 - `queryinfo`: capture to token style, text predicates
 - `treesitterhighlighter`: edits, scheduling, span cache
+- `TreeSitterFoldProvider` (in `treesitterhighlighter`): fold ranges from `queries/<language>/folds.scm` captures (`@fold`, `@fold.keep_last`), indentation where the tree does not reach ([ADR 0014](../../docs/adr/0014-code-folding.md))

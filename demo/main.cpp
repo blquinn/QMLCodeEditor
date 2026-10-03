@@ -12,7 +12,9 @@ int main(int argc, char **argv) {
   QQuickStyle::setStyle(QStringLiteral("Basic"));
   // --smoke: exit 0 after the first presented frame, 1 if none arrives within 10 s (used by ctest).
   // --grab <png>: save a screenshot of the window once it has settled, then exit.
+  // --fold-level <n>: fold the regions of that nesting level shortly before the grab.
   bool smoke = false;
+  int foldLevel = 0;
   QString grabPath;
   QUrl initialFile; // the first argument that isn't an option is a file to open
   const QStringList args = app.arguments();
@@ -21,6 +23,8 @@ int main(int argc, char **argv) {
       smoke = true;
     else if (args[i] == QLatin1String("--grab") && i + 1 < args.size())
       grabPath = args[++i];
+    else if (args[i] == QLatin1String("--fold-level") && i + 1 < args.size())
+      foldLevel = args[++i].toInt();
     else if (!args[i].startsWith(QLatin1Char('-')) && initialFile.isEmpty())
       initialFile = QUrl::fromLocalFile(QDir::current().absoluteFilePath(args[i]));
   }
@@ -48,6 +52,12 @@ int main(int argc, char **argv) {
       qWarning("demo --smoke: no frame within 10 s");
       exitCode = 1;
       QCoreApplication::exit(1);
+    });
+  }
+  if (foldLevel > 0) {
+    QTimer::singleShot(1000, &app, [&] {
+      if (QObject *editor = window->findChild<QObject *>(QStringLiteral("editor")))
+        QMetaObject::invokeMethod(editor, "foldToLevel", Q_ARG(int, foldLevel));
     });
   }
   if (!grabPath.isEmpty()) {
