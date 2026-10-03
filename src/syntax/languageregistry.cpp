@@ -15,6 +15,8 @@ const TSLanguage *tree_sitter_json();
 const TSLanguage *tree_sitter_javascript();
 const TSLanguage *tree_sitter_qmljs();
 const TSLanguage *tree_sitter_python();
+const TSLanguage *tree_sitter_html();
+const TSLanguage *tree_sitter_xml();
 const TSLanguage *tree_sitter_markdown();
 const TSLanguage *tree_sitter_markdown_inline();
 }
@@ -180,6 +182,25 @@ LanguageRegistry::LanguageRegistry() {
        {u"py"_s, u"python3"_s},
        &tree_sitter_python,
        {u"python/highlights.scm"_s},
+       {}});
+  add({u"html"_s,
+       u"HTML"_s,
+       {u"html"_s, u"htm"_s, u"xhtml"_s},
+       {},
+       {},
+       {u"htm"_s},
+       &tree_sitter_html,
+       {u"html/highlights.scm"_s},
+       {u"html/injections.scm"_s}});
+  add({u"xml"_s,
+       u"XML"_s,
+       {u"xml"_s, u"xsd"_s, u"xsl"_s, u"xslt"_s, u"svg"_s, u"plist"_s, u"rss"_s, u"atom"_s, u"xaml"_s,
+        u"ui"_s, u"qrc"_s, u"xliff"_s, u"wsdl"_s, u"csproj"_s, u"vcxproj"_s, u"pom"_s},
+       {},
+       {},
+       {u"svg"_s},
+       &tree_sitter_xml,
+       {u"xml/highlights.scm"_s},
        {}});
   add({u"markdown"_s,
        u"Markdown"_s,

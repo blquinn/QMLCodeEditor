@@ -38,6 +38,14 @@ qce_fetch(ts_markdown
     https://github.com/tree-sitter-grammars/tree-sitter-markdown/archive/refs/tags/v0.5.3.tar.gz
     df845b1ab7c7c163ec57d7fa17170c92b04be199bddab02523636efec5224ab6)
 
+qce_fetch(ts_html
+    https://github.com/tree-sitter/tree-sitter-html/archive/refs/tags/v0.23.2.tar.gz
+    21fa4f2d4dcb890ef12d09f4979a0007814f67f1c7294a9b17b0108a09e45ef7)
+# Also contains the DTD grammar (unused); the XML grammar is in its xml/ directory.
+qce_fetch(ts_xml
+    https://github.com/tree-sitter-grammars/tree-sitter-xml/archive/refs/tags/v0.7.0.tar.gz
+    4330a6b3685c2f66d108e1df0448eb40c468518c3a66f2c1607a924c262a3eb9)
+
 add_library(qce_tree_sitter STATIC ${tree_sitter_SOURCE_DIR}/lib/src/lib.c)
 target_include_directories(qce_tree_sitter
     PUBLIC ${tree_sitter_SOURCE_DIR}/lib/include
@@ -64,19 +72,21 @@ qce_add_grammar(qce_ts_json ${ts_json_SOURCE_DIR})
 qce_add_grammar(qce_ts_javascript ${ts_javascript_SOURCE_DIR})
 qce_add_grammar(qce_ts_qml ${ts_qmljs_SOURCE_DIR})
 qce_add_grammar(qce_ts_python ${ts_python_SOURCE_DIR})
+qce_add_grammar(qce_ts_html ${ts_html_SOURCE_DIR})
+qce_add_grammar(qce_ts_xml ${ts_xml_SOURCE_DIR}/xml)
 qce_add_grammar(qce_ts_markdown ${ts_markdown_SOURCE_DIR}/tree-sitter-markdown)
 qce_add_grammar(qce_ts_markdown_inline ${ts_markdown_SOURCE_DIR}/tree-sitter-markdown-inline)
 
 add_library(qce_grammars INTERFACE)
 target_link_libraries(qce_grammars INTERFACE
     qce_tree_sitter qce_ts_c qce_ts_cpp qce_ts_json qce_ts_javascript qce_ts_qml qce_ts_python
-    qce_ts_markdown qce_ts_markdown_inline)
+    qce_ts_html qce_ts_xml qce_ts_markdown qce_ts_markdown_inline)
 
 # language=dir pairs of the upstream checkouts, read by src/syntax to embed query files.
 set(QCE_TS_SOURCE_DIRS
     c=${ts_c_SOURCE_DIR} cpp=${ts_cpp_SOURCE_DIR} json=${ts_json_SOURCE_DIR}
     javascript=${ts_javascript_SOURCE_DIR} typescript=${ts_typescript_SOURCE_DIR} qml=${ts_qmljs_SOURCE_DIR}
-    python=${ts_python_SOURCE_DIR}
+    python=${ts_python_SOURCE_DIR} html=${ts_html_SOURCE_DIR} xml=${ts_xml_SOURCE_DIR}
     markdown=${ts_markdown_SOURCE_DIR}/tree-sitter-markdown
     markdown_inline=${ts_markdown_SOURCE_DIR}/tree-sitter-markdown-inline
 )

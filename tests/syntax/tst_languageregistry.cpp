@@ -20,6 +20,10 @@ private slots:
     QTest::newRow("py") << u"tool.py"_s << u"python"_s;
     QTest::newRow("md") << u"notes.md"_s << u"markdown"_s;
     QTest::newRow("readme") << u"README"_s << u"markdown"_s;
+    QTest::newRow("html") << u"index.HTML"_s << u"html"_s;
+    QTest::newRow("xml") << u"pom.xml"_s << u"xml"_s;
+    QTest::newRow("svg") << u"logo.svg"_s << u"xml"_s;
+    QTest::newRow("ui") << u"form.ui"_s << u"xml"_s;
     QTest::newRow("unknown") << u"a.xyz"_s << QString();
   }
   void detectsByExtension() {

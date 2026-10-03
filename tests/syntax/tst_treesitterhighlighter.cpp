@@ -138,6 +138,35 @@ private slots:
     expect(h, doc, u"1;"_s, TokenStyle::Number);
   }
 
+  void html() {
+    TextDocument doc;
+    doc.setText(u"<!DOCTYPE html>\n<p class=\"a\">hi</p>\n<!-- c -->\n<script>var n = 12;</script>\n"_s);
+    TreeSitterHighlighter h;
+    h.setFileName(u"index.html"_s);
+    h.attach(&doc);
+    settle(h);
+    expect(h, doc, u"class"_s, TokenStyle::Attribute);
+    expect(h, doc, u"a\">hi"_s, TokenStyle::String); // the value, inside the quotes
+    expect(h, doc, u"<!-- c -->"_s, TokenStyle::Comment);
+    expect(h, doc, u"p class"_s, TokenStyle::Tag);
+    expect(h, doc, u"var"_s, TokenStyle::Keyword); // JavaScript inside <script>
+    expect(h, doc, u"12"_s, TokenStyle::Number);
+  }
+
+  void xml() {
+    TextDocument doc;
+    doc.setText(u"<?xml version=\"1.0\"?>\n<root id=\"7\">\n  <!-- c -->\n  <item>a &amp; b</item>\n</root>\n"_s);
+    TreeSitterHighlighter h;
+    h.setFileName(u"a.xml"_s);
+    h.attach(&doc);
+    settle(h);
+    expect(h, doc, u"root"_s, TokenStyle::Tag);
+    expect(h, doc, u"id"_s, TokenStyle::Property);
+    expect(h, doc, u"7\">"_s, TokenStyle::String);
+    expect(h, doc, u"<!-- c -->"_s, TokenStyle::Comment);
+    expect(h, doc, u"&amp;"_s, TokenStyle::Constant);
+  }
+
   void shebangPicksLanguage() {
     TextDocument doc;
     doc.setText(u"#!/usr/bin/env python3\nx = 1\n"_s);
