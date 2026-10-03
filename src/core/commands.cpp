@@ -1,6 +1,7 @@
 #include "core/commands.h"
 
 #include "core/textboundaries.h"
+#include "core/textsearch.h"
 
 #include <cmath>
 
@@ -424,6 +425,103 @@ bool addCursorVertical(EditContext &ctx, bool up) {
   ctx.selections.setGoalX(index, goal); // the goal survives repeated presses
   ctx.selections.add({head, head});
   ctx.selections.setGoalX(ctx.selections.primaryIndex(), goal);
+  return true;
+}
+
+namespace {
+
+// The word at or just before `offset`, if there is one.
+std::optional<Selection> wordAt(const Rope &rope, qsizetype offset) {
+  const TextBoundaries bounds(rope);
+  for (qsizetype probe : {offset, offset - 1}) {
+    if (probe < 0 || probe >= rope.length())
+      continue;
+    const auto [start, end] = bounds.wordRangeAt(probe);
+    if (end > start && search::isWordChar(rope.at(start)))
+      return Selection{start, end};
+  }
+  return std::nullopt;
+}
+
+bool isWholeWord(const Rope &rope, Selection s) {
+  if (s.isEmpty())
+    return false;
+  for (qsizetype i = s.start(); i < s.end(); ++i)
+    if (!search::isWordChar(rope.at(i)))
+      return false;
+  return (s.start() == 0 || !search::isWordChar(rope.at(s.start() - 1))) &&
+         (s.end() == rope.length() || !search::isWordChar(rope.at(s.end())));
+}
+
+constexpr qsizetype kMaxNeedle = 1 << 16;
+
+} // namespace
+
+bool addNextOccurrence(EditContext &ctx) {
+  const Rope &rope = ctx.document.rope();
+  SelectionSet &sel = ctx.selections;
+  if (sel.primary().isEmpty()) {
+    SelectionList list = sel.selections();
+    bool any = false;
+    for (Selection &s : list)
+      if (s.isEmpty())
+        if (const auto word = wordAt(rope, s.head)) {
+          s = *word;
+          any = true;
+        }
+    if (!any)
+      return false;
+    ctx.document.breakUndoCoalescing();
+    sel.set(list, sel.primaryIndex());
+    return true;
+  }
+  const Selection primary = sel.primary();
+  if (primary.end() - primary.start() > kMaxNeedle)
+    return false;
+  const QString needle = rope.toString(primary.start(), primary.end());
+  const search::Options options{true, isWholeWord(rope, primary)};
+  qsizetype from = primary.end();
+  for (int tries = 0; tries <= 2 * sel.count() + 2; ++tries) {
+    const auto match = search::findNext(rope, needle, from, options, true);
+    if (!match)
+      return false;
+    const int i = sel.lowerBound(match->start());
+    if (i < sel.count() && sel.at(i).start() <= match->end()) {
+      from = match->end(); // taken
+      continue;
+    }
+    ctx.document.breakUndoCoalescing();
+    sel.add(*match);
+    return true;
+  }
+  return false;
+}
+
+bool selectAllOccurrences(EditContext &ctx, bool *capped) {
+  if (capped)
+    *capped = false;
+  const Rope &rope = ctx.document.rope();
+  SelectionSet &sel = ctx.selections;
+  Selection primary = sel.primary();
+  bool wholeWord = isWholeWord(rope, primary);
+  if (primary.isEmpty()) {
+    const auto word = wordAt(rope, primary.head);
+    if (!word)
+      return false;
+    primary = *word;
+    wholeWord = true;
+  }
+  if (primary.end() - primary.start() > kMaxNeedle)
+    return false;
+  const QString needle = rope.toString(primary.start(), primary.end());
+  const SelectionList matches = search::findAll(rope, needle, qMax(1, ctx.settings.maxSelections), {true, wholeWord}, capped);
+  if (matches.isEmpty())
+    return false;
+  int newPrimary = 0;
+  while (newPrimary + 1 < matches.size() && matches[newPrimary].start() < primary.start())
+    ++newPrimary;
+  ctx.document.breakUndoCoalescing();
+  sel.set(matches, newPrimary);
   return true;
 }
 

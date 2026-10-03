@@ -11,6 +11,7 @@ qt_add_library(qce_core STATIC
     selection.h selectionset.h selectionset.cpp commands.h commands.cpp
     cursorlayout.h cursorlayout.cpp inputhandler.h inputhandler.cpp
     undostack.h undostack.cpp
+    textsearch.h textsearch.cpp
     highlighter.h highlighter.cpp
     displaymap.h displaymap.cpp
     linemarkerset.h linemarkerset.cpp

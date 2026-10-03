@@ -495,6 +495,51 @@ private slots:
     f.key(Qt::Key_Down, Qt::ControlModifier | Qt::AltModifier);
     QCOMPARE(f.sel.selections(), (SelectionList{{0, 0}, {6, 6}})); // rows: line 0 (folded 1..2), line 3
   }
+
+  void addNextOccurrenceSelectsWordThenMatches() {
+    Fixture f(u"foo bar foo foobar foo"_s);
+    f.sel.setSingle(1);
+    QVERIFY(f.key(Qt::Key_D, Qt::ControlModifier));
+    QCOMPARE(f.sel.selections(), (SelectionList{{0, 3}}));
+    QVERIFY(f.key(Qt::Key_D, Qt::ControlModifier));
+    QCOMPARE(f.sel.selections(), (SelectionList{{0, 3}, {8, 11}})); // whole words only: not foobar
+    QCOMPARE(f.sel.primary(), (Selection{8, 11}));
+    QVERIFY(f.key(Qt::Key_D, Qt::ControlModifier));
+    QCOMPARE(f.sel.selections(), (SelectionList{{0, 3}, {8, 11}, {19, 22}}));
+    QVERIFY(!f.key(Qt::Key_D, Qt::ControlModifier) || f.sel.count() == 3); // none left
+    f.type(u"X"_s);
+    QCOMPARE(f.text(), u"X bar X foobar X"_s);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+  }
+
+  void addNextOccurrenceWrapsAndSubstringsWhenSelectionIsPartial() {
+    Fixture f(u"foo foobar foo"_s);
+    f.sel.setSingle(4, 7); // "foo" inside "foobar": a substring search
+    f.key(Qt::Key_D, Qt::ControlModifier);
+    QCOMPARE(f.sel.selections(), (SelectionList{{4, 7}, {11, 14}}));
+    f.key(Qt::Key_D, Qt::ControlModifier);
+    QCOMPARE(f.sel.selections(), (SelectionList{{0, 3}, {4, 7}, {11, 14}})); // wrapped to the start
+    QCOMPARE(f.sel.primaryIndex(), 0);
+  }
+
+  void selectAllOccurrences() {
+    Fixture f(u"a ab a abab a"_s);
+    f.sel.setSingle(0);
+    f.key(Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(f.sel.selections(), (SelectionList{{0, 1}, {5, 6}, {12, 13}}));
+    f.sel.setSingle(7, 9); // "ab" inside "abab": not a whole word, so substrings count
+    f.key(Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(f.sel.selections(), (SelectionList{{2, 4}, {7, 11}})); // touching matches merge
+    QCOMPARE(f.sel.primary(), (Selection{7, 11}));
+
+    Fixture g(u"x x x x x"_s);
+    g.ctx.settings.maxSelections = 3;
+    g.sel.setSingle(0);
+    bool capped = false;
+    QVERIFY(commands::selectAllOccurrences(g.ctx, &capped));
+    QVERIFY(capped);
+    QCOMPARE(g.sel.count(), 3);
+  }
 };
 
 QTEST_MAIN(TstInput)

@@ -105,6 +105,14 @@ bool DefaultInputHandler::keyPress(QKeyEvent *event, EditContext &ctx, InputHost
     addCursorVertical(ctx, event->key() == Qt::Key_Up);
     return true;
   }
+  if (event->key() == Qt::Key_D && event->modifiers() == Qt::ControlModifier) {
+    addNextOccurrence(ctx);
+    return true;
+  }
+  if (event->key() == Qt::Key_L && event->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier)) {
+    selectAllOccurrences(ctx);
+    return true;
+  }
   if (event->key() == Qt::Key_Escape && event->modifiers() == Qt::NoModifier)
     return collapseSelections(ctx);
 

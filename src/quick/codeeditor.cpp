@@ -471,6 +471,20 @@ bool CodeEditor::addCursorBelow() {
   return done;
 }
 
+bool CodeEditor::addNextOccurrence() {
+  qce::EditContext ctx = editContext();
+  const bool done = qce::commands::addNextOccurrence(ctx);
+  afterCommand();
+  return done;
+}
+
+bool CodeEditor::selectAllOccurrences() {
+  qce::EditContext ctx = editContext();
+  const bool done = qce::commands::selectAllOccurrences(ctx);
+  afterCommand();
+  return done;
+}
+
 bool CodeEditor::collapseSelections() {
   qce::EditContext ctx = editContext();
   const bool done = qce::commands::collapseSelections(ctx);

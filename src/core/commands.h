@@ -19,6 +19,9 @@ struct EditorSettings {
   // Movement steps over folded lines instead of landing in them (needs `map`). Off, the cursor can
   // enter a fold, and the editor then unfolds it.
   bool skipFolds = true;
+  // Select-all-occurrences stops here: every selection costs two anchors, and a million of them
+  // is a hang rather than a feature.
+  int maxSelections = 100000;
 };
 
 // What a command acts on (ADR 0005): the document, the selections that always exist, and settings.
@@ -84,6 +87,15 @@ bool move(EditContext &ctx, Movement movement, bool extend = false);
 // Adds a cursor one display row above the topmost selection (or below the bottom-most), at its goal
 // x, and makes it primary. False at the first/last row or without a map and layout.
 bool addCursorVertical(EditContext &ctx, bool up);
+// Ctrl+D: with an empty primary selection, selects the word under every empty cursor; otherwise
+// adds the next occurrence of the primary selection's text (after it, wrapping around, skipping
+// text that is already selected) as a new primary selection. The match is a whole word when the
+// selected text is one. False when there is nothing to select or no further occurrence.
+bool addNextOccurrence(EditContext &ctx);
+// Selects every occurrence of the primary selection's text (of the word under an empty cursor),
+// up to settings.maxSelections; `*capped` says the limit cut it short. The primary stays the first
+// occurrence at or after the old one.
+bool selectAllOccurrences(EditContext &ctx, bool *capped = nullptr);
 // Keeps only the primary selection; false when there is just one.
 bool collapseSelections(EditContext &ctx);
 

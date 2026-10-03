@@ -229,6 +229,9 @@ public:
   Q_INVOKABLE void addSelection(qsizetype anchor, qsizetype head);
   Q_INVOKABLE bool addCursorAbove();
   Q_INVOKABLE bool addCursorBelow();
+  // Ctrl+D and Ctrl+Shift+L: see commands::addNextOccurrence / selectAllOccurrences.
+  Q_INVOKABLE bool addNextOccurrence();
+  Q_INVOKABLE bool selectAllOccurrences();
   // Keeps only the primary selection.
   Q_INVOKABLE bool collapseSelections();
   // Selects [anchor, head] with the cursor at `head`.

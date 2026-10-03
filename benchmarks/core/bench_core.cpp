@@ -5,6 +5,8 @@
 // The 100 MB input is generated once into $QCE_BENCH_DIR (default: the system temp dir) and reused.
 #include "bench.h"
 #include "core/anchorset.h"
+#include "core/commands.h"
+#include "core/textsearch.h"
 #include "core/fileloader.h"
 #include "core/filesaver.h"
 #include "core/textdocument.h"
@@ -233,6 +235,74 @@ int main(int argc, char **argv) {
       ctx.setItems(undone + redone);
     },
     5, 1
+  );
+
+  // Multi-cursor (M8): a cursor at the start of every 200th line of the 100 MB document.
+  auto cursorsEvery = [](const Rope &rope, qsizetype lines, int count) {
+    SelectionList list;
+    for (qsizetype line = 0; line < rope.lineCount() && list.size() < count; line += lines)
+      list.append({rope.lineStart(line), rope.lineStart(line)});
+    return list;
+  };
+
+  runner.add(
+    "selections/set_10k_same_size",
+    [&](Context &ctx) {
+      TextDocument doc;
+      doc.reset(baseRope());
+      SelectionSet sel(&doc);
+      SelectionList list = cursorsEvery(doc.rope(), 100, 10'000);
+      sel.set(list);
+      for (Selection &s : list)
+        s = {s.anchor + 1, s.head + 1};
+      ctx.startTimer();
+      sel.set(list);
+      ctx.stopTimer();
+      doNotOptimize(sel.count());
+      ctx.setItems(list.size());
+    },
+    10, 1
+  );
+
+  runner.add(
+    "selections/type_at_10k_cursors",
+    [&](Context &ctx) {
+      TextDocument doc;
+      doc.reset(baseRope());
+      SelectionSet sel(&doc);
+      EditContext edit{doc, sel, {}};
+      sel.set(cursorsEvery(doc.rope(), 100, 10'000));
+      ctx.startTimer();
+      commands::insertText(edit, u"x");
+      ctx.stopTimer();
+      ctx.startTimer();
+      commands::undo(edit);
+      ctx.stopTimer();
+      doNotOptimize(doc.length());
+      ctx.setItems(sel.count());
+    },
+    5, 1
+  );
+
+  runner.add(
+    "search/find_all_100MB",
+    [](Context &ctx) {
+      bool capped = false;
+      const auto all = search::findAll(baseRope(), QStringLiteral("line"), 100'000, {}, &capped);
+      doNotOptimize(all.size());
+      ctx.setItems(all.size());
+    },
+    3, 1
+  );
+
+  runner.add(
+    "search/scan_100MB_no_match",
+    [](Context &ctx) {
+      const auto found = search::findNext(baseRope(), QStringLiteral("zqxjzqxj"), 0);
+      doNotOptimize(found.has_value());
+      ctx.setItems(1);
+    },
+    3, 1
   );
 
   runner.add(
