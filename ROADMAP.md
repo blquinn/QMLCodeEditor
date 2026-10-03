@@ -266,16 +266,16 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria (demonstrated 2026-10-03: tests tst_input, tst_commands, tst_selectionset, tst_textsearch, tst_codeeditor; ADR 0015 benchmarks: 10,000 cursors type in 27 ms key-to-frame on 100 MB, one undo; hands-on mouse use in a real window not done):** add cursors above/below, add next occurrence, select all occurrences, and alt-drag box select all work; typing with 10,000 cursors on a large file stays interactive; one undo reverts a multi-cursor edit.
 
-- [x] **MULTI-01** `SelectionSet` as a sorted, merged set — done 2026-10-03
+- [x] **MULTI-01** `SelectionSet` as a sorted, merged set — done 2026-10-03 (590f12f)
   - Overlapping or touching selections merge; primary cursor tracked.
-- [x] **MULTI-02** Add cursor above/below and by ctrl/alt-click — done 2026-10-03
-- [x] **MULTI-03** Add next occurrence and select all occurrences — done 2026-10-03
-- [x] **MULTI-04** Alt-drag box (column) selection — done 2026-10-03
-- [x] **MULTI-05** One transaction per multi-cursor edit — done 2026-10-03
+- [x] **MULTI-02** Add cursor above/below and by ctrl/alt-click — done 2026-10-03 (65ef2b2)
+- [x] **MULTI-03** Add next occurrence and select all occurrences — done 2026-10-03 (fb80bc4)
+- [x] **MULTI-04** Alt-drag box (column) selection — done 2026-10-03 (fd8a8c1)
+- [x] **MULTI-05** One transaction per multi-cursor edit — done 2026-10-03 (c0c8c27)
   - Edits applied back-to-front so earlier offsets stay valid; a single undo step.
-- [x] **MULTI-06** Batched rendering of many cursors and selections — done 2026-10-03
+- [x] **MULTI-06** Batched rendering of many cursors and selections — done 2026-10-03 (706ef90)
   - Overlays are found by binary search and bounded by the viewport ([ADR 0015](docs/adr/0015-multi-cursor.md)); a single-geometry batch proved unnecessary.
-- [x] **MULTI-07** Per-cursor clipboard — done 2026-10-03
+- [x] **MULTI-07** Per-cursor clipboard — done 2026-10-03 (3348431)
   - Copy joins per-cursor text by line; paste distributes when line counts match.
 
 ## M9 — Diagnostics & decorations
