@@ -211,29 +211,29 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria:** C++, JSON, QML/JS, Python and Markdown highlight correctly; typing never waits on the parser; a 100 MB file highlights the visible region without a full parse blocking the UI.
 
-- [x] **SYNTAX-01** Vendor tree-sitter core and grammars via CMake — done 2026-10-03
+- [x] **SYNTAX-01** Vendor tree-sitter core and grammars via CMake — done 2026-10-03 (a965b9e)
   - `FetchContent` / `third_party/`: C/C++, JSON, JavaScript/QML, Python, Markdown. Pinned versions.
-- [x] **SYNTAX-02** Language registry — done 2026-10-03
+- [x] **SYNTAX-02** Language registry — done 2026-10-03 (a965b9e)
   - Detect language by file extension / name / shebang; load grammar plus queries.
-- [x] **SYNTAX-03** Background incremental parsing over rope snapshots — done 2026-10-03
+- [x] **SYNTAX-03** Background incremental parsing over rope snapshots — done 2026-10-03 (a965b9e)
   - `TSInput` callback reads rope chunks as UTF-16 (`TSInputEncodingUTF16LE`); parser runs on a worker thread; stale results are discarded.
-- [x] **SYNTAX-04** Edit propagation — done 2026-10-03
+- [x] **SYNTAX-04** Edit propagation — done 2026-10-03 (a965b9e)
   - Core change events (CORE-05) drive `ts_tree_edit` and reparse with the old tree.
-- [x] **SYNTAX-05** Visible-range highlight queries — done 2026-10-03
+- [x] **SYNTAX-05** Visible-range highlight queries — done 2026-10-03 (a965b9e)
   - Run `highlights.scm` captures only for the lines being rendered, with a margin.
-- [x] **SYNTAX-06** Capture → theme mapping — done 2026-10-03
+- [x] **SYNTAX-06** Capture → theme mapping — done 2026-10-03 (a965b9e)
   - Theme token styles produce `QTextLayout::FormatRange`s through the `Highlighter` interface (RENDER-09).
-- [x] **SYNTAX-07** Targeted layout invalidation — done 2026-10-03
+- [x] **SYNTAX-07** Targeted layout invalidation — done 2026-10-03 (a965b9e)
   - `ts_tree_get_changed_ranges` limits which cached line layouts get invalidated.
-- [x] **SYNTAX-08** Injections — done 2026-10-03
+- [x] **SYNTAX-08** Injections — done 2026-10-03 (a965b9e)
   - JS inside QML, fenced code in Markdown.
-- [x] **SYNTAX-09** Interim highlighting during parse — done 2026-10-03
+- [x] **SYNTAX-09** Interim highlighting during parse — done 2026-10-03 (a965b9e)
   - Keep previous highlights (shifted through anchors) until the new tree lands, to avoid flicker.
-- [x] **SYNTAX-10** Highlighting benchmarks — done 2026-10-03
+- [x] **SYNTAX-10** Highlighting benchmarks — done 2026-10-03 (a965b9e)
   - Initial parse time, edit-to-highlight latency, memory per MB of source.
-- [x] **SYNTAX-11** Viewport window parse for large files — done 2026-10-03
+- [x] **SYNTAX-11** Viewport window parse for large files — done 2026-10-03 (a965b9e)
   - A worker parses a window around the viewport first; the full parse runs only below a size cap (default 32 MB). Above it, scrolling re-parses the window.
-- [x] **SYNTAX-12** `SyntaxHighlighter` QML element and demo language menu — done 2026-10-03
+- [x] **SYNTAX-12** `SyntaxHighlighter` QML element and demo language menu — done 2026-10-03 (a965b9e)
   - Auto-detects by file name; `language` override; `CodeEditor.highlighter` settable from QML.
 
 ## M7 — Code folding
