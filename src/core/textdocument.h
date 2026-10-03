@@ -52,7 +52,7 @@ public:
   // and change listeners stay in sync) and return the selections to restore, or nullopt when there
   // is nothing to do or a group is open. Resetting the text clears the history.
   void beginEditGroup(const SelectionList &before = {});
-  void endEditGroup(const SelectionList &after = {});
+  void endEditGroup(const SelectionList &after = {}, EditKind kind = EditKind::Other);
   bool canUndo() const { return !m_loading && !m_undo.inGroup() && m_undo.canUndo(); }
   bool canRedo() const { return !m_loading && !m_undo.inGroup() && m_undo.canRedo(); }
   std::optional<SelectionList> undo();

@@ -46,7 +46,7 @@ bool applyReplacements(
       else
         doc.replace(r.start, r.end, r.text);
     }
-    doc.endEditGroup(result);
+    doc.endEditGroup(result, kind);
   }
   ctx.selections.set(result, newPrimary);
   return true;

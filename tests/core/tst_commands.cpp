@@ -100,6 +100,54 @@ private slots:
     QCOMPARE(f.sel.primary(), (Selection{0, 0}));
   }
 
+  void multiCursorTypingRunsMergeIntoOneUndoStep() {
+    Fixture f(u"aaa\nbbb\nccc"_s);
+    f.sel.set({{0, 0}, {4, 4}, {8, 8}});
+    for (const char16_t c : {u'x', u'y', u'z'})
+      commands::insertText(f.ctx, QStringView(&c, 1));
+    QCOMPARE(f.text(), u"xyzaaa\nxyzbbb\nxyzccc"_s);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+    // moving the cursors ends the run
+    commands::move(f.ctx, Movement::CharRight);
+    commands::insertText(f.ctx, u"!");
+    QCOMPARE(f.doc.undoStack().undoSteps(), 2);
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), u"xyzaaa\nxyzbbb\nxyzccc"_s);
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), u"aaa\nbbb\nccc"_s);
+    QCOMPARE(f.sel.selections(), (SelectionList{{0, 0}, {4, 4}, {8, 8}}));
+  }
+
+  void multiCursorBackspaceRunsMerge() {
+    Fixture f(u"abc\nabc\nabc"_s);
+    f.sel.set({{3, 3}, {7, 7}, {11, 11}});
+    commands::deleteBackward(f.ctx);
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"a\na\na"_s);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), u"abc\nabc\nabc"_s);
+    QCOMPARE(f.sel.selections(), (SelectionList{{3, 3}, {7, 7}, {11, 11}}));
+  }
+
+  void multiCursorLineEditsAreSingleSteps() {
+    Fixture f(u"  a\n  b\n  c"_s);
+    f.sel.set({{3, 3}, {7, 7}, {11, 11}});
+    commands::newline(f.ctx);
+    QCOMPARE(f.text(), u"  a\n  \n  b\n  \n  c\n  "_s);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), u"  a\n  b\n  c"_s);
+    commands::indent(f.ctx);
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), u"  a\n  b\n  c"_s);
+    QCOMPARE(f.sel.selections(), (SelectionList{{3, 3}, {7, 7}, {11, 11}}));
+    commands::deleteWordBackward(f.ctx);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), u"  a\n  b\n  c"_s);
+  }
+
   void undoRestoresSelection() {
     Fixture f(u"hello world"_s);
     f.sel.setSingle(0, 5);

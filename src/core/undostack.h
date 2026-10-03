@@ -51,7 +51,9 @@ public:
   // Groups collect several edits into a single step; they nest and only the outermost counts.
   void beginGroup(const SelectionList &before);
   void addToGroup(const EditRecord &edit);
-  void endGroup(const SelectionList &after);
+  // A group of a typing/deleting `kind` without line breaks merges into the previous step of the
+  // same kind when it starts where that one ended; any other group is a step of its own.
+  void endGroup(const SelectionList &after, EditKind kind = EditKind::Other);
   bool inGroup() const { return m_depth > 0; }
 
   // The next edit starts a new step even if it would otherwise merge.

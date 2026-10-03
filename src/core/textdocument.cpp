@@ -30,7 +30,7 @@ bool TextDocument::replace(qsizetype start, qsizetype end, const Rope &text, con
 
 void TextDocument::beginEditGroup(const SelectionList &before) { m_undo.beginGroup(before); }
 
-void TextDocument::endEditGroup(const SelectionList &after) { m_undo.endGroup(after); }
+void TextDocument::endEditGroup(const SelectionList &after, EditKind kind) { m_undo.endGroup(after, kind); }
 
 std::optional<SelectionList> TextDocument::undo() {
   if (!canUndo())

@@ -2,6 +2,8 @@
 
 #include <QtCore/QElapsedTimer>
 
+#include <algorithm>
+
 namespace qce {
 
 namespace {
@@ -98,16 +100,32 @@ void UndoStack::addToGroup(const EditRecord &edit) {
   m_group.edits.append(edit);
 }
 
-void UndoStack::endGroup(const SelectionList &after) {
+void UndoStack::endGroup(const SelectionList &after, EditKind kind) {
   Q_ASSERT(m_depth > 0);
   if (--m_depth > 0)
     return;
   if (m_group.edits.isEmpty())
     return;
+  const qint64 t = now();
+  const bool lineBreak = std::any_of(m_group.edits.begin(), m_group.edits.end(), hasLineBreak);
+  const bool mergeable = kind != EditKind::Other && !lineBreak;
+  // A run of multi-cursor typing or deleting is one step, like a run of single-cursor typing: the
+  // group continues the top step when it starts from the selections that step ended with.
+  if (mergeable && !m_undo.isEmpty()) {
+    Transaction &top = m_undo.last();
+    if (!top.sealed && top.kind == kind && t - top.timeMs <= m_timeoutMs && top.selectionsAfter == m_group.selectionsBefore) {
+      top.edits.append(m_group.edits);
+      top.selectionsAfter = after;
+      top.timeMs = t;
+      m_redo.clear();
+      m_group = Transaction{};
+      return;
+    }
+  }
   m_group.selectionsAfter = after;
-  m_group.kind = EditKind::Other;
-  m_group.timeMs = now();
-  m_group.sealed = true;
+  m_group.kind = mergeable ? kind : EditKind::Other;
+  m_group.timeMs = t;
+  m_group.sealed = !mergeable;
   push(std::exchange(m_group, Transaction{}));
 }
 

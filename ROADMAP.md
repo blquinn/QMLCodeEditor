@@ -271,7 +271,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [ ] **MULTI-02** Add cursor above/below and by ctrl/alt-click
 - [ ] **MULTI-03** Add next occurrence and select all occurrences
 - [ ] **MULTI-04** Alt-drag box (column) selection
-- [ ] **MULTI-05** One transaction per multi-cursor edit
+- [x] **MULTI-05** One transaction per multi-cursor edit — done 2026-10-03
   - Edits applied back-to-front so earlier offsets stay valid; a single undo step.
 - [ ] **MULTI-06** Batched rendering of many cursors and selections
 - [ ] **MULTI-07** Per-cursor clipboard
