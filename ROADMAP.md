@@ -235,7 +235,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - A worker parses a window around the viewport first; the full parse runs only below a size cap (default 32 MB). Above it, scrolling re-parses the window.
 - [x] **SYNTAX-12** `SyntaxHighlighter` QML element and demo language menu — done 2026-10-03 (a965b9e)
   - Auto-detects by file name; `language` override; `CodeEditor.highlighter` settable from QML.
-- [x] **SYNTAX-13** HTML and XML grammars
+- [x] **SYNTAX-13** HTML and XML grammars — done 2026-10-03 (aa3162c)
   - HTML (with JavaScript in `<script>`) and XML (also SVG, Qt `.ui`/`.qrc`, plist); `<style>` content stays plain until a CSS grammar is added.
 
 ## M7 — Code folding
