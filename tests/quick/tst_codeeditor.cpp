@@ -715,6 +715,30 @@ private slots:
     QCOMPARE(editor->cursorPosition(), 2);
   }
 
+  void multiCursorCopyAndPasteRoundTrip() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("one two\nthree four\n\n"));
+    editor->select(0, 3);
+    editor->addSelection(8, 13);
+    QCOMPARE(editor->selectionCount(), 2);
+    editor->copy();
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("one\nthree"));
+    // the same number of cursors: each gets its own piece
+    editor->setCursorPosition(3);
+    editor->addSelection(7, 7);
+    editor->paste();
+    QCOMPARE(editor->document()->rope().toString(0, 15), QStringLiteral("oneone twothree"));
+    QCOMPARE(editor->selectionCount(), 2);
+    // a different number gets the whole text at each
+    editor->undo();
+    editor->setCursorPosition(0);
+    editor->addSelection(3, 3);
+    editor->addSelection(7, 7);
+    editor->paste();
+    QCOMPARE(editor->document()->rope().toString(0, 12), QStringLiteral("one\nthreeone"));
+  }
+
   void addCursorApi() {
     auto [view, editor] = showEditor();
     QVERIFY(editor);

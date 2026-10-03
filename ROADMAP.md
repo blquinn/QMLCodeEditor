@@ -274,7 +274,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [x] **MULTI-05** One transaction per multi-cursor edit — done 2026-10-03
   - Edits applied back-to-front so earlier offsets stay valid; a single undo step.
 - [ ] **MULTI-06** Batched rendering of many cursors and selections
-- [ ] **MULTI-07** Per-cursor clipboard
+- [x] **MULTI-07** Per-cursor clipboard — done 2026-10-03
   - Copy joins per-cursor text by line; paste distributes when line counts match.
 
 ## M9 — Diagnostics & decorations

@@ -65,6 +65,11 @@ bool deleteForward(EditContext &ctx);
 // Removes the selected text (cut without the clipboard); empty selections are left alone.
 bool deleteSelection(EditContext &ctx);
 
+// Paste. With several selections the text is distributed one piece per selection when the pieces
+// (given by the clipboard, else the lines of `text` without a final line break) are as many as the
+// selections; otherwise every selection receives all of `text`.
+bool paste(EditContext &ctx, const QString &text, const QStringList &pieces = {});
+
 // Enter: replaces the selections with a line break and the indentation of the line it was typed on
 // (as far as the cursor reaches into it).
 bool newline(EditContext &ctx);

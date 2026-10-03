@@ -6,6 +6,9 @@
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QtCore/QFutureWatcher>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QMimeData>
 #include <QtGui/QClipboard>
 #include <QtGui/QInputMethod>
 #include <QtGui/QInputMethodEvent>
@@ -993,6 +996,8 @@ namespace {
 
 // Above this many UTF-16 units clipboard text is built or consumed off the GUI thread.
 constexpr qsizetype kLargeClipboard = 1 << 20;
+// The per-cursor pieces of a multi-selection copy, as a JSON array of strings.
+const QString kPiecesMime = QStringLiteral("application/x-qce-pieces");
 
 QString joinSlices(const QList<qce::Rope> &slices) {
   QString out;
@@ -1015,20 +1020,35 @@ QString joinSlices(const QList<qce::Rope> &slices) {
 // a huge selection) happens on a worker.
 void CodeEditor::setClipboardFromSelections(QClipboard::Mode mode) {
   const qce::Rope &rope = m_document.rope();
+  // With several selections every one contributes a piece, empty ones included, so that pasting
+  // into the same number of cursors hands each its own text.
+  const bool multi = m_selections.count() > 1;
   QList<qce::Rope> slices;
   qsizetype total = 0;
-  for (int i = 0; i < m_selections.count(); ++i)
-    if (const qce::Selection s = m_selections.at(i); !s.isEmpty()) {
-      slices.append(rope.slice(s.start(), s.end()));
-      total += s.end() - s.start();
-    }
-  if (slices.isEmpty())
+  bool anyText = false;
+  for (int i = 0; i < m_selections.count(); ++i) {
+    const qce::Selection s = m_selections.at(i);
+    if (s.isEmpty() && !multi)
+      continue;
+    anyText |= !s.isEmpty();
+    slices.append(rope.slice(s.start(), s.end()));
+    total += s.end() - s.start();
+  }
+  if (slices.isEmpty() || !anyText)
     return;
   QClipboard *clipboard = QGuiApplication::clipboard();
   if (mode == QClipboard::Selection && !clipboard->supportsSelection())
     return;
   if (total < kLargeClipboard) {
-    clipboard->setText(joinSlices(slices), mode);
+    auto *data = new QMimeData;
+    data->setText(joinSlices(slices));
+    if (multi) {
+      QJsonArray pieces;
+      for (const qce::Rope &r : std::as_const(slices))
+        pieces.append(r.toString());
+      data->setData(kPiecesMime, QJsonDocument(pieces).toJson(QJsonDocument::Compact));
+    }
+    clipboard->setMimeData(data, mode);
     return;
   }
   auto *watcher = new QFutureWatcher<QString>(this);
@@ -1060,7 +1080,12 @@ void CodeEditor::pasteFrom(QClipboard::Mode mode) {
     return;
   if (text.size() < kLargeClipboard || m_selections.count() != 1) {
     qce::EditContext ctx = editContext();
-    qce::commands::insertText(ctx, text, qce::EditKind::Other);
+    QStringList pieces;
+    if (m_selections.count() > 1)
+      if (const QMimeData *data = QGuiApplication::clipboard()->mimeData(mode); data && data->hasFormat(kPiecesMime))
+        for (const QJsonValue &v : QJsonDocument::fromJson(data->data(kPiecesMime)).array())
+          pieces.append(v.toString());
+    qce::commands::paste(ctx, text, pieces);
     afterCommand();
     return;
   }

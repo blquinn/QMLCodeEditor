@@ -3,6 +3,8 @@
 #include "core/textboundaries.h"
 #include "core/textsearch.h"
 
+#include <QtCore/QRegularExpression>
+
 #include <cmath>
 
 namespace qce::commands {
@@ -84,6 +86,31 @@ bool insertText(EditContext &ctx, QStringView text, EditKind kind) {
   if (text.isEmpty() && ctx.selections.primary().isEmpty())
     return false;
   return replaceEach(ctx, text.toString(), kind, [](Selection s) { return qMakePair(s.start(), s.end()); });
+}
+
+bool paste(EditContext &ctx, const QString &text, const QStringList &pieces) {
+  const int n = ctx.selections.count();
+  if (n > 1) {
+    QStringList parts = pieces;
+    if (parts.size() != n) {
+      QString body = text;
+      if (body.endsWith(u"\r\n"))
+        body.chop(2);
+      else if (body.endsWith(u'\n'))
+        body.chop(1);
+      parts = body.split(QRegularExpression(QStringLiteral("\r\n|\n")));
+    }
+    if (parts.size() == n) {
+      QList<Replacement> list;
+      list.reserve(n);
+      for (int i = 0; i < n; ++i) {
+        const Selection s = ctx.selections.at(i);
+        list.append({s.start(), s.end(), parts[i]});
+      }
+      return applyReplacements(ctx, list, EditKind::Other);
+    }
+  }
+  return insertText(ctx, text, EditKind::Other);
 }
 
 bool deleteBackward(EditContext &ctx) {

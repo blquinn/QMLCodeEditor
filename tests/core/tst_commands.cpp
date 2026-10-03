@@ -148,6 +148,29 @@ private slots:
     QCOMPARE(f.text(), u"  a\n  b\n  c"_s);
   }
 
+  void pasteDistributesLinesAcrossCursors() {
+    Fixture f(u"1:\n2:\n3:"_s);
+    f.sel.set({{2, 2}, {5, 5}, {8, 8}});
+    QVERIFY(commands::paste(f.ctx, u"a\nb\nc\n"_s)); // a trailing line break is ignored
+    QCOMPARE(f.text(), u"1:a\n2:b\n3:c"_s);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+    commands::undo(f.ctx);
+    // a different count pastes everything everywhere
+    QVERIFY(commands::paste(f.ctx, u"x\ny"_s));
+    QCOMPARE(f.text(), u"1:x\ny\n2:x\ny\n3:x\ny"_s);
+  }
+
+  void pasteUsesClipboardPiecesWhenGiven() {
+    Fixture f(u"[]\n[]"_s);
+    f.sel.set({{1, 1}, {4, 4}});
+    QVERIFY(commands::paste(f.ctx, u"p\nq\nr"_s, {u"p\nq"_s, u"r"_s}));
+    QCOMPARE(f.text(), u"[p\nq]\n[r]"_s);
+    // a lone cursor takes the whole text
+    f.sel.setSingle(0);
+    QVERIFY(commands::paste(f.ctx, u"a\nb"_s));
+    QCOMPARE(f.text().left(3), u"a\nb"_s);
+  }
+
   void undoRestoresSelection() {
     Fixture f(u"hello world"_s);
     f.sel.setSingle(0, 5);
