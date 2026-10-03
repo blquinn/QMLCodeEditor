@@ -668,6 +668,48 @@ private slots:
     QCOMPARE(editor->selectionEnd(), 12 + 5);
   }
 
+  void ctrlClickAddsAndRemovesCursors() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("hello world\nsecond line"));
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 0, 1), 10);
+    QTest::mouseClick(view.get(), Qt::LeftButton, Qt::ControlModifier, cellPoint(editor, 0, 6), 10);
+    QTest::mouseClick(view.get(), Qt::LeftButton, Qt::ControlModifier, cellPoint(editor, 1, 2), 10);
+    QCOMPARE(editor->selectionCount(), 3);
+    QCOMPARE(editor->cursorPosition(), 12 + 2); // the newest is the primary
+    editor->insert(QStringLiteral("-"));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("h-ello -world\nse-cond line"));
+    // ctrl-click on an existing cursor takes it away
+    editor->undo();
+    QTest::mouseClick(view.get(), Qt::LeftButton, Qt::ControlModifier, cellPoint(editor, 0, 6), 10);
+    QCOMPARE(editor->selectionCount(), 2);
+    // ctrl-drag adds a selection
+    QTest::mousePress(view.get(), Qt::LeftButton, Qt::ControlModifier, cellPoint(editor, 0, 7), 10);
+    QTest::mouseMove(view.get(), cellPoint(editor, 0, 10));
+    QTest::mouseRelease(view.get(), Qt::LeftButton, Qt::ControlModifier, cellPoint(editor, 0, 10), 10);
+    QCOMPARE(editor->selectionCount(), 3);
+    QCOMPARE(editor->selectionStart(), 7);
+    QCOMPARE(editor->selectionEnd(), 10);
+    // a plain click goes back to one cursor
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, cellPoint(editor, 1, 0), 10);
+    QCOMPARE(editor->selectionCount(), 1);
+  }
+
+  void addCursorApi() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("abc\nabc\nabc"));
+    editor->setCursorPosition(1);
+    QVERIFY(editor->addCursorBelow());
+    QVERIFY(editor->addCursorBelow());
+    QVERIFY(!editor->addCursorBelow());
+    QCOMPARE(editor->selectionCount(), 3);
+    editor->insert(QStringLiteral("X"));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("aXbc\naXbc\naXbc"));
+    QVERIFY(editor->collapseSelections());
+    QCOMPARE(editor->selectionCount(), 1);
+  }
+
   void shiftClickExtends() {
     auto [view, editor] = showEditor();
     QVERIFY(editor);

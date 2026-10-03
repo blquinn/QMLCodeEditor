@@ -452,6 +452,32 @@ void CodeEditor::select(qsizetype anchor, qsizetype head) {
   m_selections.setSingle(anchor, head);
 }
 
+void CodeEditor::addSelection(qsizetype anchor, qsizetype head) {
+  m_document.breakUndoCoalescing();
+  m_selections.add({anchor, head});
+}
+
+bool CodeEditor::addCursorAbove() {
+  qce::EditContext ctx = editContext();
+  const bool done = qce::commands::addCursorVertical(ctx, true);
+  afterCommand();
+  return done;
+}
+
+bool CodeEditor::addCursorBelow() {
+  qce::EditContext ctx = editContext();
+  const bool done = qce::commands::addCursorVertical(ctx, false);
+  afterCommand();
+  return done;
+}
+
+bool CodeEditor::collapseSelections() {
+  qce::EditContext ctx = editContext();
+  const bool done = qce::commands::collapseSelections(ctx);
+  afterCommand();
+  return done;
+}
+
 qce::EditContext CodeEditor::editContext() {
   return {
     m_document, m_selections, {m_insertSpaces, m_indentWidth, m_metrics.tabWidth(), m_readOnly, m_foldPolicy == SkipFolds}, &m_map,
@@ -658,6 +684,28 @@ void CodeEditor::handlePress(QMouseEvent *event, bool doubleClick) {
     return;
   }
 
+  // Ctrl+click adds a cursor (and dragging makes it a selection); on an existing one it removes it.
+  const Qt::KeyboardModifiers mods = event->modifiers();
+  if ((mods & Qt::ControlModifier) && !(mods & (Qt::AltModifier | Qt::ShiftModifier))) {
+    m_document.breakUndoCoalescing();
+    m_clickCount = 0;
+    const int existing = m_selections.indexAt(offset);
+    if (existing >= 0 && m_selections.count() > 1) {
+      qce::SelectionList list = m_selections.selections();
+      list.removeAt(existing);
+      m_selections.set(list, qMin(existing, int(list.size()) - 1));
+    } else {
+      m_dragBase = m_selections.selections();
+      m_dragUnit = DragUnit::Add;
+      m_dragAnchor = offset;
+      m_dragging = true;
+      m_dragPos = event->position();
+      m_selections.add({offset, offset});
+    }
+    event->accept();
+    return;
+  }
+
   // Repeated clicks close together in time and space select a word, then a line.
   const QStyleHints *hints = QGuiApplication::styleHints();
   const bool repeated = m_clickCount > 0 && event->timestamp() - m_lastClickTime <= ulong(hints->mouseDoubleClickInterval()) &&
@@ -699,7 +747,11 @@ void CodeEditor::mouseDoubleClickEvent(QMouseEvent *event) { handlePress(event, 
 // side of the first unit the pointer is.
 void CodeEditor::updateDrag() {
   const qsizetype offset = positionAt(m_dragPos.x(), m_dragPos.y());
-  if (m_dragUnit == DragUnit::Char) {
+  if (m_dragUnit == DragUnit::Add) {
+    qce::SelectionList list = m_dragBase;
+    list.append({m_dragAnchor, offset});
+    m_selections.set(list, int(list.size()) - 1);
+  } else if (m_dragUnit == DragUnit::Char) {
     m_selections.setSingle(m_dragAnchor, offset);
   } else {
     const auto unit = unitRangeAt(offset, m_dragUnit);

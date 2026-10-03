@@ -99,6 +99,15 @@ bool DefaultInputHandler::keyPress(QKeyEvent *event, EditContext &ctx, InputHost
     }
   }
 
+  // Multi-cursor: Ctrl+Alt+Up/Down adds a cursor, Escape drops all but the primary.
+  if ((event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) &&
+      (event->modifiers() & ~Qt::KeypadModifier) == (Qt::ControlModifier | Qt::AltModifier)) {
+    addCursorVertical(ctx, event->key() == Qt::Key_Up);
+    return true;
+  }
+  if (event->key() == Qt::Key_Escape && event->modifiers() == Qt::NoModifier)
+    return collapseSelections(ctx);
+
   if (event->matches(QKeySequence::DeleteStartOfWord)) {
     deleteWordBackward(ctx);
     return true;

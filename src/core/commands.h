@@ -81,6 +81,12 @@ bool selectAll(EditContext &ctx);
 // touch the text and ends the current typing run for undo.
 bool move(EditContext &ctx, Movement movement, bool extend = false);
 
+// Adds a cursor one display row above the topmost selection (or below the bottom-most), at its goal
+// x, and makes it primary. False at the first/last row or without a map and layout.
+bool addCursorVertical(EditContext &ctx, bool up);
+// Keeps only the primary selection; false when there is just one.
+bool collapseSelections(EditContext &ctx);
+
 // Undo and redo restore the selections recorded with the step.
 bool undo(EditContext &ctx);
 bool redo(EditContext &ctx);

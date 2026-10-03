@@ -268,7 +268,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 - [x] **MULTI-01** `SelectionSet` as a sorted, merged set — done 2026-10-03
   - Overlapping or touching selections merge; primary cursor tracked.
-- [ ] **MULTI-02** Add cursor above/below and by ctrl/alt-click
+- [x] **MULTI-02** Add cursor above/below and by ctrl/alt-click — done 2026-10-03
 - [ ] **MULTI-03** Add next occurrence and select all occurrences
 - [ ] **MULTI-04** Alt-drag box (column) selection
 - [x] **MULTI-05** One transaction per multi-cursor edit — done 2026-10-03

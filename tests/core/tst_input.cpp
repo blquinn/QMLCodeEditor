@@ -453,6 +453,48 @@ private slots:
     QCOMPARE(f.doc.rope().lineAt(f.sel.primary().head), 5); // the end of the last visible line
     QCOMPARE(f.sel.primary().head, f.doc.rope().lineEnd(5));
   }
+
+  void addCursorsAboveAndBelow() {
+    Fixture f(u"abcdef\nab\nabcdef\n\nabcdef"_s);
+    f.sel.setSingle(4);
+    const auto mods = Qt::ControlModifier | Qt::AltModifier;
+    QVERIFY(f.key(Qt::Key_Down, mods));
+    QVERIFY(f.key(Qt::Key_Down, mods));
+    QVERIFY(f.key(Qt::Key_Down, mods));
+    QVERIFY(f.key(Qt::Key_Down, mods));
+    // the goal column survives the short lines
+    QCOMPARE(f.sel.selections(), (SelectionList{{4, 4}, {9, 9}, {14, 14}, {17, 17}, {22, 22}}));
+    QCOMPARE(f.sel.primaryIndex(), 4);
+    f.key(Qt::Key_Down, mods); // last row: nothing to add
+    QCOMPARE(f.sel.count(), 5);
+    f.type(u"X"_s);
+    QCOMPARE(f.text(), u"abcdXef\nabX\nabcdXef\nX\nabcdXef"_s);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+
+    f.key(Qt::Key_Escape);
+    QCOMPARE(f.sel.count(), 1);
+    QCOMPARE(f.sel.primary(), (Selection{f.sel.primary().head, f.sel.primary().head}));
+    QVERIFY(!f.key(Qt::Key_Escape)); // a lone cursor leaves Escape alone
+  }
+
+  void addCursorAboveStartsFromTopmost() {
+    Fixture f(u"aaaa\nbbbb\ncccc\ndddd"_s);
+    f.sel.set({{7, 7}, {12, 12}}); // rows 1 and 2
+    const auto mods = Qt::ControlModifier | Qt::AltModifier;
+    f.key(Qt::Key_Up, mods);
+    QCOMPARE(f.sel.selections(), (SelectionList{{2, 2}, {7, 7}, {12, 12}}));
+    QCOMPARE(f.sel.primaryIndex(), 0);
+    QVERIFY(f.key(Qt::Key_Up, mods)); // consumed, but already on the first row
+    QCOMPARE(f.sel.count(), 3);
+  }
+
+  void addCursorSkipsFoldedLinesAndFollowsWrap() {
+    Fixture f(u"a\nb\nc\nd"_s);
+    f.map.fold(0, 2);
+    f.sel.setSingle(0);
+    f.key(Qt::Key_Down, Qt::ControlModifier | Qt::AltModifier);
+    QCOMPARE(f.sel.selections(), (SelectionList{{0, 0}, {6, 6}})); // rows: line 0 (folded 1..2), line 3
+  }
 };
 
 QTEST_MAIN(TstInput)

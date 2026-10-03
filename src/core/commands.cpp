@@ -407,4 +407,32 @@ bool move(EditContext &ctx, Movement movement, bool extend) {
   return true;
 }
 
+bool addCursorVertical(EditContext &ctx, bool up) {
+  if (!ctx.map || !ctx.layout)
+    return false;
+  const Rope &rope = ctx.document.rope();
+  const int index = up ? 0 : ctx.selections.count() - 1;
+  const Selection s = ctx.selections.at(index);
+  const qsizetype row = ctx.map->rowForPosition(rope.positionAt(s.head));
+  const qsizetype target = row + (up ? -1 : 1);
+  if (target < 0 || target >= ctx.map->rowCount())
+    return false;
+  const qreal oldGoal = ctx.selections.goalX(index);
+  const qreal goal = std::isnan(oldGoal) ? ctx.layout->xForOffset(s.head) : oldGoal;
+  const qsizetype head = ctx.layout->offsetForX(ctx.map->rowAt(target), goal);
+  ctx.document.breakUndoCoalescing();
+  ctx.selections.setGoalX(index, goal); // the goal survives repeated presses
+  ctx.selections.add({head, head});
+  ctx.selections.setGoalX(ctx.selections.primaryIndex(), goal);
+  return true;
+}
+
+bool collapseSelections(EditContext &ctx) {
+  if (ctx.selections.count() < 2)
+    return false;
+  ctx.document.breakUndoCoalescing();
+  ctx.selections.collapseToPrimary();
+  return true;
+}
+
 } // namespace qce::commands

@@ -87,6 +87,8 @@ public:
   Q_PROPERTY(bool canRedo READ canRedo NOTIFY canRedoChanged FINAL)
   Q_PROPERTY(qsizetype selectionStart READ selectionStart NOTIFY selectionChanged FINAL)
   Q_PROPERTY(qsizetype selectionEnd READ selectionEnd NOTIFY selectionChanged FINAL)
+  // How many selections there are (cursors count); selectionStart/End/cursorPosition describe the primary one.
+  Q_PROPERTY(int selectionCount READ selectionCount NOTIFY selectionChanged FINAL)
   Q_PROPERTY(
     int cursorBlinkInterval READ cursorBlinkInterval WRITE setCursorBlinkInterval NOTIFY
       cursorBlinkIntervalChanged FINAL
@@ -222,6 +224,13 @@ public:
   qsizetype cursorColumn() const;
   qsizetype selectionStart() const;
   qsizetype selectionEnd() const;
+  int selectionCount() const { return m_selections.count(); }
+  // Multi-cursor (M8). A new selection merges with any it overlaps and becomes the primary one.
+  Q_INVOKABLE void addSelection(qsizetype anchor, qsizetype head);
+  Q_INVOKABLE bool addCursorAbove();
+  Q_INVOKABLE bool addCursorBelow();
+  // Keeps only the primary selection.
+  Q_INVOKABLE bool collapseSelections();
   // Selects [anchor, head] with the cursor at `head`.
   Q_INVOKABLE void select(qsizetype anchor, qsizetype head);
   // Edits from the user (keys, paste, input methods) are refused while read-only; the document API
@@ -353,7 +362,7 @@ protected:
 private:
   class EditorLayout;
   class EditorHost;
-  enum class DragUnit : quint8 { Char, Word, Line };
+  enum class DragUnit : quint8 { Char, Word, Line, Add, Box };
   void handlePress(QMouseEvent *event, bool doubleClick);
   void handleGutterPress(QMouseEvent *event, bool doubleClick);
   ulong m_lastGutterPress = 0;
@@ -391,6 +400,7 @@ private:
   qsizetype m_dragAnchor = 0;
   QPair<qsizetype, qsizetype> m_dragInitial;
   QPointF m_dragPos;
+  qce::SelectionList m_dragBase; // Add: the selections the drag adds to
   QTimer m_autoScrollTimer;
   int m_clickCount = 0;
   ulong m_lastClickTime = 0;
