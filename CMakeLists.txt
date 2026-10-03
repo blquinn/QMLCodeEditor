@@ -12,6 +12,18 @@ set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Test Concurrent)
 qt_standard_project_setup(REQUIRES 6.8)
 
+# Link-time optimization for Release builds (ThinLTO with clang). Must come before any target is created.
+option(QCE_LTO "Enable link-time optimization in Release builds" ON)
+if(QCE_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT QCE_IPO_SUPPORTED OUTPUT QCE_IPO_MESSAGE LANGUAGES C CXX)
+    if(QCE_IPO_SUPPORTED)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    else()
+        message(WARNING "QCE_LTO requested but not supported: ${QCE_IPO_MESSAGE}")
+    endif()
+endif()
+
 enable_testing()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
