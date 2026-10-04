@@ -446,11 +446,12 @@ void TreeSitterHighlighter::startJob() {
       request->end = end;
       scopeChanged = true;
     }
-    m_needWindow = false;
   } else {
     request->start = 0;
     request->end = length;
   }
+  // This job covers whatever the viewport asked for; leaving the flag set re-queues a parse forever.
+  m_needWindow = false;
   if (request->windowed != m_treeWindowed)
     scopeChanged = true;
 
