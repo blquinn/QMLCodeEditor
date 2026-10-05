@@ -548,10 +548,40 @@ bool CodeEditor::collapseSelections() {
 }
 
 qce::EditContext CodeEditor::editContext() {
-  return {
-    m_document, m_selections, {m_insertSpaces, m_indentWidth, m_metrics.tabWidth(), m_readOnly, m_foldPolicy == SkipFolds}, &m_map,
-    m_cursorLayout.get()
-  };
+  qce::EditorSettings settings;
+  settings.insertSpaces = m_insertSpaces;
+  settings.indentWidth = m_indentWidth;
+  settings.tabWidth = m_metrics.tabWidth();
+  settings.readOnly = m_readOnly;
+  settings.skipFolds = m_foldPolicy == SkipFolds;
+  settings.autoClose = m_autoClose;
+  settings.autoClosePairs = m_autoClosePairs;
+  return {m_document, m_selections, settings, &m_map, m_cursorLayout.get()};
+}
+
+void CodeEditor::setAutoClose(bool enable) {
+  if (enable == m_autoClose)
+    return;
+  m_autoClose = enable;
+  emit autoCloseChanged();
+}
+
+QStringList CodeEditor::autoClosePairs() const {
+  QStringList list;
+  for (const auto &pair : m_autoClosePairs)
+    list.append(QString(QChar(pair.first)) + QChar(pair.second));
+  return list;
+}
+
+void CodeEditor::setAutoClosePairs(const QStringList &pairs) {
+  QList<std::pair<char16_t, char16_t>> parsed;
+  for (const QString &pair : pairs)
+    if (pair.size() == 2 && !pair[0].isSurrogate() && !pair[1].isSurrogate())
+      parsed.append({pair[0].unicode(), pair[1].unicode()});
+  if (parsed == m_autoClosePairs)
+    return;
+  m_autoClosePairs = parsed;
+  emit autoClosePairsChanged();
 }
 
 void CodeEditor::setDetectIndentation(bool detect) {
@@ -954,7 +984,10 @@ void CodeEditor::inputMethodEvent(QInputMethodEvent *event) {
       m_selections.setSingle(from, to);
     }
     qce::EditContext ctx = editContext();
-    qce::commands::insertText(ctx, commit, qce::EditKind::Typing);
+    if (event->replacementLength() == 0 && event->replacementStart() == 0)
+      qce::commands::typeText(ctx, commit);
+    else
+      qce::commands::insertText(ctx, commit, qce::EditKind::Typing);
   }
 
   const QString preedit = event->preeditString();

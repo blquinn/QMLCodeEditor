@@ -148,7 +148,7 @@ bool DefaultInputHandler::keyPress(QKeyEvent *event, EditContext &ctx, InputHost
   }
 
   if (isPrintable(event->text(), event->modifiers())) {
-    insertText(ctx, event->text());
+    typeText(ctx, event->text());
     return true;
   }
   return false;

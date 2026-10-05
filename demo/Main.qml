@@ -193,6 +193,12 @@ ApplicationWindow {
                 checked: !editor.insertSpaces
                 onToggled: editor.insertSpaces = !checked
             }
+            MenuItem {
+                text: qsTr("Auto-close brackets")
+                checkable: true
+                checked: editor.autoClose
+                onToggled: editor.autoClose = checked
+            }
             MenuSeparator {}
             MenuSpin {
                 label: qsTr("Indent width")

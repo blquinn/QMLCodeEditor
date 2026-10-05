@@ -115,6 +115,139 @@ bool paste(EditContext &ctx, const QString &text, const QStringList &pieces) {
 
 namespace {
 
+char16_t charAt(const Rope &rope, qsizetype i) { return i >= 0 && i < rope.length() ? rope.at(i).unicode() : u'\0'; }
+
+bool isWordChar(char16_t c) { return QChar::isLetterOrNumber(c) || c == u'_'; }
+
+const std::pair<char16_t, char16_t> *pairOpenedBy(const EditorSettings &settings, char16_t c) {
+  for (const auto &pair : settings.autoClosePairs)
+    if (pair.first == c)
+      return &pair;
+  return nullptr;
+}
+
+bool isCloser(const EditorSettings &settings, char16_t c) {
+  for (const auto &pair : settings.autoClosePairs)
+    if (pair.second == c)
+      return true;
+  return false;
+}
+
+// Is the cursor between the two halves of an empty pair?
+const std::pair<char16_t, char16_t> *pairAround(const Rope &rope, const EditorSettings &settings, qsizetype at) {
+  if (!settings.autoClose || at < 1)
+    return nullptr;
+  const char16_t before = charAt(rope, at - 1);
+  const auto *pair = pairOpenedBy(settings, before);
+  return pair && charAt(rope, at) == pair->second ? pair : nullptr;
+}
+
+QString indentUnit(const EditorSettings &settings) {
+  return settings.insertSpaces ? QString(settings.indentWidth, u' ') : QStringLiteral("\t");
+}
+
+} // namespace
+
+bool typeText(EditContext &ctx, QStringView text) {
+  const EditorSettings &settings = ctx.settings;
+  if (!settings.autoClose || text.size() != 1 || ctx.document.isLoading() || settings.readOnly)
+    return insertText(ctx, text);
+  const char16_t c = text.front().unicode();
+  const auto *opens = pairOpenedBy(settings, c);
+  if (!opens && !isCloser(settings, c))
+    return insertText(ctx, text);
+
+  enum class Action { Plain, Pair, Wrap, Over };
+  const Rope &rope = ctx.document.rope();
+  const int n = ctx.selections.count();
+  QList<Action> actions;
+  actions.reserve(n);
+  bool anyEdit = false;
+  for (int i = 0; i < n; ++i) {
+    const Selection s = ctx.selections.at(i);
+    Action action = Action::Plain;
+    if (!s.isEmpty()) {
+      if (opens)
+        action = Action::Wrap;
+    } else {
+      const char16_t next = charAt(rope, s.head);
+      const char16_t previous = charAt(rope, s.head - 1);
+      if (next == c && isCloser(settings, c)) {
+        action = Action::Over;
+      } else if (opens) {
+        const bool quote = opens->first == opens->second;
+        const bool roomAfter = next == u'\0' || next == u'\n' || next == u'\r' || QChar::isSpace(next) || isCloser(settings, next);
+        if (roomAfter && !(quote && (isWordChar(previous) || previous == c)))
+          action = Action::Pair;
+      }
+    }
+    anyEdit |= action != Action::Over;
+    actions.append(action);
+  }
+
+  SelectionList result;
+  result.reserve(n);
+  qsizetype shift = 0;
+  for (int i = 0; i < n; ++i) {
+    const Selection s = ctx.selections.at(i);
+    switch (actions[i]) {
+    case Action::Plain:
+      result.append({s.start() + shift + 1, s.start() + shift + 1});
+      shift += 1 - (s.end() - s.start());
+      break;
+    case Action::Pair:
+      result.append({s.head + shift + 1, s.head + shift + 1});
+      shift += 2;
+      break;
+    case Action::Wrap:
+      result.append({s.anchor + shift + 1, s.head + shift + 1});
+      shift += 2;
+      break;
+    case Action::Over:
+      result.append({s.head + shift + 1, s.head + shift + 1});
+      break;
+    }
+  }
+  const int primary = ctx.selections.primaryIndex();
+  if (!anyEdit) {
+    // Only stepping over closers: a cursor move, which ends the typing run.
+    ctx.selections.set(result, primary);
+    ctx.document.breakUndoCoalescing();
+    return true;
+  }
+
+  TextDocument &doc = ctx.document;
+  const SelectionList before = ctx.selections.selections();
+  const QString open = QString(QChar(c));
+  const QString close = opens ? QString(QChar(opens->second)) : QString();
+  bool wrapped = false;
+  SelectionSet::Batch batch(ctx.selections);
+  doc.beginEditGroup(before);
+  for (int i = n - 1; i >= 0; --i) {
+    const Selection s = ctx.selections.at(i);
+    switch (actions[i]) {
+    case Action::Plain:
+      doc.replace(s.start(), s.end(), open);
+      break;
+    case Action::Pair:
+      doc.insert(s.head, open + close);
+      break;
+    case Action::Wrap:
+      doc.insert(s.end(), close); // the selected text is never copied
+      doc.insert(s.start(), open);
+      wrapped = true;
+      break;
+    case Action::Over:
+      break;
+    }
+  }
+  doc.endEditGroup(result, wrapped ? EditKind::Other : EditKind::Typing);
+  ctx.selections.set(result, primary);
+  return true;
+}
+
+namespace {
+
 // Cell column of `offset` on its line, with tab stops every `tabWidth` cells.
 qsizetype visualColumn(const Rope &rope, qsizetype offset, int tabWidth) {
   const qsizetype start = rope.lineStart(rope.lineAt(offset));
@@ -158,6 +291,8 @@ bool deleteBackward(EditContext &ctx) {
     [&](Selection s) {
       if (!s.isEmpty())
         return qMakePair(s.start(), s.end());
+      if (pairAround(rope, ctx.settings, s.head))
+        return qMakePair(s.head - 1, s.head + 1);
       const qsizetype stop = previousIndentStop(rope, s.head, ctx.settings);
       return qMakePair(stop < s.head ? stop : bounds.previousGrapheme(s.head), s.head);
     }
@@ -187,6 +322,8 @@ bool newline(EditContext &ctx) {
   const QString eol = crlf ? QStringLiteral("\r\n") : QStringLiteral("\n");
   const Rope &rope = ctx.document.rope();
   QList<Replacement> list;
+  QList<Selection> after;
+  bool expanded = false;
   for (int i = 0; i < ctx.selections.count(); ++i) {
     const Selection s = ctx.selections.at(i);
     const qsizetype line = rope.lineAt(s.start());
@@ -194,16 +331,24 @@ bool newline(EditContext &ctx) {
     qsizetype end = lineStart;
     while (end < s.start() && (rope.at(end) == u' ' || rope.at(end) == u'\t'))
       ++end;
-    list.append({s.start(), s.end(), eol + rope.toString(lineStart, end)});
+    const QString indent = rope.toString(lineStart, end);
+    const auto *pair = s.isEmpty() ? pairAround(rope, ctx.settings, s.head) : nullptr;
+    if (pair && pair->first != pair->second) {
+      // {|} becomes {, an indented line for the cursor, and } at the original indentation.
+      const QString inner = eol + indent + indentUnit(ctx.settings);
+      list.append({s.start(), s.end(), inner + eol + indent});
+      after.append({inner.size(), inner.size()});
+      expanded = true;
+    } else {
+      const QString text = eol + indent;
+      list.append({s.start(), s.end(), text});
+      after.append({text.size(), text.size()});
+    }
   }
-  return applyReplacements(ctx, list, EditKind::Other);
+  return expanded ? applyReplacements(ctx, list, EditKind::Other, &after) : applyReplacements(ctx, list, EditKind::Other);
 }
 
 namespace {
-
-QString indentUnit(const EditorSettings &settings) {
-  return settings.insertSpaces ? QString(settings.indentWidth, u' ') : QStringLiteral("\t");
-}
 
 // The lines a set of selections covers, ascending and without repeats. A selection that ends at the
 // very start of a line does not include that line.
