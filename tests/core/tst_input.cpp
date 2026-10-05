@@ -44,6 +44,20 @@ struct Fixture {
 class TstInput : public QObject {
   Q_OBJECT
 private slots:
+  void bracketsPairTypeOverAndExpand() {
+    Fixture f;
+    f.type(u"f"_s);
+    f.type(u"("_s);
+    QCOMPARE(f.text(), u"f()"_s);
+    f.type(u")"_s); // steps over the closer
+    QCOMPARE(f.text(), u"f()"_s);
+    QCOMPARE(f.cursor(), (Selection{3, 3}));
+    f.type(u"{"_s);
+    f.key(Qt::Key_Return);
+    QCOMPARE(f.text(), u"f(){\n    \n}"_s);
+    QCOMPARE(f.cursor(), (Selection{9, 9}));
+  }
+
   void typingAndBackspace() {
     Fixture f;
     f.type(u"h"_s);

@@ -51,6 +51,157 @@ private slots:
     QVERIFY(!commands::deleteForward(f.ctx));
   }
 
+  void typeText_data() {
+    QTest::addColumn<QString>("before"); // '|' cursor, '[' ']' selection (head at ']')
+    QTest::addColumn<QString>("typed");
+    QTest::addColumn<QString>("after");
+    QTest::newRow("open") << u"a |"_s << u"("_s << u"a (|)"_s;
+    QTest::newRow("brace before text") << u"|x"_s << u"{"_s << u"{|x"_s;
+    QTest::newRow("before closer") << u"(|)"_s << u"["_s << u"([|])"_s;
+    QTest::newRow("type over") << u"(a|)"_s << u")"_s << u"(a)|"_s;
+    QTest::newRow("closer without match") << u"a|"_s << u")"_s << u"a)|"_s;
+    QTest::newRow("quote") << u"x = |"_s << u"\""_s << u"x = \"|\""_s;
+    QTest::newRow("quote after word") << u"don|"_s << u"'"_s << u"don'|"_s;
+    QTest::newRow("quote type over") << u"\"a|\""_s << u"\""_s << u"\"a\"|"_s;
+    QTest::newRow("double quote") << u"'|'"_s << u"'"_s << u"''|"_s;
+    QTest::newRow("wrap") << u"a [b]c"_s << u"("_s << u"a ([b])c"_s;
+    QTest::newRow("selection replaced by closer") << u"a [b]c"_s << u")"_s << u"a )|c"_s;
+    QTest::newRow("plain letter") << u"|"_s << u"x"_s << u"x|"_s;
+  }
+  void typeText() {
+    QFETCH(QString, before);
+    QFETCH(QString, typed);
+    QFETCH(QString, after);
+    auto parse = [](QString s, qsizetype &a, qsizetype &h) {
+      a = h = -1;
+      if (const qsizetype c = s.indexOf(u'|'); c >= 0) {
+        a = h = c;
+        s.remove(c, 1);
+      } else if (const qsizetype o = s.indexOf(u'['); o >= 0) {
+        s.remove(o, 1);
+        a = o;
+        h = s.indexOf(u']');
+        s.remove(h, 1);
+      }
+      return s;
+    };
+    qsizetype a, h, ea, eh;
+    Fixture f(parse(before, a, h));
+    f.sel.setSingle(a, h);
+    QVERIFY(commands::typeText(f.ctx, typed));
+    QCOMPARE(f.text(), parse(after, ea, eh));
+    if (ea >= 0)
+      QCOMPARE(f.sel.primary(), (Selection{ea, eh}));
+  }
+
+  void typeTextOffLeavesTypingAlone() {
+    Fixture f(u"x"_s);
+    f.ctx.settings.autoClose = false;
+    f.sel.setSingle(1);
+    commands::typeText(f.ctx, u"(");
+    QCOMPARE(f.text(), u"x("_s);
+  }
+
+  void typeTextCustomPairs() {
+    Fixture f;
+    f.ctx.settings.autoClosePairs = {{u'<', u'>'}};
+    commands::typeText(f.ctx, u"<");
+    commands::typeText(f.ctx, u"(");
+    QCOMPARE(f.text(), u"<(>"_s);
+  }
+
+  void typeTextMultiCursor() {
+    Fixture f(u"a\nb(\n)"_s);
+    f.sel.set({{1, 1}, {4, 4}, {6, 6}});
+    // Pairs before a line break and at the end of the text.
+    commands::typeText(f.ctx, u"(");
+    QCOMPARE(f.text(), u"a()\nb(()\n)()"_s);
+    QCOMPARE(f.sel.selections(), (SelectionList{{2, 2}, {7, 7}, {11, 11}}));
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), u"a\nb(\n)"_s);
+  }
+
+  void typeTextMixedOverAndPair() {
+    Fixture f(u"(a)\n"_s);
+    f.sel.set({{2, 2}, {4, 4}});
+    commands::typeText(f.ctx, u")");
+    QCOMPARE(f.text(), u"(a)\n)"_s); // the second cursor has no ')' ahead: plain insert
+    Fixture g(u"()\n()"_s);
+    g.sel.set({{1, 1}, {4, 4}});
+    commands::typeText(g.ctx, u")");
+    QCOMPARE(g.text(), u"()\n()"_s);
+    QCOMPARE(g.sel.selections(), (SelectionList{{2, 2}, {5, 5}}));
+  }
+
+  void typeTextUndoRemovesWholePair() {
+    Fixture f;
+    commands::typeText(f.ctx, u"(");
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), QString());
+  }
+
+  void backspaceDeletesEmptyPair() {
+    Fixture f(u"f(\"\")"_s);
+    f.sel.setSingle(3);
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"f()"_s);
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"f"_s);
+    Fixture g(u"(a)"_s);
+    g.sel.setSingle(2);
+    commands::deleteBackward(g.ctx);
+    QCOMPARE(g.text(), u"()"_s);
+    g.ctx.settings.autoClose = false;
+    g.sel.setSingle(1);
+    commands::deleteBackward(g.ctx);
+    QCOMPARE(g.text(), u")"_s);
+  }
+
+  void newlineBetweenBracketsExpands() {
+    Fixture f(u"  if (x) {}"_s);
+    f.sel.setSingle(10);
+    QVERIFY(commands::newline(f.ctx));
+    QCOMPARE(f.text(), u"  if (x) {\n      \n  }"_s);
+    QCOMPARE(f.sel.primary(), (Selection{17, 17}));
+    commands::undo(f.ctx);
+    QCOMPARE(f.text(), u"  if (x) {}"_s);
+  }
+
+  void newlineExpansionFollowsIndentSettings() {
+    Fixture f(u"\t{}"_s);
+    f.ctx.settings.insertSpaces = false;
+    f.sel.setSingle(2);
+    commands::newline(f.ctx);
+    QCOMPARE(f.text(), u"\t{\n\t\t\n\t}"_s);
+    Fixture g(u"[]"_s);
+    g.ctx.settings.indentWidth = 2;
+    g.sel.setSingle(1);
+    commands::newline(g.ctx);
+    QCOMPARE(g.text(), u"[\n  \n]"_s);
+  }
+
+  void newlineExpansionOnlyForBracketsAndWhenOn() {
+    Fixture f(u"\"\""_s);
+    f.sel.setSingle(1);
+    commands::newline(f.ctx);
+    QCOMPARE(f.text(), u"\"\n\""_s);
+    Fixture g(u"{}"_s);
+    g.ctx.settings.autoClose = false;
+    g.sel.setSingle(1);
+    commands::newline(g.ctx);
+    QCOMPARE(g.text(), u"{\n}"_s);
+  }
+
+  void newlineExpansionKeepsCrlf() {
+    Fixture f(u"a\r\n{}"_s);
+    FileFormat format;
+    format.dominantLineEnding = LineEnding::Crlf;
+    f.doc.setFormat(format);
+    f.sel.setSingle(4);
+    commands::newline(f.ctx);
+    QCOMPARE(f.text(), u"a\r\n{\r\n    \r\n}"_s);
+  }
+
   void cursorsThatCannotDeleteStayInTheSet() {
     Fixture f(u"abc"_s);
     f.sel.set({{0, 0}, {2, 2}});

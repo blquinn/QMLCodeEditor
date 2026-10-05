@@ -6,7 +6,10 @@
 #include "core/selectionset.h"
 #include "core/textdocument.h"
 
+#include <QtCore/QList>
+
 #include <optional>
+#include <utility>
 
 namespace qce {
 
@@ -22,6 +25,12 @@ struct EditorSettings {
   // Select-all-occurrences stops here: every selection costs two anchors, and a million of them
   // is a hang rather than a feature.
   int maxSelections = 100000;
+  // Bracket and quote pairing (typeText, Backspace, Enter). A pair whose two characters are equal
+  // is a quote: it only closes at a word boundary and is not expanded by Enter.
+  bool autoClose = true;
+  QList<std::pair<char16_t, char16_t>> autoClosePairs = {
+    {u'(', u')'}, {u'[', u']'}, {u'{', u'}'}, {u'"', u'"'}, {u'\'', u'\''}, {u'`', u'`'},
+  };
 };
 
 // What a command acts on (ADR 0005): the document, the selections that always exist, and settings.
@@ -65,13 +74,19 @@ bool deleteForward(EditContext &ctx);
 // Removes the selected text (cut without the clipboard); empty selections are left alone.
 bool deleteSelection(EditContext &ctx);
 
+// Typing from the keyboard or an input method. Like insertText, but with `autoClose` a single
+// opener inserts its closer (wrapping a selection instead), and a closer typed in front of the same
+// closer steps over it. Anything else is insertText.
+bool typeText(EditContext &ctx, QStringView text);
+
 // Paste. With several selections the text is distributed one piece per selection when the pieces
 // (given by the clipboard, else the lines of `text` without a final line break) are as many as the
 // selections; otherwise every selection receives all of `text`.
 bool paste(EditContext &ctx, const QString &text, const QStringList &pieces = {});
 
 // Enter: replaces the selections with a line break and the indentation of the line it was typed on
-// (as far as the cursor reaches into it).
+// (as far as the cursor reaches into it). With `autoClose`, Enter between an empty bracket pair
+// opens a line for the cursor, one indent unit deeper, and leaves the closer on the line below.
 bool newline(EditContext &ctx);
 // Tab: indents the lines of any selection that spans several lines; otherwise replaces each
 // selection with spaces up to the next indent stop (or a tab character, when !insertSpaces).

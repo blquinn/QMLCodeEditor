@@ -164,6 +164,10 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
 - [x] **INPUT-12** Smart tabs — done 2026-10-05 (f4aebee)
   - Indentation (spaces vs tabs, width) is detected from the first lines of a document on load and `setText`; `detectIndentation` turns it off.
   - Backspace inside leading spaces deletes back to the previous indent stop; Shift+Tab outdents to the previous stop.
+- [x] **INPUT-13** Bracket auto-pairing — done 2026-10-05 (03512cb)
+  - Typing an opener inserts its closer (quotes only at a word boundary); typing a closer over the same closer steps past it; typing an opener over a selection wraps it.
+  - Backspace between an empty pair deletes both; Enter between brackets puts the closer on the line below and the cursor on an indented line between (smart-tab unit).
+  - `autoClose` (default on, every language) and `autoClosePairs` properties; works per cursor with multiple selections.
 
 ## M4 — Display map & soft wrap
 
@@ -340,7 +344,7 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **API-04** Find/replace
   - Incremental search with regex, match highlighting, replace all as one transaction; runs on rope snapshots in a worker thread.
 - [ ] **API-05** Go-to-definition and find-references request signals
-- [ ] **API-06** Matching bracket highlight and bracket auto-pairing
+- [ ] **API-06** Matching bracket highlight (auto-pairing is INPUT-13)
 - [ ] **API-07** Accessibility basics
   - Screen-reader text and cursor exposure through `QAccessible`.
 - [ ] **API-08** Documented QML API

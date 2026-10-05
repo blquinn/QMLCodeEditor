@@ -82,6 +82,8 @@ public:
   Q_PROPERTY(
     qsizetype cursorPosition READ cursorPosition WRITE setCursorPosition NOTIFY selectionChanged FINAL
   )
+  Q_PROPERTY(bool autoClose READ autoClose WRITE setAutoClose NOTIFY autoCloseChanged FINAL)
+  Q_PROPERTY(QStringList autoClosePairs READ autoClosePairs WRITE setAutoClosePairs NOTIFY autoClosePairsChanged FINAL)
   Q_PROPERTY(bool detectIndentation READ detectIndentation WRITE setDetectIndentation NOTIFY detectIndentationChanged FINAL)
   Q_PROPERTY(
     bool insertSpaces READ insertSpaces WRITE setInsertSpaces NOTIFY insertSpacesChanged FINAL
@@ -260,6 +262,16 @@ public:
   // several lines are indented by one level. Backspace in leading spaces and Shift+Tab move to the
   // previous indent stop. With `detectIndentation` (the default) a loaded or replaced text
   // overwrites both settings with what the text itself uses; turn it off to force your own.
+  // Bracket and quote pairing (on by default, for every language). Typing an opener inserts its
+  // closer (around a selection, if there is one), typing a closer in front of the same closer steps
+  // over it, Backspace between an empty pair deletes both, and Enter between brackets puts the
+  // closer on the line below with the cursor on an indented line in between. Quotes only close at a
+  // word boundary. `autoClosePairs` lists pairs as two-character strings, e.g. "()" or "\"\"";
+  // set it per language from the host. Malformed entries are ignored.
+  bool autoClose() const { return m_autoClose; }
+  void setAutoClose(bool enable);
+  QStringList autoClosePairs() const;
+  void setAutoClosePairs(const QStringList &pairs);
   bool detectIndentation() const { return m_detectIndentation; }
   void setDetectIndentation(bool detect);
   bool insertSpaces() const { return m_insertSpaces; }
@@ -345,6 +357,8 @@ signals:
   void cursorVisibleChanged();
   void readOnlyChanged();
   void undoLimitChanged();
+  void autoCloseChanged();
+  void autoClosePairsChanged();
   void detectIndentationChanged();
   void insertSpacesChanged();
   void indentWidthChanged();
@@ -524,6 +538,8 @@ private:
   qce::InputHandler *m_handler = &m_defaultHandler;
   bool m_readOnly = false;
   int m_undoLimit = 0;
+  bool m_autoClose = true;
+  QList<std::pair<char16_t, char16_t>> m_autoClosePairs = qce::EditorSettings().autoClosePairs;
   bool m_detectIndentation = true;
   bool m_insertSpaces = true;
   int m_indentWidth = 4;

@@ -36,6 +36,19 @@ private slots:
     QCOMPARE(image.pixelColor(10, 90), QColor(0x1e, 0x1e, 0x1e));
   }
 
+  void autoClosePropertiesDefaultAndApply() {
+    QQuickView view(&m_engine, nullptr);
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    QVERIFY(editor);
+    QVERIFY(editor->autoClose());
+    QCOMPARE(editor->autoClosePairs().size(), 6);
+    editor->setAutoClosePairs({QStringLiteral("<>"), QStringLiteral("bad")});
+    QCOMPARE(editor->autoClosePairs(), QStringList{QStringLiteral("<>")});
+    editor->setAutoClose(false);
+    QVERIFY(!editor->autoClose());
+  }
+
   void detectsIndentationOnSetText() {
     QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
