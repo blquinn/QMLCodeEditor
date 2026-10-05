@@ -34,6 +34,19 @@ import me.blq.qmlcodeeditor
 CodeEditor { anchors.fill: parent }
 ```
 
+### Text rendering
+
+`renderType` picks how glyphs are rasterized, with the same values as `Text.renderType`
+(`CodeEditor.QtRendering`, `CodeEditor.NativeRendering`, `CodeEditor.CurveRendering`). Unset, the editor follows
+the application default set with `QQuickWindow::setTextRenderType()` (read on every frame, so changing it later
+is picked up), and reading the property returns that effective value. Assign a value to override it and
+`undefined` to go back to following the default. Layout and metrics don't depend on it. `renderTypeQuality` is
+not exposed: `QSGTextNode` has no equivalent.
+
+```qml
+CodeEditor { renderType: CodeEditor.NativeRendering }
+```
+
 ## Roadmap tooling
 
 ```sh

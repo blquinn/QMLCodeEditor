@@ -8,6 +8,7 @@
 #include <QtGui/QColor>
 #include <QtGui/QImage>
 #include <QtQuick/QSGNode>
+#include <QtQuick/QSGTextNode>
 
 #include <memory>
 #include <unordered_map>
@@ -82,6 +83,7 @@ struct FrameParams {
   qreal contentX = 0;
   qreal contentY = 0;
   const QList<FramePlanRow> *rows = nullptr; // contiguous, ascending
+  QSGTextNode::RenderType renderType = QSGTextNode::QtRendering; // for every text node, gutter included
 
   // Overlays, only for rows in the plan (RENDER-05).
   QColor currentLineColor;
@@ -110,6 +112,7 @@ struct SceneStats {
   quint64 linesFilled = 0;    // addTextLayout calls
   quint64 matrixUpdates = 0;  // row transforms rewritten
   quint64 overlayUpdates = 0; // times the overlay geometry was rebuilt
+  QSGTextNode::RenderType renderType = QSGTextNode::QtRendering; // what every text node is set to
 };
 
 // The editor's scene-graph subtree (ADR 0001). Lives on the render thread:
@@ -133,7 +136,10 @@ public:
   ~EditorScene() override;
 
   void sync(const FrameParams &params);
-  const SceneStats &stats() const { return m_stats; }
+  const SceneStats &stats() {
+    m_stats.renderType = m_renderType;
+    return m_stats;
+  }
 
 private:
   struct Item {
@@ -206,6 +212,7 @@ private:
 
   Item *acquire(RowPool &pool);
   void release(RowPool &pool, Item *item);
+  void applyRenderType(QSGTextNode::RenderType type);
   void positionItem(Item *item, qsizetype row, const FrameParams &params);
 
   QQuickWindow *m_window;
@@ -227,6 +234,7 @@ private:
   qsizetype m_originRow = 0;
   bool m_haveOrigin = false;
   QColor m_textColor;
+  QSGTextNode::RenderType m_renderType = QSGTextNode::QtRendering;
   SceneStats m_stats;
 };
 

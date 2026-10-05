@@ -279,6 +279,56 @@ void CodeEditor::setShowWhitespace(bool show) {
   emit showWhitespaceChanged();
 }
 
+QSGTextNode::RenderType CodeEditor::toNodeRenderType(RenderType type) {
+  switch (type) {
+  case QtRendering:
+    return QSGTextNode::QtRendering;
+  case NativeRendering:
+    return QSGTextNode::NativeRendering;
+  case CurveRendering:
+    return QSGTextNode::CurveRendering;
+  }
+  return QSGTextNode::QtRendering;
+}
+
+CodeEditor::RenderType CodeEditor::fromWindowRenderType(QQuickWindow::TextRenderType type) {
+  switch (type) {
+  case QQuickWindow::QtTextRendering:
+    return QtRendering;
+  case QQuickWindow::NativeTextRendering:
+    return NativeRendering;
+  case QQuickWindow::CurveTextRendering:
+    return CurveRendering;
+  }
+  return QtRendering;
+}
+
+CodeEditor::RenderType CodeEditor::renderType() const {
+  return m_renderType.value_or(fromWindowRenderType(QQuickWindow::textRenderType()));
+}
+
+// Layout and metrics come from QTextLayout and QFontMetrics, which never see the render type, so
+// only the scene needs to hear about it.
+void CodeEditor::setRenderType(RenderType type) {
+  if (m_renderType == type)
+    return;
+  const RenderType before = renderType();
+  m_renderType = type;
+  update();
+  if (renderType() != before)
+    emit renderTypeChanged();
+}
+
+void CodeEditor::resetRenderType() {
+  if (!m_renderType)
+    return;
+  const RenderType before = renderType();
+  m_renderType.reset();
+  update();
+  if (renderType() != before)
+    emit renderTypeChanged();
+}
+
 void CodeEditor::updateWrapMeasure() {
   m_wrapMeasure = std::make_shared<qce::FontWrapMeasure>(m_metrics.layoutFont(), m_metrics.tabWidth(), m_metrics.cellAdvance());
   invalidateWrap();
@@ -1870,6 +1920,7 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.gutterWidth = m_gutterWidth;
   params.gutterBackground = m_theme->gutterBackground();
   params.gutter = &m_gutter;
+  params.renderType = toNodeRenderType(renderType());
   scene->sync(params);
   m_sceneStats = scene->stats();
   return scene;
