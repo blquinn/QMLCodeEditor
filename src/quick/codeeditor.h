@@ -82,6 +82,7 @@ public:
   Q_PROPERTY(
     qsizetype cursorPosition READ cursorPosition WRITE setCursorPosition NOTIFY selectionChanged FINAL
   )
+  Q_PROPERTY(bool detectIndentation READ detectIndentation WRITE setDetectIndentation NOTIFY detectIndentationChanged FINAL)
   Q_PROPERTY(
     bool insertSpaces READ insertSpaces WRITE setInsertSpaces NOTIFY insertSpacesChanged FINAL
   )
@@ -256,7 +257,11 @@ public:
   // Edits from the user (keys, paste, input methods) are refused while read-only; the document API
   // and setText()/load() still work.
   // Tab inserts `indentWidth` columns of spaces (or a tab character when false); selections of
-  // several lines are indented by one level.
+  // several lines are indented by one level. Backspace in leading spaces and Shift+Tab move to the
+  // previous indent stop. With `detectIndentation` (the default) a loaded or replaced text
+  // overwrites both settings with what the text itself uses; turn it off to force your own.
+  bool detectIndentation() const { return m_detectIndentation; }
+  void setDetectIndentation(bool detect);
   bool insertSpaces() const { return m_insertSpaces; }
   void setInsertSpaces(bool spaces);
   int indentWidth() const { return m_indentWidth; }
@@ -340,6 +345,7 @@ signals:
   void cursorVisibleChanged();
   void readOnlyChanged();
   void undoLimitChanged();
+  void detectIndentationChanged();
   void insertSpacesChanged();
   void indentWidthChanged();
   void canUndoChanged();
@@ -476,6 +482,7 @@ private:
   void updateContentSize();
   void buildOverlays();
   void buildTabMarks();
+  void applyDetectedIndentation();
   void restartBlink();
   // `column` is a column of the buffer line; the layout is one row of it.
   qreal xForColumn(const qce::LineLayout &layout, qsizetype column) const;
@@ -517,6 +524,7 @@ private:
   qce::InputHandler *m_handler = &m_defaultHandler;
   bool m_readOnly = false;
   int m_undoLimit = 0;
+  bool m_detectIndentation = true;
   bool m_insertSpaces = true;
   int m_indentWidth = 4;
   bool m_canUndo = false;

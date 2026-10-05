@@ -1,6 +1,7 @@
 #include "codeeditor.h"
 
 #include "core/filesaver.h"
+#include "core/indentation.h"
 #include "core/folding.h"
 #include "core/textboundaries.h"
 
@@ -124,6 +125,7 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
     m_loadProgress = 1;
     emit loadProgressChanged();
     emit loadingChanged();
+    applyDetectedIndentation();
   });
   connect(&m_document, &qce::TextDocument::loadFailed, this, [this](const QString &error) {
     emit loadingChanged();
@@ -550,6 +552,24 @@ qce::EditContext CodeEditor::editContext() {
     m_document, m_selections, {m_insertSpaces, m_indentWidth, m_metrics.tabWidth(), m_readOnly, m_foldPolicy == SkipFolds}, &m_map,
     m_cursorLayout.get()
   };
+}
+
+void CodeEditor::setDetectIndentation(bool detect) {
+  if (detect == m_detectIndentation)
+    return;
+  m_detectIndentation = detect;
+  emit detectIndentationChanged();
+  applyDetectedIndentation();
+}
+
+void CodeEditor::applyDetectedIndentation() {
+  if (!m_detectIndentation)
+    return;
+  if (const auto guess = qce::detectIndentation(m_document.rope())) {
+    setInsertSpaces(guess->insertSpaces);
+    if (guess->indentWidth > 0)
+      setIndentWidth(guess->indentWidth);
+  }
 }
 
 void CodeEditor::setInsertSpaces(bool spaces) {
@@ -1637,6 +1657,8 @@ void CodeEditor::save(const QUrl &file) {
 }
 
 void CodeEditor::onDocumentReset() {
+  if (!m_document.isLoading())
+    applyDetectedIndentation();
   updateUndoState();
   m_lastLineCount = lineCount();
   m_layouts.clear();

@@ -7,7 +7,7 @@ qt_add_library(qce_core STATIC
     anchorset.h anchorset.cpp
     fileformat.h fileloader.h fileloader.cpp
     filesaver.h filesaver.cpp
-    textboundaries.h textboundaries.cpp
+    textboundaries.h textboundaries.cpp indentation.h indentation.cpp
     selection.h selectionset.h selectionset.cpp commands.h commands.cpp
     cursorlayout.h cursorlayout.cpp inputhandler.h inputhandler.cpp
     undostack.h undostack.cpp
