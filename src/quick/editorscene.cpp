@@ -217,6 +217,7 @@ EditorScene::Item *EditorScene::acquire(RowPool &pool) {
     item = new Item;
     item->transform = new QSGTransformNode;
     item->text = m_window->createTextNode();
+    item->text->setRenderType(m_renderType);
     item->transform->appendChildNode(item->text);
     ++m_stats.nodesCreated;
   }
@@ -240,6 +241,20 @@ void EditorScene::release(RowPool &pool, Item *item) {
   pool.free.append(item);
 }
 
+// Nodes bake the render type in when a layout is added, so every node that holds text is
+// refilled. Free nodes are detached and hold stale glyphs but are always refilled before reuse.
+void EditorScene::applyRenderType(QSGTextNode::RenderType type) {
+  m_renderType = type;
+  for (RowPool *pool : {&m_textPool, &m_labelPool}) {
+    for (auto &[row, item] : pool->active) {
+      item->text->setRenderType(type);
+      item->layoutId = 0;
+    }
+    for (Item *item : std::as_const(pool->free))
+      item->text->setRenderType(type);
+  }
+}
+
 // Puts a row's transform where its row is, relative to the current origin.
 void EditorScene::positionItem(Item *item, qsizetype row, const FrameParams &p) {
   if (item->originRow == m_originRow && item->lineHeight == p.lineHeight && item->layoutId != 0)
@@ -253,6 +268,8 @@ void EditorScene::positionItem(Item *item, qsizetype row, const FrameParams &p) 
 }
 
 void EditorScene::sync(const FrameParams &p) {
+  if (p.renderType != m_renderType)
+    applyRenderType(p.renderType);
   m_background->setRect(p.viewport);
   m_background->setColor(p.background);
 

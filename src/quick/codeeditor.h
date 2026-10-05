@@ -25,8 +25,11 @@
 #include <QtQml/QQmlListProperty>
 #include <QtQml/qqmlregistration.h>
 #include <QtQuick/QQuickItem>
+#include <QtQuick/QQuickWindow>
+#include <QtQuick/QSGTextNode>
 
 #include <memory>
+#include <optional>
 
 // The editor item (ADR 0001). The GUI thread owns the document and does all text layout; the scene
 // graph is only touched from updatePaintNode().
@@ -65,6 +68,10 @@ public:
   };
   Q_ENUM(FoldCursorPolicy)
 
+  // How glyphs are rasterized. Names and values mirror Text.renderType and QSGTextNode::RenderType.
+  enum RenderType { QtRendering, NativeRendering, CurveRendering };
+  Q_ENUM(RenderType)
+
   Q_PROPERTY(qsizetype lineCount READ lineCount NOTIFY lineCountChanged FINAL)
   Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged FINAL)
   Q_PROPERTY(qreal loadProgress READ loadProgress NOTIFY loadProgressChanged FINAL)
@@ -99,6 +106,7 @@ public:
     bool showWhitespace READ showWhitespace WRITE setShowWhitespace NOTIFY showWhitespaceChanged FINAL
   )
   Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
+  Q_PROPERTY(RenderType renderType READ renderType WRITE setRenderType RESET resetRenderType NOTIFY renderTypeChanged FINAL)
   Q_PROPERTY(qce::Theme *theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
   Q_PROPERTY(qce::Highlighter *highlighter READ highlighter WRITE setHighlighter NOTIFY highlighterChanged FINAL)
   Q_PROPERTY(WrapMode wrapMode READ wrapMode WRITE setWrapMode NOTIFY wrapModeChanged FINAL)
@@ -133,6 +141,15 @@ public:
   // Draws tabs and spaces as visible marks in the theme's whitespace color.
   bool showWhitespace() const { return m_showWhitespace; }
   void setShowWhitespace(bool show);
+
+  // How text is drawn. Unset, it follows QQuickWindow::textRenderType() like Text does; reading it
+  // then returns that default. The window default is process-wide and read when a frame is built.
+  RenderType renderType() const;
+  void setRenderType(RenderType type);
+  void resetRenderType();
+  // The mapping to the scene graph's enum, explicit rather than a cast.
+  static QSGTextNode::RenderType toNodeRenderType(RenderType type);
+  static RenderType fromWindowRenderType(QQuickWindow::TextRenderType type);
 
   // Never null: the editor owns a dark theme until the host assigns one.
   qce::Theme *theme() const { return m_theme; }
@@ -316,6 +333,7 @@ signals:
   void loadProgressChanged();
   void fontChanged();
   void tabWidthChanged();
+  void renderTypeChanged();
   void showWhitespaceChanged();
   void selectionChanged();
   void cursorBlinkIntervalChanged();
@@ -505,6 +523,7 @@ private:
   bool m_canRedo = false;
   void onSelectionsChanged();
   bool m_showWhitespace = false;
+  std::optional<RenderType> m_renderType; // unset: follow the window default
   QTimer m_blinkTimer;
   static constexpr int kBlinkTimeoutMs = 10000;
   bool m_cursorVisible = true;
