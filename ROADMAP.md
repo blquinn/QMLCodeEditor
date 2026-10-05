@@ -132,7 +132,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - File dialog / command-line path / drag-and-drop in `demo/`.
 - [x] **RENDER-11** Scroll and frame-time benchmarks — done 2026-10-02 (63f0522)
   - Scripted scroll over the generated large files; results recorded in JSON.
-- [x] **RENDER-12** Text render type — done 2026-10-05
+- [x] **RENDER-12** Text render type — done 2026-10-05 (bf9ff83)
   - `renderType` property (Qt/Native/Curve) applied to every text node; unset follows `QQuickWindow::textRenderType()`.
 
 ## M3 — Editing & input
