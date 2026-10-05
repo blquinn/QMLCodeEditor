@@ -148,6 +148,54 @@ private slots:
     QCOMPARE(f.text(), u"  a\n  b\n  c"_s);
   }
 
+  void backspaceInIndentationMovesByStops() {
+    Fixture f(u"        x"_s);
+    f.sel.setSingle(8);
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"    x"_s);
+    QCOMPARE(f.sel.primary(), (Selection{4, 4}));
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"x"_s);
+  }
+
+  void backspaceBetweenStopsGoesToPreviousStop() {
+    Fixture f(u"      x"_s);
+    f.sel.setSingle(6);
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"    x"_s);
+  }
+
+  void backspaceAfterTextDeletesOneSpace() {
+    Fixture f(u"a    b"_s);
+    f.sel.setSingle(5);
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"a   b"_s);
+  }
+
+  void backspaceInTabIndentationDeletesOneTab() {
+    Fixture f(u"\t\tx"_s);
+    f.sel.setSingle(2);
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"\tx"_s);
+  }
+
+  void backspaceInIndentationWithSeveralCursors() {
+    Fixture f(u"      a\n        b"_s);
+    f.sel.set({{6, 6}, {16, 16}});
+    commands::deleteBackward(f.ctx);
+    QCOMPARE(f.text(), u"    a\n    b"_s);
+    QCOMPARE(f.doc.undoStack().undoSteps(), 1);
+  }
+
+  void outdentGoesToPreviousStop() {
+    Fixture f(u"      x"_s);
+    f.sel.setSingle(7);
+    commands::outdent(f.ctx);
+    QCOMPARE(f.text(), u"    x"_s);
+    commands::outdent(f.ctx);
+    QCOMPARE(f.text(), u"x"_s);
+  }
+
   void pasteDistributesLinesAcrossCursors() {
     Fixture f(u"1:\n2:\n3:"_s);
     f.sel.set({{2, 2}, {5, 5}, {8, 8}});

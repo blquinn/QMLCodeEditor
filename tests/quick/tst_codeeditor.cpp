@@ -36,6 +36,23 @@ private slots:
     QCOMPARE(image.pixelColor(10, 90), QColor(0x1e, 0x1e, 0x1e));
   }
 
+  void detectsIndentationOnSetText() {
+    QQuickView view(&m_engine, nullptr);
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("a {\n  b {\n    c;\n  }\n}\n"));
+    QCOMPARE(editor->indentWidth(), 2);
+    QVERIFY(editor->insertSpaces());
+    editor->setText(QStringLiteral("a {\n\tb;\n}\n"));
+    QVERIFY(!editor->insertSpaces());
+    editor->setDetectIndentation(false);
+    editor->setIndentWidth(8);
+    editor->setText(QStringLiteral("a {\n  b;\n}\n"));
+    QCOMPARE(editor->indentWidth(), 8);
+    QVERIFY(!editor->insertSpaces());
+  }
+
   void themeSwitchRepaints() {
     QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));

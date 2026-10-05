@@ -113,15 +113,53 @@ bool paste(EditContext &ctx, const QString &text, const QStringList &pieces) {
   return insertText(ctx, text, EditKind::Other);
 }
 
+namespace {
+
+// Cell column of `offset` on its line, with tab stops every `tabWidth` cells.
+qsizetype visualColumn(const Rope &rope, qsizetype offset, int tabWidth) {
+  const qsizetype start = rope.lineStart(rope.lineAt(offset));
+  qsizetype cell = 0;
+  for (qsizetype i = start; i < offset; ++i)
+    cell += rope.at(i) == u'\t' ? tabWidth - cell % tabWidth : 1;
+  return cell;
+}
+
+// Where Backspace in leading spaces stops: the previous indent stop. Returns `offset` when the
+// cursor is not inside a line's leading whitespace, or has no space before it.
+qsizetype previousIndentStop(const Rope &rope, qsizetype offset, const EditorSettings &settings) {
+  const qsizetype lineStart = rope.lineStart(rope.lineAt(offset));
+  if (offset == lineStart || rope.at(offset - 1) != u' ')
+    return offset;
+  for (qsizetype i = lineStart; i < offset; ++i)
+    if (rope.at(i) != u' ' && rope.at(i) != u'\t')
+      return offset;
+  const qsizetype width = qMax(1, settings.indentWidth);
+  const qsizetype column = visualColumn(rope, offset, settings.tabWidth);
+  qsizetype target = (column - 1) / width * width;
+  qsizetype start = offset;
+  qsizetype cell = column;
+  while (start > lineStart && cell > target && rope.at(start - 1) == u' ') {
+    --start;
+    --cell;
+  }
+  return start;
+}
+
+} // namespace
+
 bool deleteBackward(EditContext &ctx) {
-  const TextBoundaries bounds(ctx.document.rope());
+  const Rope &rope = ctx.document.rope();
+  const TextBoundaries bounds(rope);
   bool anySelection = false;
   for (int i = 0; i < ctx.selections.count() && !anySelection; ++i)
     anySelection = !ctx.selections.at(i).isEmpty();
   return replaceEach(
     ctx, {}, anySelection ? EditKind::Other : EditKind::DeleteBackward,
     [&](Selection s) {
-      return s.isEmpty() ? qMakePair(bounds.previousGrapheme(s.head), s.head) : qMakePair(s.start(), s.end());
+      if (!s.isEmpty())
+        return qMakePair(s.start(), s.end());
+      const qsizetype stop = previousIndentStop(rope, s.head, ctx.settings);
+      return qMakePair(stop < s.head ? stop : bounds.previousGrapheme(s.head), s.head);
     }
   );
 }
@@ -162,15 +200,6 @@ bool newline(EditContext &ctx) {
 }
 
 namespace {
-
-// Cell column of `offset` on its line, with tab stops every `tabWidth` cells.
-qsizetype visualColumn(const Rope &rope, qsizetype offset, int tabWidth) {
-  const qsizetype start = rope.lineStart(rope.lineAt(offset));
-  qsizetype cell = 0;
-  for (qsizetype i = start; i < offset; ++i)
-    cell += rope.at(i) == u'\t' ? tabWidth - cell % tabWidth : 1;
-  return cell;
-}
 
 QString indentUnit(const EditorSettings &settings) {
   return settings.insertSpaces ? QString(settings.indentWidth, u' ') : QStringLiteral("\t");
@@ -247,11 +276,15 @@ bool outdent(EditContext &ctx) {
     const Rope &rope = ctx.document.rope();
     const qsizetype start = rope.lineStart(line);
     qsizetype n = 0;
-    if (rope.lineLength(line) > 0 && rope.at(start) == u'\t')
+    if (rope.lineLength(line) > 0 && rope.at(start) == u'\t') {
       n = 1;
-    else
-      while (n < width && n < rope.lineLength(line) && rope.at(start + n) == u' ')
-        ++n;
+    } else {
+      qsizetype run = 0; // leading spaces
+      while (run < rope.lineLength(line) && rope.at(start + run) == u' ')
+        ++run;
+      // Back to the previous indent stop.
+      n = qMin<qsizetype>(run, run % width ? run % width : width);
+    }
     if (n > 0)
       ctx.document.remove(start, start + n);
   });

@@ -161,6 +161,9 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
 - [x] **INPUT-10** Focus handling and cursor blink — done 2026-10-02 (b2ae309)
 - [x] **INPUT-11** Keystroke-to-frame benchmark — done 2026-10-02 (bd9e4d8)
   - `bench_typing`: typing, Enter, Backspace, paste and undo on the generated 100 MB file; event-to-frame latency median/p95/max; JSON result committed; ctest smoke variant.
+- [~] **INPUT-12** Smart tabs
+  - Indentation (spaces vs tabs, width) is detected from the first lines of a document on load and `setText`; `detectIndentation` turns it off.
+  - Backspace inside leading spaces deletes back to the previous indent stop; Shift+Tab outdents to the previous stop.
 
 ## M4 — Display map & soft wrap
 

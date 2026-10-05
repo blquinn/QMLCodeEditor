@@ -182,11 +182,23 @@ ApplicationWindow {
             title: qsTr("&Indentation")
             width: 300 // room for a label and a spin box
             MenuItem {
+                text: qsTr("Detect from file")
+                checkable: true
+                checked: editor.detectIndentation
+                onToggled: editor.detectIndentation = checked
+            }
+            MenuItem {
                 text: qsTr("Indent with tabs")
                 checkable: true
+                checked: !editor.insertSpaces
                 onToggled: editor.insertSpaces = !checked
             }
             MenuSeparator {}
+            MenuSpin {
+                label: qsTr("Indent width")
+                from: 1; to: 16; value: editor.indentWidth
+                onModified: (v) => editor.indentWidth = v
+            }
             MenuSpin {
                 label: qsTr("Tab width")
                 from: 1; to: 16; value: editor.tabWidth
