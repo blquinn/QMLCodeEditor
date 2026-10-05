@@ -164,7 +164,7 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
 - [x] **INPUT-12** Smart tabs — done 2026-10-05 (f4aebee)
   - Indentation (spaces vs tabs, width) is detected from the first lines of a document on load and `setText`; `detectIndentation` turns it off.
   - Backspace inside leading spaces deletes back to the previous indent stop; Shift+Tab outdents to the previous stop.
-- [x] **INPUT-13** Bracket auto-pairing — done 2026-10-05 (03512cb)
+- [x] **INPUT-13** Bracket auto-pairing — done 2026-10-05 (89b0f6e)
   - Typing an opener inserts its closer (quotes only at a word boundary); typing a closer over the same closer steps past it; typing an opener over a selection wraps it.
   - Backspace between an empty pair deletes both; Enter between brackets puts the closer on the line below and the cursor on an indented line between (smart-tab unit).
   - `autoClose` (default on, every language) and `autoClosePairs` properties; works per cursor with multiple selections.
