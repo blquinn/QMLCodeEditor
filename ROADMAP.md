@@ -294,8 +294,9 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [x] **DIAG-01** Decoration API with anchored ranges — done 2026-10-05 (7cd058e)
   - Kinds: underline, squiggle, background, gutter icon, end-of-line virtual text. Ranges survive edits ([ADR 0006](docs/adr/0006-anchored-decorations.md), [ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
   - Squiggle spans are built here and drawn by DIAG-02; inline virtual text is DIAG-06.
-- [ ] **DIAG-02** Squiggle rendering
+- [x] **DIAG-02** Squiggle rendering — done 2026-10-05
   - Custom `QSGMaterial`, or a tiled geometry fallback; correct across wrapped rows.
+  - Done as the fallback: a pre-rendered wave strip per color in pooled image nodes, which every backend (software included) draws the same ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)); the material is DIAG-07.
 - [ ] **DIAG-03** LSP-shaped diagnostic model
   - Range, severity, message, code, source, related information, tags.
 - [ ] **DIAG-04** Hover and popup placement
@@ -368,3 +369,6 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
   - Fail CI when a tracked benchmark regresses beyond a set tolerance.
 - [ ] **PERF-06** Render-thread audit
   - Confirm no main-thread work leaks into `updatePaintNode`; check batching and overdraw with `QSG_VISUALIZE`.
+- [ ] **DIAG-07** Squiggle shader material (optional)
+  - A `QSGMaterial` wave shader built with `qt_add_shaders` (Qt6::ShaderTools at build time only; the compiled `.qsb` is a resource, nothing new at run time), for waves that stay crisp at any zoom. The texture strip from DIAG-02 stays as the software-backend fallback.
+  - Adopt only if a GPU-backend check shows a visible gain; needs a manual check on each backend (the software one cannot draw custom materials).

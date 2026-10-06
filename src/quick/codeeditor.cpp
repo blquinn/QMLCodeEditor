@@ -2177,6 +2177,8 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.chipDots = &m_chipDotSpans;
   params.decorationBackgrounds = &m_decoBackgroundSpans;
   params.decorationUnderlines = &m_decoUnderlineSpans;
+  params.squiggles = &m_squiggleSpans;
+  params.devicePixelRatio = window() ? window()->effectiveDevicePixelRatio() : 1.0;
   params.cursors = &m_cursorSpans;
   params.cursorVisible = m_cursorVisible && m_hasFocus;
   params.gutterWidth = m_gutterWidth;

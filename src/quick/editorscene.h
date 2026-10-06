@@ -107,6 +107,8 @@ struct FrameParams {
   // front of it.
   const QList<ColoredSpan> *decorationBackgrounds = nullptr;
   const QList<ColoredSpan> *decorationUnderlines = nullptr;
+  const QList<ColoredSpan> *squiggles = nullptr;
+  qreal devicePixelRatio = 1; // the squiggle texture is drawn at this scale
 
   // The gutter occupies [0, gutterWidth) and the text the rest of the viewport.
   qreal gutterWidth = 0;
@@ -120,6 +122,9 @@ struct SceneStats {
   quint64 linesFilled = 0;    // addTextLayout calls
   quint64 matrixUpdates = 0;  // row transforms rewritten
   quint64 overlayUpdates = 0; // times the overlay geometry was rebuilt
+  quint64 squiggleNodesCreated = 0;   // image nodes allocated for squiggle pieces
+  quint64 squiggleTexturesCreated = 0; // wave textures uploaded (one per color)
+  quint64 squigglePieces = 0;          // pieces drawn in the last frame
   QSGTextNode::RenderType renderType = QSGTextNode::QtRendering; // what every text node is set to
 };
 
@@ -129,7 +134,7 @@ struct SceneStats {
 //    |- background rect
 //    |- clip -- scroll transform -+- backdrop: current line, decoration backgrounds, selection, marks, fold chips
 //    |                            |- rows: row transform -- text node   (one pair per row, pooled)
-//    |                            |- decoration underlines
+//    |                            |- decoration underlines, squiggles
 //    |                            '- opacity -- cursor rect
 //    |- gutter background rect
 //    '- gutter clip -- gutter scroll transform -+- rects (colored bars and bands)
@@ -216,6 +221,36 @@ private:
     QList<QRectF> m_rects;
     QList<qint64> m_keys;
   };
+  // Squiggles (ADR 0016): a pre-rendered wave strip per color, drawn with pooled image nodes whose
+  // source rectangle starts at the span's phase, so the wave is continuous across spans and rows and
+  // the same on every backend (a custom material draws nothing on the software one).
+  class SquiggleBatch {
+  public:
+    SquiggleBatch(QQuickWindow *window, SceneStats *stats) : m_window(window), m_stats(stats), m_group(new QSGNode) {}
+    ~SquiggleBatch();
+    QSGNode *node() const { return m_group; }
+    void update(const QList<ColoredSpan> &spans, qreal lineHeight, qsizetype originRow, qreal ratio);
+
+    static constexpr int kPeriod = 4;      // logical pixels per wave
+    static constexpr int kHeight = 3;      // logical pixels
+    static constexpr int kStripWidth = 512; // logical pixels, a whole number of periods
+
+  private:
+    struct Piece {
+      QRectF rect, source;
+      QRgb color = 0;
+      bool operator==(const Piece &) const = default;
+    };
+    QSGTexture *textureFor(QRgb color, qreal ratio);
+
+    QQuickWindow *m_window;
+    SceneStats *m_stats;
+    QSGNode *m_group; // owned by its parent in the scene tree
+    QList<QSGImageNode *> m_nodes;
+    QList<Piece> m_pieces;
+    std::unordered_map<QRgb, QSGTexture *> m_textures;
+    qreal m_ratio = 1;
+  };
   void syncOverlays(const FrameParams &params);
   void syncGutter(const FrameParams &params);
 
@@ -235,6 +270,7 @@ private:
   QSGTransformNode *m_gutterScroll = nullptr;
   QSGNode *m_gutterLabels = nullptr;
   std::unique_ptr<ColorBatch> m_gutterRects, m_decoBackgrounds, m_decoUnderlines;
+  std::unique_ptr<SquiggleBatch> m_squiggles;
   std::unique_ptr<ImageBatch> m_gutterImages;
   RowPool m_textPool, m_labelPool;
   quint64 m_frame = 0;
