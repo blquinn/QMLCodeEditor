@@ -301,7 +301,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - Range, severity, message, code, source, related information, tags. LSP JSON in and out; shown through the decoration set ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
 - [ ] **DIAG-04** Hover and popup placement
   - Popups are QML delegate `Component`s positioned using `rectForPosition()`; flip to stay on screen.
-- [x] **DIAG-05** Go to next/previous diagnostic — done 2026-10-05
+- [x] **DIAG-05** Go to next/previous diagnostic — done 2026-10-05 (df8c6c1)
   - `gotoNextDiagnostic`/`gotoPreviousDiagnostic` (wrapping, minimum severity, opens folds, scrolls); F8 / Shift+F8.
 - [ ] **DIAG-06** Inline virtual text and inlay hints
   - Rendered as part of line layout so wrap and cursor movement account for them.
