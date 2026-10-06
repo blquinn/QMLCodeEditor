@@ -11,6 +11,22 @@
 
 namespace qce {
 
+// Text that is laid out in a row but is not part of the document: an input-method composition
+// (INPUT-05) or inline virtual text such as an inlay hint (DIAG-06). It sits before the unit at
+// `column` of the row's own text, and `length` units are added to the laid-out text there.
+struct Injection {
+  enum Placement : quint8 {
+    BeforeCursor, // a cursor at `column` is drawn after it (a hint leaning on the text after it)
+    Preedit,      // the composition; the cursor is inside it
+    AfterCursor   // a cursor at `column` is drawn before it (a hint leaning on the text before it)
+  };
+  int column = 0;
+  int length = 0;
+  Placement placement = BeforeCursor;
+  int start = 0;     // where the injected text begins in the laid-out text
+  bool pill = false; // drawn on a background pill
+};
+
 // One laid-out display row: a buffer line, or with soft wrap one column range of it. `id` is unique per layout ever created by the cache, so a node that
 // remembers the id it was filled from knows whether its glyphs are still current.
 struct LineLayout {
@@ -22,10 +38,43 @@ struct LineLayout {
   qsizetype startColumn = 0; // column of the row's first unit in its buffer line
   qreal indentX = 0;         // hanging indent: where the text starts
   bool endsLine = true;      // the last (or only) row of its buffer line
-  // Input-method composition shown in this row (INPUT-05): `preeditLength` units sit at
-  // `preeditColumn` (relative to the row) in the laid-out text, which is then longer than `text`.
-  int preeditColumn = 0;
-  int preeditLength = 0;
+  // Text injected into the row, ordered by column and, at one column, by placement. The laid-out
+  // text is `text` with these put in, so it is longer than `text`; the two index spaces are
+  // converted with layoutIndex() and columnForLayoutIndex().
+  QList<Injection> injections;
+
+  // Index in the laid-out text of the cursor at `column` (relative to the row): injected text at
+  // earlier columns goes before it, and at this column so far as it leans on the text before.
+  int layoutIndex(int column) const {
+    int index = column;
+    for (const Injection &injection : injections) {
+      if (injection.column > column)
+        break;
+      if (injection.column < column || injection.placement != Injection::AfterCursor)
+        index += injection.length;
+    }
+    return index;
+  }
+  // The column (relative to the row) a laid-out index stands for. Indexes inside injected text
+  // stand for the column the text is injected at, so a click on a hint lands next to it.
+  int columnForLayoutIndex(int index) const {
+    int shift = 0;
+    for (const Injection &injection : injections) {
+      const int start = injection.column + shift;
+      if (index <= start)
+        break;
+      if (index < start + injection.length)
+        return injection.column;
+      shift += injection.length;
+    }
+    return index - shift;
+  }
+  const Injection *preedit() const {
+    for (const Injection &injection : injections)
+      if (injection.placement == Injection::Preedit)
+        return &injection;
+    return nullptr;
+  }
 };
 
 // LRU cache of row layouts keyed by (buffer line, row within the line) (RENDER-03). Only lines near the viewport are ever

@@ -57,6 +57,7 @@ Decoration DecorationSet::toDecoration(const Entry &entry) const {
   d.priority = entry.priority;
   d.tag = entry.tag;
   d.icon = entry.icon;
+  d.startGravity = m_document->anchors().gravity(entry.start);
   return d;
 }
 
@@ -86,6 +87,8 @@ DecorationSet::Entry DecorationSet::makeEntry(const DecorationSpec &spec, int la
 void DecorationSet::destroy(const Entry &entry, Touched &touched) {
   AnchorSet &anchors = m_document->anchors();
   touched.add(anchors.offset(entry.start), entry.kind);
+  if (entry.kind == DecorationKind::InlineText)
+    touched.inlineOffsets.append(anchors.offset(entry.start));
   if (anchors.gravity(entry.start) == Gravity::Left)
     --m_leftStarts;
   --m_counts[int(entry.kind)];
@@ -125,6 +128,17 @@ void DecorationSet::emitTouched(const Touched &touched) {
     return;
   const Rope &rope = m_document->rope();
   const qsizetype length = rope.length();
+  if (!touched.inlineOffsets.isEmpty()) {
+    QList<qsizetype> offsets = touched.inlineOffsets;
+    std::sort(offsets.begin(), offsets.end());
+    QList<qsizetype> lines;
+    for (qsizetype offset : std::as_const(offsets)) {
+      const qsizetype line = rope.lineAt(qMin(offset, length));
+      if (lines.isEmpty() || lines.last() != line)
+        lines.append(line);
+    }
+    emit inlineLinesChanged(lines);
+  }
   emit changed(
     rope.lineAt(qMin(touched.first, length)), rope.lineAt(qMin(touched.last, length)), touched.kinds
   );
@@ -136,6 +150,8 @@ int DecorationSet::add(const DecorationSpec &spec, int layer) {
   Touched touched;
   touched.add(startOf(entry), entry.kind);
   touched.add(endOf(entry), entry.kind);
+  if (entry.kind == DecorationKind::InlineText)
+    touched.inlineOffsets.append(startOf(entry));
   insertEntry(std::move(entry));
   emitTouched(touched);
   return id;
@@ -178,6 +194,8 @@ void DecorationSet::setLayer(int layer, const QList<DecorationSpec> &specs) {
     Entry entry = makeEntry(spec, layer);
     touched.add(startOf(entry), entry.kind);
     touched.add(endOf(entry), entry.kind);
+    if (entry.kind == DecorationKind::InlineText)
+      touched.inlineOffsets.append(startOf(entry));
     const qsizetype span = endOf(entry) - startOf(entry);
     if (span > kLongSpan) {
       m_long.push_back(std::move(entry));

@@ -61,6 +61,9 @@ struct Decoration {
   int priority = 0;
   int tag = 0;
   QImage icon;
+  // Which way the start leans: Left means text typed at the start goes after the decoration (an inlay
+  // hint in front of an argument), Right that it goes before it (a type annotation after a name).
+  Gravity startGravity = Gravity::Right;
 };
 
 // Ranges that follow edits and carry a look (ADR 0006): squiggles, underlines, backgrounds, gutter
@@ -116,6 +119,9 @@ signals:
   // Decorations of `kinds` (a mask of decorationKindBit) were added or removed on lines
   // [firstLine, lastLine].
   void changed(qsizetype firstLine, qsizetype lastLine, quint32 kinds);
+  // The lines (ascending, no repeats) that had an InlineText decoration added or removed: their
+  // width changed, so soft wrap has to look at them again. Sent before changed().
+  void inlineLinesChanged(const QList<qsizetype> &lines);
 
 private:
   struct Entry {
@@ -134,6 +140,7 @@ private:
   struct Touched {
     qsizetype first = -1, last = -1;
     quint32 kinds = 0;
+    QList<qsizetype> inlineOffsets; // where InlineText decorations were added or removed
     void add(qsizetype offset, DecorationKind kind) {
       first = first < 0 ? offset : qMin(first, offset);
       last = qMax(last, offset);
