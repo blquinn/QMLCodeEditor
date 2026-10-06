@@ -119,6 +119,7 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setActiveFocusOnTab(true);
 
   connect(&m_decorations, &qce::DecorationSet::changed, this, &CodeEditor::onDecorationsChanged);
+  connect(&m_diagnostics, &qce::DiagnosticSet::changed, this, &CodeEditor::diagnosticsChanged);
   connect(&m_document, &qce::TextDocument::textReset, this, &CodeEditor::onDocumentReset);
   connect(&m_document, &qce::TextDocument::changed, this, &CodeEditor::onDocumentChanged);
   connect(&m_document, &qce::TextDocument::loadProgress, this, [this](qint64 done, qint64 total) {
@@ -1696,6 +1697,32 @@ int CodeEditor::addDecoration(qsizetype start, qsizetype end, const QVariantMap 
 bool CodeEditor::removeDecoration(int id) { return m_decorations.remove(id); }
 
 void CodeEditor::clearDecorations(int layer) { m_decorations.clearLayer(layer); }
+
+void CodeEditor::setDiagnostics(const QVariantList &diagnostics) {
+  QList<qce::Diagnostic> list;
+  list.reserve(diagnostics.size());
+  for (const QVariant &item : diagnostics)
+    list.append(qce::Diagnostic::fromLsp(item.toMap()));
+  m_diagnostics.setDiagnostics(list);
+}
+
+void CodeEditor::setDiagnostics(const QList<qce::Diagnostic> &diagnostics) { m_diagnostics.setDiagnostics(diagnostics); }
+
+void CodeEditor::clearDiagnostics() { m_diagnostics.clear(); }
+
+QVariantList CodeEditor::diagnosticsAt(qsizetype offset) const {
+  QVariantList list;
+  for (const qce::Diagnostic &d : m_diagnostics.at(offset))
+    list.append(d.toLsp());
+  return list;
+}
+
+void CodeEditor::setDiagnosticMessages(DiagnosticMessages messages) {
+  if (messages == diagnosticMessages())
+    return;
+  m_diagnostics.setEndOfLineMessages(messages == EndOfLineMessages);
+  emit diagnosticMessagesChanged();
+}
 
 void CodeEditor::onDecorationsChanged(qsizetype firstLine, qsizetype lastLine, quint32 kinds) {
   // Virtual text is part of a row's layout, so the rows it was added to or removed from are laid out

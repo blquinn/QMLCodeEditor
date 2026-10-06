@@ -297,8 +297,8 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [x] **DIAG-02** Squiggle rendering — done 2026-10-05 (09c06f8)
   - Custom `QSGMaterial`, or a tiled geometry fallback; correct across wrapped rows.
   - Done as the fallback: a pre-rendered wave strip per color in pooled image nodes, which every backend (software included) draws the same ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)); the material is DIAG-07.
-- [ ] **DIAG-03** LSP-shaped diagnostic model
-  - Range, severity, message, code, source, related information, tags.
+- [x] **DIAG-03** LSP-shaped diagnostic model — done 2026-10-05
+  - Range, severity, message, code, source, related information, tags. LSP JSON in and out; shown through the decoration set ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
 - [ ] **DIAG-04** Hover and popup placement
   - Popups are QML delegate `Component`s positioned using `rectForPosition()`; flip to stay on screen.
 - [ ] **DIAG-05** Go to next/previous diagnostic

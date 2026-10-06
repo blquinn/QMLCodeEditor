@@ -218,6 +218,57 @@ private slots:
     QTRY_COMPARE(editor->renderStats().scene.squigglePieces, 0);
   }
 
+  void diagnosticsFromLspJsonShowAsSquigglesIconsAndMessages() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("let a = 1;\nlet b = oops;\n"));
+    auto *column = new qce::DecorationColumn(editor);
+    editor->addGutterColumn(column);
+    QTRY_VERIFY(editor->gutterWidth() > 0);
+    QSignalSpy countSpy(editor, &CodeEditor::diagnosticsChanged);
+    const QVariantMap error{
+      {"range", QVariantMap{{"start", QVariantMap{{"line", 1}, {"character", 8}}}, {"end", QVariantMap{{"line", 1}, {"character", 12}}}}},
+      {"severity", 1}, {"message", "oops is not defined"}, {"code", "E1"}, {"source", "lint"}};
+    editor->setDiagnostics(QVariantList{error});
+    QCOMPARE(editor->diagnosticCount(), 1);
+    QVERIFY(countSpy.count() >= 1);
+    const int lh = int(editor->metrics().lineHeight());
+    const QColor errorColor = editor->theme()->diagnosticError();
+    auto reddish = [&](const QRect &rect) {
+      const QImage image = view->grabWindow();
+      for (int y = rect.top(); y < rect.bottom(); ++y)
+        for (int x = rect.left(); x < rect.right(); ++x) {
+          const QColor c = image.pixelColor(x, y);
+          if (c.red() > errorColor.red() * 6 / 10 && c.green() < 90 && c.blue() < 90)
+            return true;
+        }
+      return false;
+    };
+    const QRect textRow1(int(editor->gutterWidth()), lh + lh * 2 / 3, 400, lh - lh * 2 / 3);
+    QTRY_VERIFY(reddish(textRow1));              // the squiggle
+    QVERIFY(reddish(QRect(0, lh, int(editor->gutterWidth()), lh))); // the icon
+    QVERIFY(!reddish(QRect(0, 0, int(editor->gutterWidth()), lh)));
+    // The diagnostic comes back with its range as it is now.
+    const qsizetype inside = editor->document()->rope().lineStart(1) + 9;
+    const QVariantList hit = editor->diagnosticsAt(inside);
+    QCOMPARE(hit.size(), 1);
+    QCOMPARE(hit[0].toMap().value("message").toString(), QStringLiteral("oops is not defined"));
+    QCOMPARE(hit[0].toMap().value("code").toString(), QStringLiteral("E1"));
+    editor->document()->insert(0, QStringLiteral("// c\n"));
+    const QVariantMap range = editor->diagnosticsAt(inside + 5).first().toMap().value("range").toMap();
+    QCOMPARE(range.value("start").toMap().value("line").toInt(), 2);
+    QCOMPARE(range.value("start").toMap().value("character").toInt(), 8);
+    // End-of-line messages are off until asked for.
+    QCOMPARE(editor->diagnosticMessages(), CodeEditor::NoMessages);
+    const qreal before = editor->contentWidth();
+    editor->setDiagnosticMessages(CodeEditor::EndOfLineMessages);
+    QTRY_VERIFY(editor->contentWidth() > before);
+    editor->setDiagnosticMessages(CodeEditor::NoMessages);
+    editor->clearDiagnostics();
+    QCOMPARE(editor->diagnosticCount(), 0);
+    QTRY_VERIFY(!reddish(textRow1.translated(0, lh)));
+    QVERIFY(editor->diagnosticsAt(inside).isEmpty());
+  }
+
   void foldedLinesDrawNothing() {
     auto [view, editor] = showEditor();
     editor->setText(kCode);

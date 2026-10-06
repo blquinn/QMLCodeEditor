@@ -16,6 +16,7 @@ qce_add_test(tst_indentation SOURCES tst_indentation.cpp testutil.h LIBS QMLCode
 qce_add_test(tst_input SOURCES tst_input.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_linemarkers SOURCES tst_linemarkers.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_decorationset SOURCES tst_decorationset.cpp LIBS QMLCodeEditor::Core)
+qce_add_test(tst_diagnostics SOURCES tst_diagnostics.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_foldmap SOURCES tst_foldmap.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_foldprovider SOURCES tst_foldprovider.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_textsearch SOURCES tst_textsearch.cpp testutil.h LIBS QMLCodeEditor::Core)

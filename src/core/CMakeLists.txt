@@ -14,7 +14,7 @@ qt_add_library(qce_core STATIC
     textsearch.h textsearch.cpp
     highlighter.h highlighter.cpp
     displaymap.h displaymap.cpp
-    linemarkerset.h linemarkerset.cpp decorationset.h decorationset.cpp
+    linemarkerset.h linemarkerset.cpp decorationset.h decorationset.cpp diagnostics.h diagnostics.cpp
     foldmap.h foldmap.cpp foldprovider.h foldprovider.cpp folding.h folding.cpp wrapmeasure.h wrapmeasure.cpp wrapbreaks.h wrapbreaks.cpp wrapmap.h wrapmap.cpp
 )
 add_library(QMLCodeEditor::Core ALIAS qce_core)
