@@ -1771,7 +1771,8 @@ bool CodeEditor::showPopup(const HoverTarget &target) {
   if (item->height() <= 0)
     item->setHeight(item->implicitHeight());
   const QRectF bounds(QPointF(0, 0), root->size());
-  item->setPosition(qce::placePopup(mapRectToItem(root, anchorFor(target)), item->size(), bounds));
+  m_popupAnchor = anchorFor(target);
+  item->setPosition(qce::placePopup(mapRectToItem(root, m_popupAnchor), item->size(), bounds));
   m_popup = item;
   m_popupTarget = target;
   m_popupHovered = false;
@@ -1863,9 +1864,12 @@ void CodeEditor::updatePopupHover(const QPointF &pos) {
   if (!m_diagnosticPopups || (m_diagnostics.count() == 0 && !m_popup))
     return;
   if (m_popup && window()) {
-    // The pointer over the popup itself keeps it open, whatever lies under it.
-    QQuickItem *root = window()->contentItem();
-    if (m_popup->boundingRect().contains(m_popup->mapFromItem(root, mapToItem(root, pos)))) {
+    // The pointer between what the popup hangs from and the popup, or on it, is on its way there (or
+    // there): the box around both, with some slack, keeps it open however the pointer approaches, and
+    // whatever lies under it. The slack is what a hand that overshoots by a few pixels needs.
+    constexpr qreal kSlack = 12;
+    const QRectF popupHere = mapRectFromItem(window()->contentItem(), m_popup->mapRectToItem(window()->contentItem(), m_popup->boundingRect()));
+    if (m_popupAnchor.united(popupHere).adjusted(-kSlack, -kSlack, kSlack, kSlack).contains(pos)) {
       m_popupGrace.stop();
       return;
     }
