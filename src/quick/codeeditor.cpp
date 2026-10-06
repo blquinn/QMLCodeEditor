@@ -23,8 +23,11 @@
 #include <QtCore/QElapsedTimer>
 
 #include <algorithm>
+#include <tuple>
 #include <limits>
 #include <cmath>
+
+using namespace Qt::StringLiterals;
 
 // Geometry for movement commands, from the same layouts and metrics the editor draws with.
 class CodeEditor::EditorLayout final : public qce::CursorLayout {
@@ -115,6 +118,7 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   });
   setActiveFocusOnTab(true);
 
+  connect(&m_decorations, &qce::DecorationSet::changed, this, &CodeEditor::onDecorationsChanged);
   connect(&m_document, &qce::TextDocument::textReset, this, &CodeEditor::onDocumentReset);
   connect(&m_document, &qce::TextDocument::changed, this, &CodeEditor::onDocumentChanged);
   connect(&m_document, &qce::TextDocument::loadProgress, this, [this](qint64 done, qint64 total) {
@@ -1466,6 +1470,7 @@ qsizetype CodeEditor::columnForX(const qce::LineLayout &layout, qreal x) const {
   if (layout.preeditLength == 0 && m_metrics.isSimple(layout.text))
     return layout.startColumn + m_metrics.columnForX(layout.text, x);
   qsizetype column = layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
+  column = qMin<qsizetype>(column, layout.text.size() + layout.preeditLength); // not into virtual text
   if (layout.preeditLength > 0) { // the composition is not part of the text: hits on it land before it
     if (column >= layout.preeditColumn + layout.preeditLength)
       column -= layout.preeditLength;
@@ -1638,7 +1643,7 @@ void CodeEditor::buildFoldChips() {
   for (const qce::FramePlanRow &planRow : std::as_const(m_plan)) {
     if (!planRow.display.isLast() || !m_map.folds().isFolded(planRow.display.line))
       continue;
-    const qreal x0 = planRow.layout->indentX + planRow.layout->width + cell;
+    const qreal x0 = planRow.layout->indentX + planRow.layout->fullWidth + cell;
     const qreal x1 = x0 + 4 * cell;
     m_chipSpans.append({planRow.row, x0, x1, inset, lh - 2 * inset});
     const qreal dy = std::round((lh - dot) / 2) + 1;
@@ -1647,6 +1652,168 @@ void CodeEditor::buildFoldChips() {
       m_chipDotSpans.append({planRow.row, std::round(x), std::round(x) + dot, dy, dot});
     }
     m_chipHits.append({planRow.row, x0, x1, planRow.display.line});
+  }
+}
+
+// Decorations --------------------------------------------------------------------------------
+
+static_assert(int(CodeEditor::Underline) == int(qce::DecorationKind::Underline));
+static_assert(int(CodeEditor::Squiggle) == int(qce::DecorationKind::Squiggle));
+static_assert(int(CodeEditor::Background) == int(qce::DecorationKind::Background));
+static_assert(int(CodeEditor::GutterIcon) == int(qce::DecorationKind::GutterIcon));
+static_assert(int(CodeEditor::EndOfLineText) == int(qce::DecorationKind::EndOfLineText));
+static_assert(int(CodeEditor::InlineText) == int(qce::DecorationKind::InlineText));
+
+namespace {
+qce::Gravity gravityOption(const QVariant &value, qce::Gravity fallback) {
+  const QString name = value.toString();
+  if (name.compare(u"left", Qt::CaseInsensitive) == 0)
+    return qce::Gravity::Left;
+  if (name.compare(u"right", Qt::CaseInsensitive) == 0)
+    return qce::Gravity::Right;
+  return fallback;
+}
+} // namespace
+
+int CodeEditor::addDecoration(qsizetype start, qsizetype end, const QVariantMap &options) {
+  qce::DecorationSpec spec;
+  spec.start = start;
+  spec.end = end;
+  const int kind = options.value(u"kind"_s, int(Underline)).toInt();
+  if (kind < 0 || kind >= qce::kDecorationKindCount)
+    return 0;
+  spec.kind = qce::DecorationKind(kind);
+  spec.color = options.value(u"color"_s).value<QColor>();
+  spec.text = options.value(u"text"_s).toString();
+  spec.severity = options.value(u"severity"_s, 0).toInt();
+  spec.priority = options.value(u"priority"_s, 0).toInt();
+  spec.tag = options.value(u"tag"_s, 0).toInt();
+  spec.startGravity = gravityOption(options.value(u"startGravity"_s), spec.startGravity);
+  spec.endGravity = gravityOption(options.value(u"endGravity"_s), spec.endGravity);
+  return m_decorations.add(spec, options.value(u"layer"_s, 0).toInt());
+}
+
+bool CodeEditor::removeDecoration(int id) { return m_decorations.remove(id); }
+
+void CodeEditor::clearDecorations(int layer) { m_decorations.clearLayer(layer); }
+
+void CodeEditor::onDecorationsChanged(qsizetype firstLine, qsizetype lastLine, quint32 kinds) {
+  // Virtual text is part of a row's layout, so the rows it was added to or removed from are laid out
+  // again; the rest only changes what is drawn over them.
+  constexpr quint32 inLayout =
+    qce::decorationKindBit(qce::DecorationKind::EndOfLineText) | qce::decorationKindBit(qce::DecorationKind::InlineText);
+  if (kinds & inLayout) {
+    const qsizetype count = lastLine - firstLine + 1;
+    m_layouts.invalidate(firstLine, count, count);
+  }
+  invalidatePlan();
+}
+
+// The text to show after the end of `line`: the highest-priority end-of-line decoration that starts
+// on it, cut at its first line break.
+QString CodeEditor::endOfLineText(qsizetype line, QColor *color) const {
+  const qce::Rope &rope = m_document.rope();
+  const qsizetype lineStart = rope.lineStart(line), lineEnd = rope.lineEnd(line);
+  const QList<qce::Decoration> found =
+    m_decorations.query(lineStart, lineEnd, qce::decorationKindBit(qce::DecorationKind::EndOfLineText));
+  const qce::Decoration *best = nullptr;
+  for (const qce::Decoration &d : found)
+    if (d.start >= lineStart && d.start <= lineEnd && (!best || d.priority > best->priority))
+      best = &d;
+  if (!best)
+    return {};
+  QString text = best->text;
+  for (qsizetype i = 0; i < text.size(); ++i)
+    if (text[i] == u'\n' || text[i] == u'\r') {
+      text.truncate(i);
+      break;
+    }
+  if (color)
+    *color = best->color.isValid() ? best->color
+              : best->severity != 0 ? m_theme->severityColor(best->severity)
+                                    : m_theme->virtualText();
+  return text;
+}
+
+// Turns the decorations of the rows in the plan into colored spans: backgrounds go behind the text,
+// underlines and squiggles in front of it. Like selections, only what reaches the plan is looked at,
+// however many decorations there are.
+void CodeEditor::buildDecorations() {
+  m_decoBackgroundSpans.clear();
+  m_decoUnderlineSpans.clear();
+  m_squiggleSpans.clear();
+  using qce::DecorationKind;
+  if (m_planLast < m_planFirst || m_planFirst < 0)
+    return;
+  const qsizetype drawn = m_decorations.count(DecorationKind::Underline) + m_decorations.count(DecorationKind::Squiggle) +
+                          m_decorations.count(DecorationKind::Background);
+  if (drawn == 0)
+    return;
+  constexpr qsizetype kMaxSpans = 20000;
+  const qce::Rope &rope = m_document.rope();
+  const qsizetype firstLine = m_map.rowAt(m_planFirst).line;
+  const qsizetype afterLine = m_map.folds().nextVisibleLine(m_map.rowAt(m_planLast).line);
+  const qsizetype lowOffset = rope.lineStart(firstLine);
+  const qsizetype highOffset = afterLine < rope.lineCount() ? rope.lineStart(afterLine) : rope.length();
+  QList<qce::Decoration> found = m_decorations.query(
+    lowOffset, highOffset,
+    qce::decorationKindBit(DecorationKind::Underline) | qce::decorationKindBit(DecorationKind::Squiggle) |
+      qce::decorationKindBit(DecorationKind::Background)
+  );
+  // Lowest priority first, so higher ones paint over them.
+  std::stable_sort(found.begin(), found.end(), [](const auto &a, const auto &b) { return a.priority < b.priority; });
+
+  const qreal cell = m_metrics.cellAdvance(), lh = m_metrics.lineHeight();
+  const qreal viewLeft = m_contentX - cell, viewRight = m_contentX + textViewportWidth() + cell;
+  const qreal underlineY = qMin(lh - 1, std::round(m_metrics.ascent()) + 1);
+  const qreal squiggleHeight = qMin<qreal>(3, lh / 4);
+  const qsizetype lineCountNow = rope.lineCount();
+  for (const qce::Decoration &d : std::as_const(found)) {
+    qce::TextPosition start = rope.positionAt(d.start);
+    qce::TextPosition end = rope.positionAt(d.end);
+    const bool startHidden = m_map.folds().isHidden(start.line);
+    if (startHidden && m_map.folds().isHidden(end.line))
+      continue; // all of it is folded away
+    if (startHidden) { // the part after the fold
+      const qsizetype next = m_map.folds().nextVisibleLine(start.line);
+      if (next >= lineCountNow)
+        continue;
+      start = {next, 0};
+    }
+    start = m_map.visiblePosition(start);
+    end = m_map.visiblePosition(end);
+    const qsizetype startRow = m_map.rowForPosition(start);
+    const qsizetype endRow = m_map.rowForPosition(end);
+    const QColor color = d.color.isValid() ? d.color : m_theme->severityColor(d.severity);
+    const bool empty = d.start == d.end;
+    for (qsizetype row = qMax(startRow, m_planFirst); row <= qMin(endRow, m_planLast); ++row) {
+      const qce::LineLayout &layout = *m_plan[row - m_planFirst].layout;
+      const qreal x0 = row == startRow ? xForColumn(layout, start.column) : layout.indentX;
+      qreal x1 = row == endRow ? xForColumn(layout, end.column) : layout.indentX + layout.width;
+      if (x1 <= x0) {
+        // An empty range still gets a mark one cell wide (but not a background).
+        if (!empty || d.kind == DecorationKind::Background)
+          continue;
+        x1 = x0 + cell;
+      }
+      if (x1 < viewLeft || x0 > viewRight)
+        continue;
+      switch (d.kind) {
+      case DecorationKind::Background:
+        m_decoBackgroundSpans.append({row, x0, x1, 0, -1, color});
+        break;
+      case DecorationKind::Underline:
+        m_decoUnderlineSpans.append({row, x0, x1, underlineY, 1, color});
+        break;
+      case DecorationKind::Squiggle:
+        m_squiggleSpans.append({row, x0, x1, lh - squiggleHeight, squiggleHeight, color});
+        break;
+      default:
+        break;
+      }
+    }
+    if (m_decoBackgroundSpans.size() + m_decoUnderlineSpans.size() + m_squiggleSpans.size() >= kMaxSpans)
+      break;
   }
 }
 
@@ -1848,15 +2015,52 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
       formats = withPreeditFormats(std::move(formats), preeditColumn, preeditLength, shifted);
     }
   }
-  if (!formats.isEmpty())
-    layout->setFormats(formats);
-  layout->beginLayout();
-  QTextLine textLine = layout->createLine();
-  textLine.setLineWidth(1e9);
-  textLine.setPosition(QPointF(0, 0));
-  const qreal width = textLine.naturalTextWidth();
-  layout->endLayout();
+  // End-of-line virtual text follows the row's own text after a gap (DIAG-01). It is part of the
+  // layout so it is drawn, clipped and measured with the row, but not part of the row's text: columns,
+  // hit-testing and selections stop where the text does.
+  QString trailing;
+  QColor trailingColor;
+  if (row.isLast() && m_decorations.count(qce::DecorationKind::EndOfLineText) > 0)
+    trailing = endOfLineText(row.line, &trailingColor);
+  constexpr int kTrailingGap = 2;
+  const QString baseText = layout->text();
+  const int baseLength = int(baseText.size());
+  // Lays the row out with `extra` after the text; returns the width of the text and of everything.
+  auto layOut = [&](const QString &extra) {
+    QList<QTextLayout::FormatRange> all = formats;
+    if (!extra.isEmpty()) {
+      layout->setText(baseText + QString(kTrailingGap, u' ') + extra);
+      QTextCharFormat format;
+      format.setForeground(trailingColor);
+      format.setFontItalic(true);
+      all.append({baseLength + kTrailingGap, int(extra.size()), format});
+    }
+    if (!all.isEmpty())
+      layout->setFormats(all);
+    layout->beginLayout();
+    QTextLine textLine = layout->createLine();
+    textLine.setLineWidth(1e9);
+    textLine.setPosition(QPointF(0, 0));
+    const qreal full = textLine.naturalTextWidth();
+    layout->endLayout();
+    return std::pair(extra.isEmpty() ? full : layout->lineAt(0).cursorToX(baseLength), full);
+  };
+  auto [width, fullWidth] = layOut(trailing);
+  if (!trailing.isEmpty() && m_map.wrapEnabled()) {
+    // A wrapped row has nowhere to put text that does not fit: cut it short instead of letting it
+    // run under the edge.
+    const qreal room = textViewportWidth() - row.indent - width - kTrailingGap * m_metrics.cellAdvance();
+    const qsizetype fit = qsizetype(std::floor(room / m_metrics.cellAdvance()));
+    if (trailing.size() > fit) {
+      trailing = fit >= 2 ? trailing.left(fit - 1) + QChar(0x2026) : QString();
+      layout->clearLayout();
+      if (trailing.isEmpty())
+        layout->setText(baseText);
+      std::tie(width, fullWidth) = layOut(trailing);
+    }
+  }
   auto result = m_layouts.insert(row.line, std::move(layout), width, text, row.rowInLine);
+  result->fullWidth = fullWidth;
   result->startColumn = row.startColumn;
   result->indentX = row.indent;
   result->endsLine = row.isLast();
@@ -1921,15 +2125,16 @@ void CodeEditor::updatePolish() {
   for (qsizetype row = firstRow; row <= lastRow; ++row) {
     const qce::DisplayRow displayRow = m_map.rowAt(row);
     auto layout = layoutForRow(displayRow, snapshot);
-    widest = qMax(widest, layout->indentX + layout->width);
+    widest = qMax(widest, layout->indentX + layout->fullWidth);
     if (hasFolds && displayRow.isLast() && m_map.folds().isFolded(displayRow.line))
-      widest = qMax(widest, layout->indentX + layout->width + 5 * m_metrics.cellAdvance());
+      widest = qMax(widest, layout->indentX + layout->fullWidth + 5 * m_metrics.cellAdvance());
     m_plan.append({row, std::move(layout), displayRow});
   }
   m_planFirst = firstRow;
   m_planLast = lastRow;
   m_planDirty = false;
   buildOverlays();
+  buildDecorations();
   buildGutter();
   m_maxLineWidth = widest;
   updateContentSize();
@@ -1970,6 +2175,8 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.chips = &m_chipSpans;
   params.chipDotColor = m_theme->foldPlaceholderText();
   params.chipDots = &m_chipDotSpans;
+  params.decorationBackgrounds = &m_decoBackgroundSpans;
+  params.decorationUnderlines = &m_decoUnderlineSpans;
   params.cursors = &m_cursorSpans;
   params.cursorVisible = m_cursorVisible && m_hasFocus;
   params.gutterWidth = m_gutterWidth;

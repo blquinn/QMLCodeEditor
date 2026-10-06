@@ -34,6 +34,14 @@ class Theme : public QObject {
   Q_PROPERTY(QColor foldRangeHover MEMBER m_foldRangeHover NOTIFY changed)
   Q_PROPERTY(QColor foldPlaceholder MEMBER m_foldPlaceholder NOTIFY changed)
   Q_PROPERTY(QColor foldPlaceholderText MEMBER m_foldPlaceholderText NOTIFY changed)
+  Q_PROPERTY(QColor diagnosticError MEMBER m_diagnosticError NOTIFY changed)
+  Q_PROPERTY(QColor diagnosticWarning MEMBER m_diagnosticWarning NOTIFY changed)
+  Q_PROPERTY(QColor diagnosticInfo MEMBER m_diagnosticInfo NOTIFY changed)
+  Q_PROPERTY(QColor diagnosticHint MEMBER m_diagnosticHint NOTIFY changed)
+  // End-of-line virtual text, and inlay hints with the pill behind them.
+  Q_PROPERTY(QColor virtualText MEMBER m_virtualText NOTIFY changed)
+  Q_PROPERTY(QColor inlayHint MEMBER m_inlayHint NOTIFY changed)
+  Q_PROPERTY(QColor inlayHintBackground MEMBER m_inlayHintBackground NOTIFY changed)
   // Style name -> { color, bold, italic }; names are the TokenStyle names from core/highlighter.h
   // in lower case ("keyword", "string", ...). Unlisted styles use the foreground color.
   Q_PROPERTY(QVariantMap tokenStyles READ tokenStyles WRITE setTokenStyles NOTIFY changed)
@@ -60,6 +68,15 @@ public:
   QColor foldRangeHover() const { return m_foldRangeHover; }
   QColor foldPlaceholder() const { return m_foldPlaceholder; }
   QColor foldPlaceholderText() const { return m_foldPlaceholderText; }
+  QColor diagnosticError() const { return m_diagnosticError; }
+  QColor diagnosticWarning() const { return m_diagnosticWarning; }
+  QColor diagnosticInfo() const { return m_diagnosticInfo; }
+  QColor diagnosticHint() const { return m_diagnosticHint; }
+  QColor virtualText() const { return m_virtualText; }
+  QColor inlayHint() const { return m_inlayHint; }
+  QColor inlayHintBackground() const { return m_inlayHintBackground; }
+  // The color for a decoration severity (qce::DecorationSeverity, LSP numbering); the foreground for none.
+  QColor severityColor(int severity) const;
 
   QVariantMap tokenStyles() const { return m_tokenStyles; }
   void setTokenStyles(const QVariantMap &styles);
@@ -97,6 +114,13 @@ private:
   QColor m_foldRangeHover{0xff, 0xff, 0xff, 0x12}; // band over the hovered fold's rows
   QColor m_foldPlaceholder{0x4b, 0x4b, 0x4b};    // the chip after a folded line
   QColor m_foldPlaceholderText{0xd4, 0xd4, 0xd4}; // its dots
+  QColor m_diagnosticError{0xf1, 0x4c, 0x4c};
+  QColor m_diagnosticWarning{0xcc, 0xa7, 0x00};
+  QColor m_diagnosticInfo{0x37, 0x94, 0xff};
+  QColor m_diagnosticHint{0x9a, 0x9a, 0x9a};
+  QColor m_virtualText{0x7a, 0x7a, 0x7a};
+  QColor m_inlayHint{0x8b, 0x94, 0x9f};
+  QColor m_inlayHintBackground{0x40, 0x44, 0x4a, 0x80};
   void rebuildFormats();
 
   QVariantMap m_tokenStyles;

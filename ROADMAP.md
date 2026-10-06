@@ -291,8 +291,9 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria:** a host can push 100k diagnostics and the editor stays at 120 fps; squiggles, gutter icons and end-of-line messages render correctly with wrap and folds; hovering a diagnostic shows a QML popup.
 
-- [ ] **DIAG-01** Decoration API with anchored ranges
-  - Kinds: underline, squiggle, background, gutter icon, end-of-line virtual text. Ranges survive edits ([ADR 0006](docs/adr/0006-anchored-decorations.md)).
+- [x] **DIAG-01** Decoration API with anchored ranges — done 2026-10-05
+  - Kinds: underline, squiggle, background, gutter icon, end-of-line virtual text. Ranges survive edits ([ADR 0006](docs/adr/0006-anchored-decorations.md), [ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
+  - Squiggle spans are built here and drawn by DIAG-02; inline virtual text is DIAG-06.
 - [ ] **DIAG-02** Squiggle rendering
   - Custom `QSGMaterial`, or a tiled geometry fallback; correct across wrapped rows.
 - [ ] **DIAG-03** LSP-shaped diagnostic model

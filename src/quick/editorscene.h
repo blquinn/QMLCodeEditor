@@ -42,6 +42,9 @@ struct GutterRect {
   QColor color;
   bool operator==(const GutterRect &) const = default;
 };
+// A colored rectangle on one display row, in the same terms; decorations (ADR 0016) use it for
+// backgrounds, underlines and squiggles in content coordinates.
+using ColoredSpan = GutterRect;
 struct GutterLabel {
   qsizetype row = 0;
   qreal x = 0;
@@ -100,6 +103,11 @@ struct FrameParams {
   QColor chipDotColor;
   const QList<RowSpan> *chipDots = nullptr;
 
+  // Decorations, only for rows in the plan (DIAG-01): backgrounds sit behind the text, underlines in
+  // front of it.
+  const QList<ColoredSpan> *decorationBackgrounds = nullptr;
+  const QList<ColoredSpan> *decorationUnderlines = nullptr;
+
   // The gutter occupies [0, gutterWidth) and the text the rest of the viewport.
   qreal gutterWidth = 0;
   QColor gutterBackground;
@@ -119,8 +127,9 @@ struct SceneStats {
 //
 //   EditorScene
 //    |- background rect
-//    |- clip -- scroll transform -+- backdrop: current line, selection, marks, fold chips
+//    |- clip -- scroll transform -+- backdrop: current line, decoration backgrounds, selection, marks, fold chips
 //    |                            |- rows: row transform -- text node   (one pair per row, pooled)
+//    |                            |- decoration underlines
 //    |                            '- opacity -- cursor rect
 //    |- gutter background rect
 //    '- gutter clip -- gutter scroll transform -+- rects (colored bars and bands)
@@ -225,7 +234,7 @@ private:
   QSGClipNode *m_gutterClip = nullptr;
   QSGTransformNode *m_gutterScroll = nullptr;
   QSGNode *m_gutterLabels = nullptr;
-  std::unique_ptr<ColorBatch> m_gutterRects;
+  std::unique_ptr<ColorBatch> m_gutterRects, m_decoBackgrounds, m_decoUnderlines;
   std::unique_ptr<ImageBatch> m_gutterImages;
   RowPool m_textPool, m_labelPool;
   quint64 m_frame = 0;

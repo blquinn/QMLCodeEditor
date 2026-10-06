@@ -17,7 +17,8 @@ struct LineLayout {
   quint64 id = 0;
   std::unique_ptr<QTextLayout> layout;
   QString text;    // the row as stored; the layout may draw stand-in glyphs (visible whitespace)
-  qreal width = 0; // natural width of the row's text, not counting the indent
+  qreal width = 0; // natural width of the row's text, not counting the indent or virtual text after it
+  qreal fullWidth = 0; // width including end-of-line virtual text (DIAG-01); equals `width` without any
   qsizetype startColumn = 0; // column of the row's first unit in its buffer line
   qreal indentX = 0;         // hanging indent: where the text starts
   bool endsLine = true;      // the last (or only) row of its buffer line
