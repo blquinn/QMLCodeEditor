@@ -2,6 +2,7 @@
 
 #include <QtCore/QChar>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -39,7 +40,10 @@ namespace {
 // Length in code units of the row at the start of `t`, or -1 when the window ends before the row
 // does (`atLineEnd` is false). The row is the whole text when it fits and the window reaches the
 // line's end.
-qsizetype scanWindow(const QString &t, bool atLineEnd, qreal avail, const WrapConfig &cfg) {
+qsizetype scanWindow(
+  const QString &t, bool atLineEnd, qreal avail, const WrapConfig &cfg, const QList<InlineSpan> *inlays,
+  qsizetype base
+) {
   const WrapMeasure &measure = *cfg.measure;
   const qreal tabStop = measure.tabWidth() * measure.cellAdvance();
   const qsizetype n = t.size();
@@ -48,6 +52,12 @@ qsizetype scanWindow(const QString &t, bool atLineEnd, qreal avail, const WrapCo
   qsizetype lastBreak = 0; // just after the last whitespace that follows text; 0 when there is none
   bool sawText = false;    // indentation is not a place to break
   bool afterJoiner = false;
+  // The first hint width that belongs at or after this window's first character.
+  qsizetype nextInlay = 0;
+  if (inlays)
+    nextInlay = std::lower_bound(inlays->begin(), inlays->end(), base, [](const InlineSpan &span, qsizetype column) {
+                  return span.column < column;
+                }) - inlays->begin();
   while (i < n) {
     const QChar hi = t[i];
     char32_t cp = hi.unicode();
@@ -63,7 +73,10 @@ qsizetype scanWindow(const QString &t, bool atLineEnd, qreal avail, const WrapCo
     }
     const bool extender = i > 0 && (afterJoiner || isClusterExtender(cp));
     const bool space = cp == u' ' || cp == u'\t';
-    const qreal advance = cp == u'\t' ? tabStop - std::fmod(x, tabStop) : measure.advance(cp);
+    qreal advance = cp == u'\t' ? tabStop - std::fmod(x, tabStop) : measure.advance(cp);
+    if (inlays) // hints travel with the character they belong to
+      for (; nextInlay < inlays->size() && (*inlays)[nextInlay].column < base + i + len; ++nextInlay)
+        advance += (*inlays)[nextInlay].width;
     // Whitespace may hang past the edge when breaking at words; between characters it is a character.
     if (!extender && !(space && cfg.wordBreak) && i > 0 && x + advance > avail + 1e-6)
       return cfg.wordBreak && lastBreak > 0 ? lastBreak : i;
@@ -79,12 +92,15 @@ qsizetype scanWindow(const QString &t, bool atLineEnd, qreal avail, const WrapCo
 }
 
 // The row starting at `rowStart` of a line with `remaining` units left, as a length.
-qsizetype
-rowLength(const Rope &rope, qsizetype rowStart, qsizetype remaining, qreal avail, const WrapConfig &cfg) {
+qsizetype rowLength(
+  const Rope &rope, qsizetype rowStart, qsizetype column, qsizetype remaining, qreal avail, const WrapConfig &cfg,
+  const QList<InlineSpan> *inlays
+) {
   qsizetype window = 2048;
   for (;;) {
     const qsizetype n = qMin(remaining, window);
-    const qsizetype length = scanWindow(rope.toString(rowStart, rowStart + n), n == remaining, avail, cfg);
+    const qsizetype length =
+      scanWindow(rope.toString(rowStart, rowStart + n), n == remaining, avail, cfg, inlays, column);
     if (length > 0)
       return length;
     window *= 4;
@@ -95,7 +111,7 @@ rowLength(const Rope &rope, qsizetype rowStart, qsizetype remaining, qreal avail
 
 qsizetype wrapRows(
   const Rope &rope, qsizetype lineStart, qsizetype lineLength, const WrapConfig &config, qreal indent,
-  qsizetype startColumn, bool firstRow, qsizetype maxRows, QList<qsizetype> &starts
+  qsizetype startColumn, bool firstRow, qsizetype maxRows, QList<qsizetype> &starts, const QList<InlineSpan> *inlays
 ) {
   const qreal full = config.rowWidth();
   qsizetype column = startColumn;
@@ -104,7 +120,7 @@ qsizetype wrapRows(
       return lineLength;
     const qreal avail = firstRow ? full : full - indent;
     firstRow = false;
-    const qsizetype length = rowLength(rope, lineStart + column, lineLength - column, avail, config);
+    const qsizetype length = rowLength(rope, lineStart + column, column, lineLength - column, avail, config, inlays);
     if (column + length >= lineLength)
       return lineLength;
     column += length;

@@ -1,3 +1,4 @@
+#include "core/decorationset.h"
 #include "core/displaymap.h"
 #include "core/wrapbreaks.h"
 #include "core/wrapmap.h"
@@ -621,6 +622,123 @@ private slots:
     QVERIFY(!map.wrapEnabled());
     QCOMPARE(map.rowCount(), 2);
     QCOMPARE(map.rowAt(0).endColumn, 19);
+  }
+  // ---- Inline virtual text (inlay hints) ------------------------------------------------------
+
+  void inlaysWidenTheCharacterTheyTravelWith() {
+    const Rope rope = Rope::fromString(QString(25, u'a'));
+    const WrapConfig c = gridConfig(10, false);
+    auto starts = [&](const QList<InlineSpan> &spans) {
+      QList<qsizetype> out;
+      wrapRows(rope, 0, 25, c, 0, 0, true, std::numeric_limits<qsizetype>::max(), out, spans.isEmpty() ? nullptr : &spans);
+      return out;
+    };
+    QCOMPARE(starts({}), (QList<qsizetype>{10, 20}));
+    // Three cells at column 5 make that character four wide: seven characters fit the first row.
+    QCOMPARE(starts({{5, 3}}), (QList<qsizetype>{7, 17}));
+    // A hint at the end of what would be row one never stays behind on it: its character moves down.
+    QCOMPARE(starts({{9, 3}}), (QList<qsizetype>{9, 16}));
+    // Widths at one character add up; spans outside the text change nothing.
+    QCOMPARE(starts({{5, 1}, {5, 2}}), (QList<qsizetype>{7, 17}));
+    QCOMPARE(starts({{40, 5}}), (QList<qsizetype>{10, 20}));
+    // The same through the later rows of a line (scanning starts in the middle).
+    QList<qsizetype> out;
+    const QList<InlineSpan> spans{{12, 4}};
+    wrapRows(rope, 0, 25, c, 0, 10, false, std::numeric_limits<qsizetype>::max(), out, &spans);
+    QCOMPARE(out, (QList<qsizetype>{16})); // chars 10..15 are 6 + 4 wide
+  }
+
+  void hintsInADisplayMapAddRowsAndCanBeTakenAway() {
+    TextDocument doc;
+    doc.setText(QString(25, u'a') + u"\nshort"_s);
+    DecorationSet decorations(&doc);
+    DisplayMap map(&doc);
+    map.setDecorations(&decorations);
+    QObject::connect(&decorations, &DecorationSet::inlineLinesChanged, &map, &DisplayMap::rewrapLines);
+    map.setWrapConfig(gridConfig(10, false));
+    QCOMPARE(map.rowCountOfLine(0), 3);
+    QCOMPARE(map.rowCount(), 4);
+    QSignalSpy reestimated(&map, &DisplayMap::rowsReestimated);
+
+    DecorationSpec hint;
+    hint.start = hint.end = 5;
+    hint.kind = DecorationKind::InlineText;
+    hint.text = u"xxxxxx"_s;
+    hint.startGravity = Gravity::Left; // leans on the text after it
+    const int id = decorations.add(hint);
+    QCOMPARE(map.rowCountOfLine(0), 4);
+    QVERIFY(reestimated.count() >= 1);
+    QCOMPARE(map.rowAt(1).startColumn, 5);
+    QCOMPARE(map.rowAt(2).startColumn, 9);
+    QCOMPARE(map.rowCount(), 5);
+    QCOMPARE(map.rowCountOfLine(1), 1);
+
+    // Typing moves the hint with the text, and the line is wrapped with it where it now is.
+    doc.insert(0, u"ZZ"_s);
+    QCOMPARE(map.rowCountOfLine(0), 4);
+    QCOMPARE(map.rowAt(1).startColumn, 7);
+    // Another line's text is not affected.
+    QCOMPARE(map.rowCountOfLine(1), 1);
+
+    QVERIFY(decorations.remove(id));
+    QCOMPARE(map.rowCountOfLine(0), 3);
+    QCOMPARE(map.rowCount(), 4);
+  }
+
+  void aHintThatLeansBackwardTravelsWithTheCharacterBeforeIt() {
+    TextDocument doc;
+    doc.setText(QString(25, u'a'));
+    DecorationSet decorations(&doc);
+    DisplayMap map(&doc);
+    map.setDecorations(&decorations);
+    QObject::connect(&decorations, &DecorationSet::inlineLinesChanged, &map, &DisplayMap::rewrapLines);
+    map.setWrapConfig(gridConfig(10, false));
+    DecorationSpec hint;
+    hint.start = hint.end = 10; // after the tenth character: a type annotation
+    hint.kind = DecorationKind::InlineText;
+    hint.text = u"xxx"_s; // default gravity: leans on what is before it
+    decorations.add(hint);
+    // Characters 0..9 are 10 wide and the annotation makes the tenth 13: it, and the hint with it,
+    // go down to row two.
+    QCOMPARE(map.rowAt(1).startColumn, 9);
+    QCOMPARE(map.rowAt(0).endColumn, 9);
+  }
+
+  void theBackgroundWorkerDoesNotSettleLinesThatHaveHints() {
+    TextDocument doc;
+    QString text;
+    for (int i = 0; i < 100; ++i)
+      text += QString(25, u'a') + u'\n';
+    doc.setText(text);
+    DecorationSet decorations(&doc);
+    DecorationSpec hint;
+    hint.kind = DecorationKind::InlineText;
+    hint.text = u"xxxxxx"_s;
+    hint.startGravity = Gravity::Left;
+    hint.start = hint.end = doc.rope().lineStart(50) + 5;
+    decorations.add(hint);
+    DisplayMap map(&doc);
+    map.setDecorations(&decorations);
+    map.setWrapConfig(gridConfig(10, false)); // the worker wraps every line without the hint
+    QTRY_COMPARE(map.estimatedLineCount(), 0);
+    QCOMPARE(map.rowCountOfLine(49), 3);
+    QCOMPARE(map.rowCountOfLine(50), 4); // this thread wrapped it with the hint
+    QCOMPARE(map.rowCountOfLine(51), 3);
+  }
+
+  void withoutWrapHintsDoNotTouchTheMap() {
+    TextDocument doc;
+    doc.setText(QString(25, u'a'));
+    DecorationSet decorations(&doc);
+    DisplayMap map(&doc);
+    map.setDecorations(&decorations);
+    QObject::connect(&decorations, &DecorationSet::inlineLinesChanged, &map, &DisplayMap::rewrapLines);
+    DecorationSpec hint;
+    hint.start = hint.end = 5;
+    hint.kind = DecorationKind::InlineText;
+    hint.text = u"xxxxxx"_s;
+    decorations.add(hint);
+    QCOMPARE(map.rowCount(), 1);
   }
 };
 

@@ -133,6 +133,9 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setActiveFocusOnTab(true);
 
   connect(&m_decorations, &qce::DecorationSet::changed, this, &CodeEditor::onDecorationsChanged);
+  // Inline virtual text widens lines, which soft wrap has to know before the rows are asked for.
+  m_map.setDecorations(&m_decorations);
+  connect(&m_decorations, &qce::DecorationSet::inlineLinesChanged, &m_map, &qce::DisplayMap::rewrapLines);
   connect(&m_diagnostics, &qce::DiagnosticSet::changed, this, &CodeEditor::diagnosticsChanged);
   connect(&m_document, &qce::TextDocument::textReset, this, &CodeEditor::onDocumentReset);
   connect(&m_document, &qce::TextDocument::changed, this, &CodeEditor::onDocumentChanged);
@@ -972,8 +975,11 @@ void CodeEditor::mouseReleaseEvent(QMouseEvent *event) {
 void CodeEditor::mouseUngrabEvent() { endDrag(); }
 
 qreal CodeEditor::preeditCursorX(const qce::LineLayout &layout) const {
-  const int inside = m_preeditCursor >= 0 ? qMin<int>(m_preeditCursor, layout.preeditLength) : layout.preeditLength;
-  return layout.indentX + layout.layout->lineAt(0).cursorToX(layout.preeditColumn + inside);
+  const qce::Injection *preedit = layout.preedit();
+  if (!preedit)
+    return layout.indentX;
+  const int inside = m_preeditCursor >= 0 ? qMin<int>(m_preeditCursor, preedit->length) : preedit->length;
+  return layout.indentX + layout.layout->lineAt(0).cursorToX(preedit->start + inside);
 }
 
 void CodeEditor::clearPreedit() {
@@ -1063,7 +1069,7 @@ QVariant CodeEditor::inputMethodQuery(Qt::InputMethodQuery query) const {
     QRectF rect = const_cast<CodeEditor *>(this)->rectForPosition(head);
     if (hasPreedit())
       if (const auto layout = const_cast<CodeEditor *>(this)->layoutForRow(rowOfPosition(pos), m_document.snapshot());
-          layout->preeditLength > 0)
+          layout->preedit())
         rect.moveLeft(preeditCursorX(*layout) - m_contentX + m_gutterWidth);
     return rect;
   }
@@ -1384,11 +1390,9 @@ void CodeEditor::wheelEvent(QWheelEvent *event) {
 // out inside it, so columns at or after it shift right.
 qreal CodeEditor::xForColumn(const qce::LineLayout &layout, qsizetype column) const {
   column = qBound<qsizetype>(0, column - layout.startColumn, layout.text.size());
-  if (layout.preeditLength == 0 && m_metrics.isSimple(layout.text))
+  if (layout.injections.isEmpty() && m_metrics.isSimple(layout.text))
     return layout.indentX + m_metrics.xForColumn(layout.text, column);
-  if (layout.preeditLength > 0 && column >= layout.preeditColumn)
-    column += layout.preeditLength;
-  return layout.indentX + layout.layout->lineAt(0).cursorToX(int(column));
+  return layout.indentX + layout.layout->lineAt(0).cursorToX(layout.layoutIndex(int(column)));
 }
 
 // A thin line across each tab's span on the baseline, for the rows being drawn. Capped so a
@@ -1401,8 +1405,8 @@ void CodeEditor::buildTabMarks() {
     const QString &text = layout.text;
     if (!text.contains(u'\t'))
       continue;
-    if (layout.preeditLength > 0)
-      continue; // tab marks are placed by column; a composition shifts them
+    if (!layout.injections.isEmpty())
+      continue; // tab marks are placed by column; injected text shifts them
     const bool simple = m_metrics.isSimple(text);
     qsizetype cell = 0;
     for (qsizetype i = 0; i < text.size(); ++i) {
@@ -1456,8 +1460,7 @@ void CodeEditor::buildOverlays() {
     const qce::TextPosition head = m_map.visiblePosition(rope.positionAt(sel.head));
     const qsizetype headRow = m_map.rowForPosition(head);
     if (const qce::LineLayout *layout = planLayout(headRow)) {
-      const qreal x = i == primary && layout->preeditLength > 0 ? preeditCursorX(*layout)
-                                                                  : xForColumn(*layout, head.column);
+      const qreal x = i == primary && layout->preedit() ? preeditCursorX(*layout) : xForColumn(*layout, head.column);
       if (x >= viewLeft && x <= viewRight)
         m_cursorSpans.append({headRow, x, x + 2});
     }
@@ -1490,17 +1493,12 @@ void CodeEditor::buildOverlays() {
 // The column of the buffer line nearest to x, for the row laid out in `layout`.
 qsizetype CodeEditor::columnForX(const qce::LineLayout &layout, qreal x) const {
   x -= layout.indentX;
-  if (layout.preeditLength == 0 && m_metrics.isSimple(layout.text))
+  if (layout.injections.isEmpty() && m_metrics.isSimple(layout.text))
     return layout.startColumn + m_metrics.columnForX(layout.text, x);
-  qsizetype column = layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
-  column = qMin<qsizetype>(column, layout.text.size() + layout.preeditLength); // not into virtual text
-  if (layout.preeditLength > 0) { // the composition is not part of the text: hits on it land before it
-    if (column >= layout.preeditColumn + layout.preeditLength)
-      column -= layout.preeditLength;
-    else
-      column = qMin<qsizetype>(column, layout.preeditColumn);
-  }
-  return layout.startColumn + column;
+  const int index = layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
+  // Injected text (a composition, a hint) is not part of the text: hits on it land next to it, and
+  // hits on virtual text after the row's end land at its end.
+  return layout.startColumn + qMin<qsizetype>(layout.columnForLayoutIndex(index), layout.text.size());
 }
 
 qce::DisplayRow CodeEditor::rowOfPosition(qce::TextPosition position) const {
@@ -1929,6 +1927,20 @@ void CodeEditor::setDiagnostics(const QList<qce::Diagnostic> &diagnostics) { m_d
 
 void CodeEditor::clearDiagnostics() { m_diagnostics.clear(); }
 
+void CodeEditor::setInlayHints(const QVariantList &hints) {
+  QList<qce::InlayHint> list;
+  list.reserve(hints.size());
+  for (const QVariant &item : hints)
+    list.append(qce::InlayHint::fromLsp(item.toMap()));
+  m_decorations.setLayer(qce::kInlayLayer, qce::inlayHintSpecs(list, m_document.rope()));
+  emit inlayHintsChanged();
+}
+
+void CodeEditor::clearInlayHints() {
+  m_decorations.clearLayer(qce::kInlayLayer);
+  emit inlayHintsChanged();
+}
+
 QVariantList CodeEditor::diagnosticsAt(qsizetype offset) const {
   QVariantList list;
   for (const qce::Diagnostic &d : m_diagnostics.at(offset))
@@ -2007,6 +2019,23 @@ void CodeEditor::buildDecorations() {
   using qce::DecorationKind;
   if (m_planLast < m_planFirst || m_planFirst < 0)
     return;
+  const qreal lineHeight = m_metrics.lineHeight();
+  // The pills behind inline virtual text, wherever the rows of the plan have some.
+  if (m_decorations.count(DecorationKind::InlineText) > 0) {
+    for (const qce::FramePlanRow &planRow : std::as_const(m_plan)) {
+      const qce::LineLayout &layout = *planRow.layout;
+      for (const qce::Injection &injection : layout.injections) {
+        if (!injection.pill)
+          continue;
+        const QTextLine textLine = layout.layout->lineAt(0);
+        m_decoBackgroundSpans.append(
+          {planRow.row, layout.indentX + textLine.cursorToX(injection.start),
+           layout.indentX + textLine.cursorToX(injection.start + injection.length), 1, lineHeight - 2,
+           m_theme->inlayHintBackground()}
+        );
+      }
+    }
+  }
   const qsizetype drawn = m_decorations.count(DecorationKind::Underline) + m_decorations.count(DecorationKind::Squiggle) +
                           m_decorations.count(DecorationKind::Background);
   if (drawn == 0)
@@ -2189,27 +2218,34 @@ withWhitespaceFormats(const QString &text, QList<QTextLayout::FormatRange> range
   return result;
 }
 
-// Makes room for a composition of `length` units at `column`: ranges after it move right, one that
-// straddles it is split around it, and the composition's own formats are added.
-QList<QTextLayout::FormatRange> withPreeditFormats(
-  const QList<QTextLayout::FormatRange> &ranges, int column, int length,
-  const QList<QTextLayout::FormatRange> &preedit
+// Makes room for injected text: format ranges after an injection move right by its length, one that
+// straddles an injection is split around it, and the injections' own formats (positions already in
+// the laid-out text) are added.
+QList<QTextLayout::FormatRange> withInjections(
+  const QList<QTextLayout::FormatRange> &ranges, const QList<qce::Injection> &injections,
+  const QList<QTextLayout::FormatRange> &injected
 ) {
   QList<QTextLayout::FormatRange> out;
-  out.reserve(ranges.size() + preedit.size() + 1);
-  for (QTextLayout::FormatRange r : ranges) {
+  out.reserve(ranges.size() + injected.size() + injections.size());
+  for (const QTextLayout::FormatRange &r : ranges) {
     const int end = r.start + r.length;
-    if (end <= column) {
-      out.append(r);
-    } else if (r.start >= column) {
-      r.start += length;
-      out.append(r);
-    } else {
-      out.append({r.start, column - r.start, r.format});
-      out.append({column + length, end - column, r.format});
+    int from = r.start;
+    auto addPiece = [&](int pieceStart, int pieceEnd) {
+      int shift = 0;
+      for (const qce::Injection &injection : injections)
+        if (injection.column <= pieceStart)
+          shift += injection.length;
+      out.append({pieceStart + shift, pieceEnd - pieceStart, r.format});
+    };
+    for (const qce::Injection &injection : injections) {
+      if (injection.column > from && injection.column < end) {
+        addPiece(from, injection.column);
+        from = injection.column;
+      }
     }
+    addPiece(from, end);
   }
-  out += preedit;
+  out += injected;
   std::sort(out.begin(), out.end(), [](const auto &a, const auto &b) { return a.start < b.start; });
   return out;
 }
@@ -2261,22 +2297,76 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
     formats = m_theme->formatRanges(sliceSpans(spans.first(), row.startColumn, row.endColumn));
   if (m_showWhitespace)
     formats = withWhitespaceFormats(text, std::move(formats), m_theme->whitespace());
-  int preeditColumn = 0, preeditLength = 0;
+  // Text that is shown in the row without being in the document: inline decorations (inlay hints) and
+  // an input-method composition. Each is put into the laid-out text before the unit at its column.
+  struct Pending {
+    qce::Injection injection;
+    QString text;
+    QList<QTextLayout::FormatRange> formats; // relative to the start of `text`
+  };
+  QList<Pending> pending;
+  if (m_decorations.count(qce::DecorationKind::InlineText) > 0) {
+    const qsizetype rowStart = lineStart + row.startColumn, rowEnd = lineStart + row.endColumn;
+    const QList<qce::Decoration> hints =
+      m_decorations.query(rowStart, rowEnd, qce::decorationKindBit(qce::DecorationKind::InlineText));
+    for (const qce::Decoration &hint : hints) {
+      if (hint.start < rowStart || hint.start > rowEnd || hint.text.isEmpty())
+        continue;
+      const int column = int(hint.start - rowStart);
+      // A hint belongs to the row that has the text it leans on, which decides where it goes at a
+      // soft break (the wrap code makes the same choice).
+      const bool leansForward = hint.startGravity == qce::Gravity::Left;
+      if (!leansForward && column == 0 && row.startColumn > 0)
+        continue;
+      if (leansForward && column == row.endColumn - row.startColumn && !row.isLast())
+        continue;
+      QTextCharFormat format;
+      format.setForeground(hint.color.isValid() ? hint.color : m_theme->inlayHint());
+      Pending item;
+      item.injection.column = column;
+      item.injection.placement = leansForward ? qce::Injection::BeforeCursor : qce::Injection::AfterCursor;
+      item.injection.pill = true;
+      item.text = hint.text;
+      item.formats.append({0, int(hint.text.size()), format});
+      pending.append(std::move(item));
+    }
+  }
   if (hasPreedit()) {
     const qce::TextPosition at = rope.positionAt(m_document.anchors().offset(m_preeditAnchor));
     // A position at a soft break belongs to the row after it; the last row also owns the line end.
     if (at.line == row.line && at.column >= row.startColumn &&
         (at.column < row.endColumn || (row.isLast() && at.column <= row.endColumn))) {
-      preeditColumn = int(at.column - row.startColumn);
-      preeditLength = int(m_preedit.size());
-      layout->setText(display.left(preeditColumn) + m_preedit + display.mid(preeditColumn));
-      QList<QTextLayout::FormatRange> shifted;
-      for (QTextLayout::FormatRange r : std::as_const(m_preeditFormats)) {
-        r.start += preeditColumn;
-        shifted.append(r);
-      }
-      formats = withPreeditFormats(std::move(formats), preeditColumn, preeditLength, shifted);
+      Pending item;
+      item.injection.column = int(at.column - row.startColumn);
+      item.injection.placement = qce::Injection::Preedit;
+      item.text = m_preedit;
+      item.formats = m_preeditFormats;
+      pending.append(std::move(item));
     }
+  }
+  QList<qce::Injection> injections;
+  if (!pending.isEmpty()) {
+    std::stable_sort(pending.begin(), pending.end(), [](const Pending &a, const Pending &b) {
+      return std::pair(a.injection.column, a.injection.placement) < std::pair(b.injection.column, b.injection.placement);
+    });
+    QString full;
+    QList<QTextLayout::FormatRange> injectedFormats;
+    int taken = 0; // units of `display` copied so far
+    for (Pending &item : pending) {
+      full += display.mid(taken, item.injection.column - taken);
+      taken = item.injection.column;
+      item.injection.start = int(full.size());
+      item.injection.length = int(item.text.size());
+      full += item.text;
+      for (QTextLayout::FormatRange r : std::as_const(item.formats)) {
+        r.start += item.injection.start;
+        injectedFormats.append(r);
+      }
+      injections.append(item.injection);
+    }
+    full += display.mid(taken);
+    layout->setText(full);
+    formats = withInjections(std::move(formats), injections, injectedFormats);
   }
   // End-of-line virtual text follows the row's own text after a gap (DIAG-01). It is part of the
   // layout so it is drawn, clipped and measured with the row, but not part of the row's text: columns,
@@ -2327,8 +2417,7 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
   result->startColumn = row.startColumn;
   result->indentX = row.indent;
   result->endsLine = row.isLast();
-  result->preeditColumn = preeditColumn;
-  result->preeditLength = preeditLength;
+  result->injections = std::move(injections);
   return result;
 }
 

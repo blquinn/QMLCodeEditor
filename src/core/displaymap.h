@@ -1,6 +1,7 @@
 #ifndef QCE_DISPLAYMAP_H
 #define QCE_DISPLAYMAP_H
 
+#include "core/decorationset.h"
 #include "core/foldmap.h"
 #include "core/textchange.h"
 #include "core/textdocument.h"
@@ -60,6 +61,13 @@ public:
   // Replaces all folds at once.
   void setFolds(const QList<FoldRange> &ranges);
 
+  // Inlay hints and other inline virtual text widen the lines they sit in, which soft wrap has to
+  // know (DIAG-06). Give the map the decoration set to read InlineText decorations from (null for
+  // none). Their widths are looked up when a line is wrapped, so an edit needs no bookkeeping here;
+  // when decorations are added or removed, tell the map which lines they were on.
+  void setDecorations(const DecorationSet *decorations) { m_decorations = decorations; }
+  void rewrapLines(const QList<qsizetype> &lines);
+
   // Turns wrapping on, off or changes its width. Every line becomes an estimate again.
   void setWrapConfig(const WrapConfig &config);
   const WrapConfig &wrapConfig() const { return m_config; }
@@ -113,6 +121,8 @@ private:
   void foldsDidChange(LineRange changed);
   qsizetype lineLength(qsizetype line) const;
   qsizetype estimateRows(qsizetype units, qreal indent) const;
+  // The widths inline decorations add to `line`, attached to characters; empty when there are none.
+  QList<InlineSpan> inlaySpans(qsizetype line) const;
   LineBreaks &breaksFor(qsizetype line) const;
   // Scans more of an incomplete line: until `rows` rows are determined (and then some).
   void extend(qsizetype line, LineBreaks &lb, qsizetype rows) const;
@@ -139,6 +149,7 @@ private:
   void applyChunk(const ChunkResult &result);
 
   TextDocument *m_document;
+  const DecorationSet *m_decorations = nullptr;
   FoldMap m_fold;
   bool m_background = true;
   quint64 m_generation = 1; // bumped when the config changes, so stale chunks are dropped

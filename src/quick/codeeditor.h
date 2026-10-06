@@ -6,6 +6,7 @@
 #include "core/displaymap.h"
 #include "core/foldprovider.h"
 #include "core/highlighter.h"
+#include "core/inlayhints.h"
 #include "core/commands.h"
 #include "core/cursorlayout.h"
 #include "core/inputhandler.h"
@@ -137,6 +138,7 @@ public:
   Q_PROPERTY(QQmlListProperty<qce::GutterColumn> gutterColumns READ gutterColumns FINAL)
   Q_PROPERTY(qreal gutterWidth READ gutterWidth NOTIFY gutterWidthChanged FINAL)
   Q_PROPERTY(int diagnosticCount READ diagnosticCount NOTIFY diagnosticsChanged FINAL)
+  Q_PROPERTY(int inlayHintCount READ inlayHintCount NOTIFY inlayHintsChanged FINAL)
   Q_PROPERTY(QQmlComponent *popupDelegate READ popupDelegate WRITE setPopupDelegate NOTIFY popupDelegateChanged FINAL)
   Q_PROPERTY(bool diagnosticPopups READ diagnosticPopups WRITE setDiagnosticPopups NOTIFY diagnosticPopupsChanged FINAL)
   Q_PROPERTY(int hoverDelay READ hoverDelay WRITE setHoverDelay NOTIFY hoverDelayChanged FINAL)
@@ -276,6 +278,16 @@ public:
     return m_diagnostics.endOfLineMessages() ? EndOfLineMessages : NoMessages;
   }
   void setDiagnosticMessages(DiagnosticMessages messages);
+
+  // Inlay hints (DIAG-06): labels shown inline in the text, in LSP's InlayHint shape ({position:
+  // {line, character}, label: string or [{value}], kind (1 type, 2 parameter), paddingLeft,
+  // paddingRight}). They are part of the line layout, so soft wrap, cursor movement, selections and
+  // hit-testing all account for them; they are not in the text and cannot be edited. Each call
+  // replaces the whole list. Hints follow edits (a parameter hint stays in front of the text it
+  // labels, others behind). Any decoration of kind InlineText with a `text` works the same way.
+  Q_INVOKABLE void setInlayHints(const QVariantList &hints);
+  Q_INVOKABLE void clearInlayHints();
+  int inlayHintCount() const { return int(m_decorations.layerSize(qce::kInlayLayer)); }
 
   // Popups (DIAG-04). Hovering a diagnostic (its text, its gutter icon or its end-of-line message)
   // for `hoverDelay` ms, or navigating to it, shows a popup: an instance of `popupDelegate`, a
@@ -456,6 +468,7 @@ signals:
   void wrappingChanged();
   void gutterWidthChanged();
   void diagnosticsChanged();
+  void inlayHintsChanged();
   void diagnosticMessagesChanged();
   void popupDelegateChanged();
   void diagnosticPopupsChanged();

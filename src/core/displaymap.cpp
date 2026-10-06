@@ -64,6 +64,59 @@ void DisplayMap::setWrapConfig(const WrapConfig &config) {
 
 qsizetype DisplayMap::lineLength(qsizetype line) const { return m_document->rope().lineLength(line); }
 
+QList<InlineSpan> DisplayMap::inlaySpans(qsizetype line) const {
+  QList<InlineSpan> spans;
+  if (!m_decorations || m_decorations->count(DecorationKind::InlineText) == 0 || !m_config.measure)
+    return spans;
+  const Rope &rope = m_document->rope();
+  const qsizetype start = rope.lineStart(line), end = rope.lineEnd(line);
+  if (end == start)
+    return spans; // nothing for a hint to travel with
+  for (const Decoration &d : m_decorations->query(start, end, decorationKindBit(DecorationKind::InlineText))) {
+    if (d.start < start || d.start > end)
+      continue;
+    qreal width = 0;
+    for (qsizetype i = 0; i < d.text.size(); ++i) {
+      char32_t cp = d.text[i].unicode();
+      if (d.text[i].isHighSurrogate() && i + 1 < d.text.size() && d.text[i + 1].isLowSurrogate()) {
+        cp = QChar::surrogateToUcs4(d.text[i], d.text[i + 1]);
+        ++i;
+      }
+      width += m_config.measure->advance(cp);
+    }
+    // A hint that leans on the text after it travels with the character at its column; one that
+    // leans on the text before it with the character before (at a line's ends, with the one there).
+    const qsizetype column = d.start - start;
+    const qsizetype attach = d.startGravity == Gravity::Left ? qMin(column, end - start - 1) : qMax<qsizetype>(column - 1, 0);
+    spans.append({attach, width});
+  }
+  std::stable_sort(spans.begin(), spans.end(), [](const InlineSpan &a, const InlineSpan &b) { return a.column < b.column; });
+  return spans;
+}
+
+// Lines that had inline decorations added or removed are wrapped again, here and now (there are few:
+// hints come per viewport), keeping the rows they had until the answer is in.
+void DisplayMap::rewrapLines(const QList<qsizetype> &lines) {
+  if (!wrapEnabled())
+    return;
+  // Past this many lines the rest are only marked as estimates: queries wrap a line exactly when
+  // they reach it, and the background pass settles the others with the hints in mind (applyChunk).
+  constexpr qsizetype kEagerLines = 2000;
+  const qsizetype count = m_document->rope().lineCount();
+  qsizetype done = 0;
+  for (qsizetype line : lines) {
+    if (line < 0 || line >= count)
+      continue;
+    m_breaks.erase(line);
+    WrapMap::Entry entry = m_wrap.entry(line);
+    entry.estimated = true;
+    m_wrap.setLine(line, entry);
+    if (++done <= kEagerLines)
+      resolve(line);
+  }
+  pumpBackground();
+}
+
 qsizetype DisplayMap::estimateRows(qsizetype units, qreal indent) const {
   const qreal avail = qMax(m_config.rowWidth() - indent, m_config.measure->cellAdvance());
   return qMax<qsizetype>(1, qsizetype(std::ceil(qreal(units) * m_config.measure->cellAdvance() / avail)));
@@ -134,9 +187,10 @@ void DisplayMap::onChanged(const TextChange &change) {
       LineBreaks &lb = m_breaks[line];
       lb = {};
       lb.indent = wrapIndent(m_config, rope, rope.lineStart(line), length);
+      const QList<InlineSpan> inlays = inlaySpans(line);
       wrapRows(
         rope, rope.lineStart(line), length, m_config, lb.indent, 0, true,
-        std::numeric_limits<qsizetype>::max(), lb.starts
+        std::numeric_limits<qsizetype>::max(), lb.starts, inlays.isEmpty() ? nullptr : &inlays
       );
       lb.complete = true;
       budget -= length + 1;
@@ -256,8 +310,10 @@ void DisplayMap::extend(qsizetype line, LineBreaks &lb, qsizetype rows) const {
   const qsizetype scanned = lb.starts.isEmpty() ? 0 : lb.starts.last();
   const qsizetype want = rows < 0 ? std::numeric_limits<qsizetype>::max()
                                   : qMax<qsizetype>(1, rows - lb.starts.size() + kScanAhead);
+  const QList<InlineSpan> inlays = inlaySpans(line);
   const qsizetype stopped = wrapRows(
-    rope, rope.lineStart(line), length, m_config, lb.indent, scanned, lb.starts.isEmpty(), want, lb.starts
+    rope, rope.lineStart(line), length, m_config, lb.indent, scanned, lb.starts.isEmpty(), want, lb.starts,
+    inlays.isEmpty() ? nullptr : &inlays
   );
   lb.complete = stopped >= length;
   storeRows(line, lb);
@@ -470,10 +526,22 @@ void DisplayMap::applyChunk(const ChunkResult &r) {
     storeRows(r.firstLine, lb);
     m_cursor = r.hugeComplete ? r.firstLine + 1 : r.firstLine;
   } else {
+    // The worker wrapped without inlay hints, so lines that have some stay estimates here and are
+    // wrapped properly below, on this thread (they are few).
+    QList<qsizetype> hinted;
+    if (m_decorations && m_decorations->count(DecorationKind::InlineText) > 0) {
+      const Rope &rope = m_document->rope();
+      const qsizetype last = r.firstLine + r.rows.size() - 1;
+      for (const Decoration &d : m_decorations->queryLines(r.firstLine, last, decorationKindBit(DecorationKind::InlineText))) {
+        const qsizetype line = rope.lineAt(d.start);
+        if (line >= r.firstLine && line <= last && (hinted.isEmpty() || hinted.last() != line))
+          hinted.append(line);
+      }
+    }
     QList<WrapMap::Entry> entries;
     entries.reserve(r.rows.size());
-    for (quint32 rows : r.rows)
-      entries.append({rows, false});
+    for (qsizetype i = 0; i < r.rows.size(); ++i)
+      entries.append(hinted.contains(r.firstLine + i) ? m_wrap.entry(r.firstLine + i) : WrapMap::Entry{r.rows[i], false});
     const qsizetype firstRow = m_wrap.firstRowOfLine(r.firstLine);
     const qsizetype oldRows = m_wrap.firstRowOfLine(r.firstLine + r.rows.size()) - firstRow;
     m_wrap.setLines(r.firstLine, entries);
@@ -481,6 +549,8 @@ void DisplayMap::applyChunk(const ChunkResult &r) {
     m_cursor = r.firstLine + r.rows.size();
     if (oldRows != newRows)
       emit rowsReestimated(firstRow, oldRows, newRows);
+    for (qsizetype line : std::as_const(hinted))
+      resolve(line);
   }
   emit wrapProgress(m_wrap.estimatedLineCount());
 }

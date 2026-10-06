@@ -6,4 +6,5 @@ qce_add_test(tst_gutter SOURCES tst_gutter.cpp LIBS Qt6::Quick QMLCodeEditor QML
 qce_add_test(tst_folding SOURCES tst_folding.cpp LIBS Qt6::Quick QMLCodeEditor QMLCodeEditorplugin)
 qce_add_test(tst_decorations SOURCES tst_decorations.cpp LIBS Qt6::Quick QMLCodeEditor QMLCodeEditorplugin)
 qce_add_test(tst_popup SOURCES tst_popup.cpp LIBS Qt6::Quick QMLCodeEditor QMLCodeEditorplugin)
+qce_add_test(tst_inlay SOURCES tst_inlay.cpp LIBS Qt6::Quick QMLCodeEditor QMLCodeEditorplugin)
 qce_add_test(tst_rendertype SOURCES tst_rendertype.cpp LIBS Qt6::Quick QMLCodeEditor QMLCodeEditorplugin)

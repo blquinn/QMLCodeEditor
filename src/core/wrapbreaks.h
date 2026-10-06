@@ -40,6 +40,15 @@ struct WrapConfig {
 // is on, plus the configured extra, never more than half a row.
 qreal wrapIndent(const WrapConfig &config, const Rope &rope, qsizetype lineStart, qsizetype lineLength);
 
+// Width that virtual text (an inlay hint) adds to a line, attached to the character it travels with:
+// a hint that leans on the text after it belongs to the character at its column, one that leans on
+// the text before it to the character before (DIAG-06). Wrapping adds `width` to that character, so a
+// row break never separates a hint from it. Lists are sorted by `column`.
+struct InlineSpan {
+  qsizetype column = 0; // the character the width belongs to
+  qreal width = 0;
+};
+
 // Wraps the line [lineStart, lineStart + lineLength) beginning with the row that starts at
 // `startColumn` (`firstRow`: it is the line's first row, which can be wider than the rest).
 // Appends the start column of each following row to `starts` and stops after `maxRows` rows or at
@@ -47,10 +56,11 @@ qreal wrapIndent(const WrapConfig &config, const Rope &rope, qsizetype lineStart
 // scan, or `lineLength` when the line is finished.
 //
 // A row always holds at least one character cluster. When breaking at words, whitespace may hang
-// past the right edge.
+// past the right edge. `inlays` (optional, for this line) are widths added to characters.
 qsizetype wrapRows(
   const Rope &rope, qsizetype lineStart, qsizetype lineLength, const WrapConfig &config, qreal indent,
-  qsizetype startColumn, bool firstRow, qsizetype maxRows, QList<qsizetype> &starts
+  qsizetype startColumn, bool firstRow, qsizetype maxRows, QList<qsizetype> &starts,
+  const QList<InlineSpan> *inlays = nullptr
 );
 
 } // namespace qce
