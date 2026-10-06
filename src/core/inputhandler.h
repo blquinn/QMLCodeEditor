@@ -20,6 +20,8 @@ public:
   // Scrolls the view by whole rows (positive scrolls down), for page up/down.
   virtual void scrollRows(qsizetype rows) = 0;
   virtual void foldCommand(FoldCommand) {}
+  // F8 / Shift+F8: go to the next or previous diagnostic.
+  virtual void gotoDiagnostic(bool /*forward*/) {}
 };
 
 // Turns events into commands (ADR 0005, ADR 0010). The default keymap and vim are two

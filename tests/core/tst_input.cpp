@@ -17,6 +17,8 @@ struct Host : InputHost {
   void paste() override { ++pastes; }
   void scrollRows(qsizetype rows) override { scrolled += rows; }
   void foldCommand(FoldCommand command) override { folds.append(command); }
+  void gotoDiagnostic(bool forward) override { diagnostics.append(forward); }
+  QList<bool> diagnostics;
   QList<FoldCommand> folds;
 };
 
@@ -444,6 +446,15 @@ private slots:
                       FoldCommand::FoldAtCursor, FoldCommand::UnfoldAtCursor, FoldCommand::FoldAll,
                       FoldCommand::UnfoldAll})
     );
+    QCOMPARE(f.text(), u"x"_s);
+  }
+
+  void f8AsksTheHostForTheNextOrPreviousDiagnostic() {
+    Fixture f(u"x"_s);
+    QVERIFY(f.key(Qt::Key_F8));
+    QVERIFY(f.key(Qt::Key_F8, Qt::ShiftModifier));
+    QVERIFY(!f.key(Qt::Key_F8, Qt::ControlModifier)); // other chords are not ours
+    QCOMPARE(f.host.diagnostics, (QList<bool>{true, false}));
     QCOMPARE(f.text(), u"x"_s);
   }
 

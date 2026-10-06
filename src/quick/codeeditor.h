@@ -261,6 +261,11 @@ public:
   // The diagnostics whose range contains the character at `offset`, most severe first, as LSP
   // objects with their ranges as they are now.
   Q_INVOKABLE QVariantList diagnosticsAt(qsizetype offset) const;
+  // Moves the cursor to the start of the next (previous) diagnostic that is at least as severe as
+  // `leastSevere` (1 error .. 4 hint), wrapping around the text; opens a fold that hides it and
+  // scrolls it into view. Bound to F8 and Shift+F8. Returns false when there is none.
+  Q_INVOKABLE bool gotoNextDiagnostic(int leastSevere = 4) { return gotoDiagnostic(true, leastSevere); }
+  Q_INVOKABLE bool gotoPreviousDiagnostic(int leastSevere = 4) { return gotoDiagnostic(false, leastSevere); }
   DiagnosticMessages diagnosticMessages() const {
     return m_diagnostics.endOfLineMessages() ? EndOfLineMessages : NoMessages;
   }
@@ -516,6 +521,7 @@ private:
   qce::DiagnosticSet m_diagnostics{&m_document, &m_decorations};
   // Decoration plumbing: spans for the rows of the plan, and the virtual text at the end of a line.
   void buildDecorations();
+  bool gotoDiagnostic(bool forward, int leastSevere);
   void onDecorationsChanged(qsizetype firstLine, qsizetype lastLine, quint32 kinds);
   QString endOfLineText(qsizetype line, QColor *color) const;
   QList<qce::ColoredSpan> m_decoBackgroundSpans, m_decoUnderlineSpans, m_squiggleSpans;

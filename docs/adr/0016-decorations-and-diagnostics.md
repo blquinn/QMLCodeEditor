@@ -35,6 +35,11 @@ M9 adds squiggles, underlines, backgrounds, gutter icons, end-of-line messages a
 - **Lookups return current ranges.** `at(offset)` (the character under `offset`, most severe first) and `inRange` find the range decorations and rebuild each diagnostic with the positions its anchors have now; an edit therefore never leaves a stale range in what the host gets back.
 - **Tags** (unnecessary, deprecated) are kept and handed back but not drawn (no fading or strike-through yet).
 
+### Navigation (DIAG-05)
+
+- `DiagnosticSet::next`/`previous` walk the decoration set in start order for the first range decoration of the layer that is at least as severe as asked, wrapping around the text; long ranges (kept apart) take part. `gotoNextDiagnostic`/`gotoPreviousDiagnostic` put the cursor at the diagnostic's start, which opens a fold hiding it, and scroll it into view. F8 and Shift+F8 reach them through a new `InputHost::gotoDiagnostic`, so other input handlers (vim's `]d`) can use the same hook.
+- Diagnostics that start at the same offset are visited as one; the popup (DIAG-04) shows all of them.
+
 ## Consequences
 
 - Decorations do not change the cost of a frame without them: one counter check per layout and per plan build.

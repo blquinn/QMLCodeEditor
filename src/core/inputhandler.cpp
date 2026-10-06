@@ -99,6 +99,16 @@ bool DefaultInputHandler::keyPress(QKeyEvent *event, EditContext &ctx, InputHost
     }
   }
 
+  // Diagnostics: F8 goes to the next one, Shift+F8 to the previous.
+  if (event->key() == Qt::Key_F8 && (event->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier) {
+    host.gotoDiagnostic(true);
+    return true;
+  }
+  if (event->key() == Qt::Key_F8 && (event->modifiers() & ~Qt::KeypadModifier) == Qt::ShiftModifier) {
+    host.gotoDiagnostic(false);
+    return true;
+  }
+
   // Multi-cursor: Ctrl+Alt+Up/Down adds a cursor, Escape drops all but the primary.
   if ((event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) &&
       (event->modifiers() & ~Qt::KeypadModifier) == (Qt::ControlModifier | Qt::AltModifier)) {
