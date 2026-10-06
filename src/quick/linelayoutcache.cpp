@@ -29,6 +29,7 @@ LineLayoutCache::insert(
   value->id = m_nextId++;
   value->layout = std::move(layout);
   value->width = width;
+  value->fullWidth = width;
   value->text = std::move(text);
   m_entries.push_front({key, value});
   m_index[key] = m_entries.begin();

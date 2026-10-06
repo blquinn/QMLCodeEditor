@@ -1,6 +1,7 @@
 #ifndef CODEEDITOR_H
 #define CODEEDITOR_H
 
+#include "core/decorationset.h"
 #include "core/displaymap.h"
 #include "core/foldprovider.h"
 #include "core/highlighter.h"
@@ -67,6 +68,10 @@ public:
     UnfoldOnEnter // movement into a fold opens it
   };
   Q_ENUM(FoldCursorPolicy)
+
+  // What a decoration looks like (DIAG-01); the values are those of qce::DecorationKind.
+  enum DecorationKind { Underline, Squiggle, Background, GutterIcon, EndOfLineText, InlineText };
+  Q_ENUM(DecorationKind)
 
   // How glyphs are rasterized. Names and values mirror Text.renderType and QSGTextNode::RenderType.
   enum RenderType { QtRendering, NativeRendering, CurveRendering };
@@ -217,6 +222,21 @@ public:
   Q_INVOKABLE bool unfoldAll();
   // Folds the regions of nesting level `level` (1 = outermost) and opens the rest.
   Q_INVOKABLE bool foldToLevel(int level);
+
+  // Decorations (M9): ranges that follow edits and are drawn as underlines, squiggles, backgrounds,
+  // gutter icons and virtual text. They live in layers so a host can replace its own in one call;
+  // layer 0 is the default and negative layers belong to the editor (diagnostics).
+  qce::DecorationSet *decorations() { return &m_decorations; }
+  const qce::DecorationSet *decorations() const { return &m_decorations; }
+  // Adds a decoration over [start, end) (UTF-16 offsets) and returns its id. `options` (all
+  // optional): kind (a DecorationKind, Underline by default), color, text (virtual text), layer,
+  // severity (1 error .. 4 hint: picks the theme color and icon), priority (the highest wins where
+  // decorations overlap), startGravity and endGravity ("left" or "right": which way the end leans
+  // when text is typed exactly at it; a decoration by default stays as it is).
+  Q_INVOKABLE int addDecoration(qsizetype start, qsizetype end, const QVariantMap &options = {});
+  Q_INVOKABLE bool removeDecoration(int id);
+  // Removes every decoration of one layer.
+  Q_INVOKABLE void clearDecorations(int layer = 0);
 
   const qce::DisplayMap &displayMap() const { return m_map; }
   const qce::TextMetrics &metrics() const { return m_metrics; }
@@ -462,6 +482,12 @@ private:
 
   qce::TextDocument m_document;
   qce::DisplayMap m_map{&m_document};
+  qce::DecorationSet m_decorations{&m_document};
+  // Decoration plumbing: spans for the rows of the plan, and the virtual text at the end of a line.
+  void buildDecorations();
+  void onDecorationsChanged(qsizetype firstLine, qsizetype lastLine, quint32 kinds);
+  QString endOfLineText(qsizetype line, QColor *color) const;
+  QList<qce::ColoredSpan> m_decoBackgroundSpans, m_decoUnderlineSpans, m_squiggleSpans;
   // Folding plumbing. Fold commands run through these so the view keeps its place and the cursor
   // moves off lines that just got hidden.
   void onFoldsChanged();

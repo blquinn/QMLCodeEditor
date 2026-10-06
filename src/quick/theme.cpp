@@ -52,6 +52,16 @@ QList<QTextLayout::FormatRange> Theme::formatRanges(const QList<HighlightSpan> &
   return ranges;
 }
 
+QColor Theme::severityColor(int severity) const {
+  switch (severity) {
+  case 1: return m_diagnosticError;
+  case 2: return m_diagnosticWarning;
+  case 3: return m_diagnosticInfo;
+  case 4: return m_diagnosticHint;
+  default: return m_foreground;
+  }
+}
+
 void Theme::setTokenStyles(const QVariantMap &styles) {
   if (m_tokenStyles == styles)
     return;
@@ -77,6 +87,13 @@ void Theme::assign(const Theme &o) {
   m_foldRangeHover = o.m_foldRangeHover;
   m_foldPlaceholder = o.m_foldPlaceholder;
   m_foldPlaceholderText = o.m_foldPlaceholderText;
+  m_diagnosticError = o.m_diagnosticError;
+  m_diagnosticWarning = o.m_diagnosticWarning;
+  m_diagnosticInfo = o.m_diagnosticInfo;
+  m_diagnosticHint = o.m_diagnosticHint;
+  m_virtualText = o.m_virtualText;
+  m_inlayHint = o.m_inlayHint;
+  m_inlayHintBackground = o.m_inlayHintBackground;
   m_tokenStyles = o.m_tokenStyles;
   emit changed();
 }
@@ -133,6 +150,13 @@ Theme *Theme::createLight(QObject *parent) {
   t->m_foldRangeHover = QColor(0x00, 0x00, 0x00, 0x0d);
   t->m_foldPlaceholder = QColor(0xe0, 0xe0, 0xe0);
   t->m_foldPlaceholderText = QColor(0x55, 0x55, 0x55);
+  t->m_diagnosticError = QColor(0xe5, 0x14, 0x00);
+  t->m_diagnosticWarning = QColor(0xbf, 0x88, 0x03);
+  t->m_diagnosticInfo = QColor(0x1a, 0x85, 0xff);
+  t->m_diagnosticHint = QColor(0x6e, 0x6e, 0x6e);
+  t->m_virtualText = QColor(0x8a, 0x8a, 0x8a);
+  t->m_inlayHint = QColor(0x6a, 0x72, 0x7c);
+  t->m_inlayHintBackground = QColor(0xd8, 0xdc, 0xe2, 0x90);
   t->m_tokenStyles = {
     {"keyword", style("#0000ff")},
     {"string", style("#a31515")},

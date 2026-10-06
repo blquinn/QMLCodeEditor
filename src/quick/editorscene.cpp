@@ -61,6 +61,8 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_cursorFade = new QSGOpacityNode;
   m_scroll->appendChildNode(m_backdrop);
   m_scroll->appendChildNode(m_rows);
+  m_decoUnderlines = std::make_unique<ColorBatch>(window);
+  m_scroll->appendChildNode(m_decoUnderlines->node());
   m_scroll->appendChildNode(m_cursorFade);
   // Fixed order gives the stacking: current line, selection, marks, then (above the text) the cursor.
   m_currentLineBatch = std::make_unique<RectBatch>(window);
@@ -69,7 +71,9 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_chipBatch = std::make_unique<RectBatch>(window);
   m_chipDotBatch = std::make_unique<RectBatch>(window);
   m_cursorBatch = std::make_unique<RectBatch>(window);
+  m_decoBackgrounds = std::make_unique<ColorBatch>(window);
   m_backdrop->appendChildNode(m_currentLineBatch->node());
+  m_backdrop->appendChildNode(m_decoBackgrounds->node());
   m_backdrop->appendChildNode(m_selectionBatch->node());
   m_backdrop->appendChildNode(m_markBatch->node());
   m_backdrop->appendChildNode(m_chipBatch->node());
@@ -193,6 +197,9 @@ void EditorScene::syncOverlays(const FrameParams &p) {
   changed |= m_cursorBatch->update(rects(p.cursors), p.cursorColor);
   if (changed)
     ++m_stats.overlayUpdates;
+  static const QList<ColoredSpan> none;
+  m_decoBackgrounds->update(p.decorationBackgrounds ? *p.decorationBackgrounds : none, lh, m_originRow);
+  m_decoUnderlines->update(p.decorationUnderlines ? *p.decorationUnderlines : none, lh, m_originRow);
   m_cursorFade->setOpacity(p.cursorVisible ? 1.0 : 0.0);
 }
 
