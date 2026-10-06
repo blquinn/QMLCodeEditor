@@ -24,6 +24,17 @@ bool hasColor(const QImage &image, const QRect &rect, const QColor &color) {
   return false;
 }
 
+// A pixel that is mostly red: an antialiased red line over the dark theme.
+bool hasReddish(const QImage &image, const QRect &rect) {
+  for (int y = rect.top(); y < rect.bottom() && y < image.height(); ++y)
+    for (int x = rect.left(); x < rect.right() && x < image.width(); ++x) {
+      const QColor c = image.pixelColor(x, y);
+      if (c.red() > 120 && c.green() < 90 && c.blue() < 90)
+        return true;
+    }
+  return false;
+}
+
 // Any pixel in `rect` that is neither of the two background colors.
 bool hasInk(const QImage &image, const QRect &rect, const QColor &bg, const QColor &band) {
   for (int y = rect.top(); y < rect.bottom() && y < image.height(); ++y)
@@ -142,6 +153,69 @@ private slots:
     for (int row = 0; row < rows; ++row)
       QVERIFY2(hasColor(image, rowRect(editor, row, 200), kRed), qPrintable(QStringLiteral("row %1").arg(row)));
     QVERIFY(!hasColor(image, rowRect(editor, rows, 200), kRed)); // "tail"
+  }
+
+  void squiggleIsDrawnUnderItsRangeOnly() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("alpha\nbeta gamma"));
+    editor->addDecoration(6, 10, {{"kind", int(CodeEditor::Squiggle)}, {"color", kRed}});
+    const int lh = int(editor->metrics().lineHeight());
+    const qreal cell = editor->metrics().cellAdvance();
+    const QRect below(int(editor->gutterWidth()), lh + lh * 2 / 3, 400, lh - lh * 2 / 3);
+    QTRY_VERIFY(hasReddish(view->grabWindow(), below));
+    const QImage image = view->grabWindow();
+    QVERIFY(!hasReddish(image, rowRect(editor, 0)));
+    // "beta" is four cells wide: nothing under " gamma".
+    const QRect afterRange(int(editor->gutterWidth() + 5 * cell), lh, 200, lh);
+    QVERIFY(!hasReddish(image, afterRange));
+    // The wave sits at the bottom of the row, not through the text.
+    QVERIFY(!hasReddish(image, QRect(int(editor->gutterWidth()), lh, int(4 * cell), lh / 3)));
+  }
+
+  void squigglesOnWrappedRowsAndOnEmptyRanges() {
+    auto [view, editor] = showEditor(300, 200);
+    editor->setText(QString(60, u'x') + u'\n' + QStringLiteral("tail"));
+    editor->setWrapMode(CodeEditor::WrapAtViewport);
+    editor->addDecoration(5, 55, {{"kind", int(CodeEditor::Squiggle)}, {"color", kRed}});
+    QTRY_VERIFY(editor->displayMap().rowCountOfLine(0) >= 3);
+    const int rows = int(editor->displayMap().rowCountOfLine(0));
+    const int lh = int(editor->metrics().lineHeight());
+    auto below = [&](int row) { return QRect(int(editor->gutterWidth()), row * lh + lh * 2 / 3, 200, lh - lh * 2 / 3); };
+    QTRY_VERIFY(hasReddish(view->grabWindow(), below(0)));
+    const QImage image = view->grabWindow();
+    for (int row = 0; row < rows; ++row)
+      QVERIFY2(hasReddish(image, below(row)), qPrintable(QStringLiteral("row %1").arg(row)));
+    QVERIFY(!hasReddish(image, below(rows))); // "tail"
+    // A diagnostic with an empty range still shows one cell of wave.
+    editor->clearDecorations();
+    editor->addDecoration(rows > 0 ? 62 : 0, 62, {{"kind", int(CodeEditor::Squiggle)}, {"color", kRed}});
+    QTRY_VERIFY(hasReddish(view->grabWindow(), below(rows)));
+  }
+
+  void squigglePiecesAreReusedAndTexturesAreSharedPerColor() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("alpha\nbeta\ngamma\ndelta"));
+    for (int line = 0; line < 4; ++line) {
+      const auto &rope = editor->document()->rope();
+      editor->addDecoration(rope.lineStart(line), rope.lineEnd(line), {{"kind", int(CodeEditor::Squiggle)}, {"color", kRed}});
+    }
+    QTRY_COMPARE(editor->renderStats().scene.squigglePieces, 4);
+    const auto first = editor->renderStats().scene;
+    QCOMPARE(first.squiggleTexturesCreated, 1); // one color, one texture
+    QCOMPARE(first.squiggleNodesCreated, 4);
+    // Frames that change nothing about the squiggles create nothing.
+    editor->setCursorPosition(7);
+    editor->setCursorPosition(12);
+    QTest::qWait(50);
+    QCOMPARE(editor->renderStats().scene.squiggleNodesCreated, 4);
+    QCOMPARE(editor->renderStats().scene.squiggleTexturesCreated, 1);
+    // A second color adds one texture.
+    editor->addDecoration(0, 2, {{"kind", int(CodeEditor::Squiggle)}, {"color", QColor(0, 0xff, 0)}});
+    QTRY_COMPARE(editor->renderStats().scene.squigglePieces, 5);
+    QCOMPARE(editor->renderStats().scene.squiggleTexturesCreated, 2);
+    // Removing them frees the nodes.
+    editor->clearDecorations();
+    QTRY_COMPARE(editor->renderStats().scene.squigglePieces, 0);
   }
 
   void foldedLinesDrawNothing() {

@@ -20,6 +20,13 @@ M9 adds squiggles, underlines, backgrounds, gutter icons, end-of-line messages a
 - **Gutter icons** come from `DecorationColumn`, a normal gutter column: the highest-priority `GutterIcon` decoration starting on each visible line, on its first row. With no icon of its own a decoration gets a glyph for its severity.
 - **Signals.** Only calls that add or remove decorations emit `changed(firstLine, lastLine, kinds)`; edits move decorations silently, because the editor already repaints on every edit. The editor drops the cached layouts of the affected lines when virtual text changed and rebuilds the plan otherwise.
 
+### Squiggles (DIAG-02)
+
+- **A texture strip, not a material.** A custom `QSGMaterial` was the first idea and the ROADMAP's, but a geometry node with a custom material draws nothing on the software backend, which the test suite runs on ([ADR 0009](0009-rendering-pipeline.md) hit the same wall with overlays), and it would add `Qt6::ShaderTools` as a build dependency (build time only: `qsb` compiles the shader and the `.qsb` is a resource). Squiggles are therefore `QSGImageNode`s, which every backend draws the same way. The shader remains an option (DIAG-07) for crisper waves at any zoom; the strip stays as the software fallback.
+- **One strip per color.** A zigzag a pixel wide, four logical pixels per wave and three high, drawn with `QPainter` at the window's device pixel ratio into a 512-pixel strip (a whole number of waves) and uploaded once per color. Image nodes share the texture instead of owning it, so the renderer batches them; textures of colors that no node uses any more are freed once more than 16 exist.
+- **Phase comes from the source rectangle.** A span becomes one node (more only when it is wider than the strip) whose rectangle starts at the span's pixel-rounded x and whose source rectangle starts `x mod period` pixels into the strip. Waves of neighbouring spans, wrapped rows and re-laid-out rows therefore line up. Nearest filtering keeps the pre-rendered wave from blurring. Verified on the software backend in the tests and by eye on the Wayland GPU backend (the two renderings are identical).
+- **Wrapped rows** get a piece per row, because spans are built per row; an empty range gets one cell of wave.
+
 ## Consequences
 
 - Decorations do not change the cost of a frame without them: one counter check per layout and per plan build.

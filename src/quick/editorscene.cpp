@@ -1,6 +1,8 @@
 #include "quick/editorscene.h"
 
 #include <QtGui/QMatrix4x4>
+#include <QtGui/QPainter>
+#include <QtGui/QPainterPath>
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGGeometry>
 #include <QtQuick/QSGImageNode>
@@ -63,6 +65,8 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_scroll->appendChildNode(m_rows);
   m_decoUnderlines = std::make_unique<ColorBatch>(window);
   m_scroll->appendChildNode(m_decoUnderlines->node());
+  m_squiggles = std::make_unique<SquiggleBatch>(window, &m_stats);
+  m_scroll->appendChildNode(m_squiggles->node());
   m_scroll->appendChildNode(m_cursorFade);
   // Fixed order gives the stacking: current line, selection, marks, then (above the text) the cursor.
   m_currentLineBatch = std::make_unique<RectBatch>(window);
@@ -118,6 +122,110 @@ void EditorScene::ColorBatch::update(const QList<GutterRect> &rects, qreal lh, q
       m_nodes[i]->setColor(rects[i].color);
     m_rects[i] = geometry[i];
     m_colors[i] = rects[i].color;
+  }
+}
+
+EditorScene::SquiggleBatch::~SquiggleBatch() {
+  // Nodes belong to the tree; the textures are ours.
+  for (auto &[color, texture] : m_textures)
+    delete texture;
+}
+
+// The strip for one color: a zigzag a pixel wide, kPeriod pixels per wave, drawn past both ends so
+// it tiles. Rendered at the device pixel ratio so it stays crisp on high-density screens.
+QSGTexture *EditorScene::SquiggleBatch::textureFor(QRgb color, qreal ratio) {
+  if (const auto it = m_textures.find(color); it != m_textures.end())
+    return it->second;
+  QImage image(int(std::ceil(kStripWidth * ratio)), int(std::ceil(kHeight * ratio)), QImage::Format_ARGB32_Premultiplied);
+  image.setDevicePixelRatio(ratio);
+  image.fill(Qt::transparent);
+  QPainter painter(&image);
+  painter.setRenderHint(QPainter::Antialiasing);
+  QPen pen(QColor::fromRgba(color), 1.0, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin);
+  painter.setPen(pen);
+  QPainterPath path;
+  constexpr qreal top = 0.75, bottom = kHeight - 0.75, half = kPeriod / 2.0;
+  path.moveTo(-half, bottom);
+  bool down = false;
+  for (qreal x = 0; x <= kStripWidth + half; x += half, down = !down)
+    path.lineTo(x, down ? bottom : top);
+  painter.drawPath(path);
+  painter.end();
+  QSGTexture *texture = m_window->createTextureFromImage(image);
+  texture->setFiltering(QSGTexture::Nearest);
+  ++m_stats->squiggleTexturesCreated;
+  return m_textures.emplace(color, texture).first->second;
+}
+
+void EditorScene::SquiggleBatch::update(const QList<ColoredSpan> &spans, qreal lh, qsizetype originRow, qreal ratio) {
+  if (ratio != m_ratio) { // the textures were drawn for another density
+    m_ratio = ratio;
+    for (QSGImageNode *node : std::as_const(m_nodes))
+      node->setTexture(nullptr);
+    for (auto &[color, texture] : m_textures)
+      delete texture;
+    m_textures.clear();
+    m_pieces.clear();
+  }
+  // A span is cut into pieces no longer than the strip allows once its phase is taken off.
+  constexpr qreal maxPiece = kStripWidth - kPeriod;
+  QList<Piece> pieces;
+  pieces.reserve(spans.size());
+  for (const ColoredSpan &span : spans) {
+    const qreal y = double(span.row - originRow) * lh + span.y;
+    const qreal height = span.height < 0 ? lh : span.height;
+    qreal x = std::round(span.x0);
+    const qreal end = std::round(span.x1);
+    while (x < end) {
+      const qreal width = qMin(end - x, maxPiece);
+      const qreal phase = std::fmod(x, kPeriod) < 0 ? std::fmod(x, kPeriod) + kPeriod : std::fmod(x, kPeriod);
+      pieces.append({QRectF(x, y, width, height), QRectF(phase * ratio, 0, width * ratio, kHeight * ratio), span.color.rgba()});
+      x += width;
+    }
+  }
+  m_stats->squigglePieces = quint64(pieces.size());
+
+  while (m_nodes.size() > pieces.size())
+    delete m_nodes.takeLast();
+  m_pieces.resize(pieces.size());
+  std::unordered_map<QRgb, bool> used;
+  for (qsizetype i = 0; i < pieces.size(); ++i) {
+    const Piece &piece = pieces[i];
+    QSGTexture *texture = textureFor(piece.color, ratio);
+    used[piece.color] = true;
+    if (i >= m_nodes.size()) {
+      // As for gutter images, a node needs texture and rectangle before it joins the tree.
+      QSGImageNode *node = m_window->createImageNode();
+      node->setTexture(texture);
+      node->setOwnsTexture(false);
+      node->setFiltering(QSGTexture::Nearest);
+      node->setSourceRect(piece.source);
+      node->setRect(piece.rect);
+      m_group->appendChildNode(node);
+      m_nodes.append(node);
+      m_pieces[i] = piece;
+      ++m_stats->squiggleNodesCreated;
+      continue;
+    }
+    QSGImageNode *node = m_nodes[i];
+    if (node->texture() != texture)
+      node->setTexture(texture);
+    if (m_pieces[i].source != piece.source || node->sourceRect() != piece.source)
+      node->setSourceRect(piece.source);
+    if (m_pieces[i].rect != piece.rect || node->rect() != piece.rect)
+      node->setRect(piece.rect);
+    m_pieces[i] = piece;
+  }
+  // Colors no node uses any more: a host cycling through colors must not pile textures up.
+  if (m_textures.size() > 16) {
+    for (auto it = m_textures.begin(); it != m_textures.end();) {
+      if (used.count(it->first)) {
+        ++it;
+      } else {
+        delete it->second;
+        it = m_textures.erase(it);
+      }
+    }
   }
 }
 
@@ -200,6 +308,7 @@ void EditorScene::syncOverlays(const FrameParams &p) {
   static const QList<ColoredSpan> none;
   m_decoBackgrounds->update(p.decorationBackgrounds ? *p.decorationBackgrounds : none, lh, m_originRow);
   m_decoUnderlines->update(p.decorationUnderlines ? *p.decorationUnderlines : none, lh, m_originRow);
+  m_squiggles->update(p.squiggles ? *p.squiggles : none, lh, m_originRow, p.devicePixelRatio);
   m_cursorFade->setOpacity(p.cursorVisible ? 1.0 : 0.0);
 }
 
