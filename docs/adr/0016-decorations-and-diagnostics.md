@@ -73,6 +73,8 @@ Measured on the release build (Fedora 44, Ryzen AI 9 365, Qt 6.11.2, Wayland wit
   | dense, wrapped at the window | 6.96 / 6.94 / 6.94 / 6.95 | 0 / 0 / 0.7 / 0.2 % | 315 / 557 / 1529 / 291 |
 
   Dense is the worst case a screen can show (every row has a squiggle, an icon and a message) and costs about 130 µs of polish and 45 µs of render-thread sync a frame; run to run noise is a few percent (ADR 0012).
+- **With 20,000 folds and the gutter** (`...-scroll-folds*.json`, same session): 100k diagnostics leave smooth, fling and cursor scrolling at the display period with 0% dropped frames (polish 136 to 157 µs smooth, 108 to 125 µs cursor) and jumps at 1.0% dropped (baseline 0%).
+- **Keystroke to frame** with 100k diagnostics (`...-typing*.json`): a typed character 0.51 ms against 0.42 ms, Enter 1.17 against 1.06, paste 1.46 against 1.30, undo 0.53 against 0.45 (medians). The harness occasionally records a 2 s lost frame (seen in the baseline run as well), so the p95 of single scenarios is noisy.
 - **Inlay hints with wrap** (core benchmarks, 2M lines wrapped at 30 columns): setting hints on 2,000 lines, wrapping them on the spot, takes 5.1 ms; on 100k lines 45 ms (2,000 wrapped at once, the rest marked and settled later); a row query with 100k hints costs 5.2 µs (about 2.5 µs without); a keystroke on a hinted line with wrap on 60 µs. Without wrap hints cost the map nothing.
 - **The benchmark found a cost in the gutter and fixed it.** `ImageBatch` created a texture for every new image node and re-uploaded one whenever scrolling gave a node a different image, which a column of icons does on almost every frame: dense diagnostics dropped 5% of cursor-scenario frames. Textures are now shared per image (by cache key), like the squiggle strips, so scrolling uploads nothing and equal icons batch: dense cursor-scenario drops fell from 5.0% to 0% and render-thread sync from 116 to 74 µs.
 - **Squiggles cost** about a render-thread node per span; with no diagnostics every path is as before (a counter check per layout and per plan build).
@@ -81,6 +83,5 @@ Measured on the release build (Fedora 44, Ryzen AI 9 365, Qt 6.11.2, Wayland wit
 ## Not done / not measured
 
 - Hands-on mouse use in a real window. Hover, popups and the gutter icons are tested with synthetic events and looked at in screenshots on the software and GPU backends, not driven by hand.
-- Scrolling with folds and diagnostics together, and keystroke-to-frame with diagnostics, were not measured on the GPU: the display stopped presenting windows partway through the session. Both were run on the offscreen software backend as a functional check (they complete, no stalls) and the benchmark options (`bench_scroll --gutter --folds --diagnostics N`, `bench_typing --diagnostics N`) are there to run when a display is available. The core numbers above cover the edit costs.
 - Diagnostic tags (fading, strike-through), hover or click on a hint, a tooltip for hints, and hints on very long lines beyond the rows asked for.
 - A bulk anchor creation (`AnchorSet::createSorted`) would make the 100k push cheaper; not worth doing until a host pushes that much often.
