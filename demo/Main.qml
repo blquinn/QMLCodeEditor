@@ -99,6 +99,40 @@ ApplicationWindow {
         editor.forceActiveFocus()
     }
 
+    // Diagnostics in LSP's shape, as a language server would publish them: `count` of them, one every
+    // few lines through the whole file, over the first characters of the line (the editor clamps
+    // ranges to the text).
+    function sampleDiagnostics(count) {
+        const lines = editor.lineCount
+        const step = Math.max(1, Math.floor(lines / count))
+        const kinds = [qsTr("error"), qsTr("warning"), qsTr("information"), qsTr("hint")]
+        const list = []
+        for (let i = 0; i < count && i * step < lines; ++i) {
+            const line = i * step
+            list.push({
+                range: { start: { line: line, character: 0 }, end: { line: line, character: 6 } },
+                severity: 1 + i % 4,
+                message: qsTr("Sample %1 on line %2: something is not quite right here").arg(kinds[i % 4]).arg(line + 1),
+                source: "demo",
+                code: 100 + i % 4
+            })
+        }
+        editor.setDiagnostics(list)
+        statusLabel.statusText = qsTr("%1 diagnostics").arg(list.length.toLocaleString())
+    }
+
+    // Inlay hints around the cursor: a type after the third character and a parameter name before the
+    // eighth, on forty lines.
+    function sampleHints() {
+        const first = Math.max(0, editor.cursorLine - 20)
+        const list = []
+        for (let line = first; line < first + 40 && line < editor.lineCount; ++line) {
+            list.push({ position: { line: line, character: 3 }, label: ": text", kind: 1 })
+            list.push({ position: { line: line, character: 8 }, label: "arg:", kind: 2 })
+        }
+        editor.setInlayHints(list)
+    }
+
     // Everything but the editor itself lives in the menus.
     menuBar: MenuBar {
         Menu {
@@ -312,6 +346,37 @@ ApplicationWindow {
             }
         }
         Menu {
+            title: qsTr("Diagno&stics")
+            MenuItem { text: qsTr("Sample diagnostics (every few lines)"); onTriggered: window.sampleDiagnostics(Math.max(1, Math.round(editor.lineCount / 15))) }
+            MenuItem { text: qsTr("100,000 diagnostics"); onTriggered: window.sampleDiagnostics(100000) }
+            MenuItem { text: qsTr("Clear diagnostics"); onTriggered: editor.clearDiagnostics() }
+            MenuSeparator {}
+            MenuItem { text: qsTr("Next diagnostic\tF8"); enabled: editor.diagnosticCount > 0; onTriggered: editor.gotoNextDiagnostic() }
+            MenuItem { text: qsTr("Previous diagnostic\tShift+F8"); enabled: editor.diagnosticCount > 0; onTriggered: editor.gotoPreviousDiagnostic() }
+            MenuSeparator {}
+            MenuItem {
+                text: qsTr("Messages at the end of the line")
+                checkable: true
+                checked: editor.diagnosticMessages === CodeEditor.EndOfLineMessages
+                onToggled: editor.diagnosticMessages = checked ? CodeEditor.EndOfLineMessages : CodeEditor.NoMessages
+            }
+            MenuItem {
+                text: qsTr("Popups on hover")
+                checkable: true
+                checked: editor.diagnosticPopups
+                onToggled: editor.diagnosticPopups = checked
+            }
+            MenuItem {
+                text: qsTr("Icons in the gutter")
+                checkable: true
+                checked: diagnosticIcons.visible
+                onToggled: diagnosticIcons.visible = checked
+            }
+            MenuSeparator {}
+            MenuItem { text: qsTr("Sample inlay hints around the cursor"); onTriggered: window.sampleHints() }
+            MenuItem { text: qsTr("Clear inlay hints"); onTriggered: editor.clearInlayHints() }
+        }
+        Menu {
             title: qsTr("&Gutter")
             MenuItem {
                 text: qsTr("Line numbers")
@@ -383,6 +448,10 @@ ApplicationWindow {
                     text: highlighter.detectedLanguage !== "" ? highlighter.languageName(highlighter.detectedLanguage)
                                                               : qsTr("Plain text")
                 }
+                Label {
+                    visible: editor.diagnosticCount > 0
+                    text: qsTr("%1 problems").arg(editor.diagnosticCount.toLocaleString())
+                }
                 Label { text: qsTr("%1 lines").arg(editor.lineCount.toLocaleString()) }
                 Label {
                     text: qsTr("Ln %1, Col %2").arg(editor.cursorLine + 1).arg(editor.cursorColumn + 1) +
@@ -442,7 +511,8 @@ ApplicationWindow {
         }
 
         // The gutter, left to right: line numbers (a click selects the line), bars for lines edited since
-        // loading, breakpoints (a click toggles one) and a column of bookmark stars drawn in QML.
+        // loading, breakpoints (a click toggles one), diagnostic icons (hover for the message), fold
+        // chevrons and a column of bookmark stars drawn in QML.
         gutterColumns: [
             LineNumberColumn { id: lineNumbers },
             ChangeColumn { id: changeBars },
@@ -454,6 +524,7 @@ ApplicationWindow {
                         addMarker(line, { color: "#e51400", barWidth: 12 })
                 }
             },
+            DecorationColumn { id: diagnosticIcons },
             FoldColumn { id: foldMarkers },
             DelegateColumn {
                 id: bookmarkColumn

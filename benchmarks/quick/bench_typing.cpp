@@ -11,6 +11,7 @@
 #include "datagen.h"
 #include "frametimer.h"
 #include "quick/codeeditor.h"
+#include "quick/decorationcolumn.h"
 
 #include <QtCore/QCommandLineParser>
 #include <QtCore/QDir>
@@ -184,6 +185,10 @@ int main(int argc, char **argv) {
   parser.addOption({{QStringLiteral("o"), QStringLiteral("json")}, QStringLiteral("Write results as JSON to <file>."), QStringLiteral("file")});
   parser.addOption({{QStringLiteral("n"), QStringLiteral("samples")}, QStringLiteral("Keystrokes per scenario."), QStringLiteral("n"), QStringLiteral("200")});
   parser.addOption({QStringLiteral("quick"), QStringLiteral("Small input and few samples (smoke test).")});
+  parser.addOption(
+    {QStringLiteral("diagnostics"), QStringLiteral("Keep N diagnostics (squiggles, icons, messages) spread through the file."),
+     QStringLiteral("n"), QStringLiteral("0")}
+  );
   parser.addOption({{QStringLiteral("f"), QStringLiteral("filter")}, QStringLiteral("Only scenarios whose name matches this regex."), QStringLiteral("regex")});
   parser.process(app);
   const bool quick = parser.isSet(QStringLiteral("quick"));
@@ -272,10 +277,31 @@ int main(int argc, char **argv) {
 
   QList<Result> results;
   const QString filter = parser.value(QStringLiteral("filter"));
+  const int diagnostics = parser.value(QStringLiteral("diagnostics")).toInt();
+  if (diagnostics > 0) {
+    editor->addGutterColumn(new qce::DecorationColumn(editor));
+    editor->setDiagnosticMessages(CodeEditor::EndOfLineMessages);
+  }
   for (const Input &input : inputs) {
     results << bench.open(input.label, input.path);
+    if (diagnostics > 0) {
+      const qce::Rope &rope = editor->document()->rope();
+      const qsizetype lines = editor->lineCount(), step = qMax<qsizetype>(1, lines / diagnostics);
+      QList<qce::Diagnostic> list;
+      list.reserve(diagnostics);
+      for (int i = 0; i < diagnostics && qsizetype(i) * step < lines; ++i) {
+        const qsizetype line = qsizetype(i) * step, length = rope.lineLength(line);
+        qce::Diagnostic d;
+        d.start = {line, qMin<qsizetype>(2, length)};
+        d.end = {line, qMin<qsizetype>(6, length)};
+        d.severity = 1 + i % 4;
+        d.message = QStringLiteral("benchmark diagnostic %1").arg(i);
+        list.append(d);
+      }
+      editor->setDiagnostics(list);
+    }
     for (const Action &action : actions) {
-      const QString label = QStringLiteral("typing/") + input.label + QLatin1Char('/') + action.name;
+      const QString label = QStringLiteral("typing/") + (diagnostics > 0 ? QStringLiteral("diagnostics%1/").arg(diagnostics) : QString()) + input.label + QLatin1Char('/') + action.name;
       if (!filter.isEmpty() && !QRegularExpression(filter).match(label).hasMatch())
         continue;
       results << bench.run(label, action, samples);
