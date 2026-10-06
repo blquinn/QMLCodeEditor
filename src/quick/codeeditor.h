@@ -295,7 +295,7 @@ public:
   // diagnostic objects, most severe first) and `editor` (this item). The editor creates it, parents
   // it to the window's content item so it can reach beyond the editor, and places it with
   // rectForPosition() below the character, flipped above it when it does not fit. Unset, a default
-  // (DiagnosticPopup.qml) is used. The popup stays while the pointer is on the diagnostic or on the
+  // (DiagnosticPopup.qml) is used; its text can be selected and copied. The popup stays while the pointer is on the diagnostic or on the
   // popup and goes when either is left, on a key press, a click, scrolling, an edit or focus loss.
   QQmlComponent *popupDelegate() const { return m_popupDelegate; }
   void setPopupDelegate(QQmlComponent *delegate);
@@ -578,6 +578,7 @@ private:
   QList<qce::Diagnostic> diagnosticsFor(const HoverTarget &target) const;
   QRectF anchorFor(const HoverTarget &target);
   bool showPopup(const HoverTarget &target);
+  bool popupHasFocus() const;
   QQmlComponent *popupComponent();
   QQmlComponent *m_popupDelegate = nullptr;
   QQmlComponent *m_defaultPopup = nullptr;

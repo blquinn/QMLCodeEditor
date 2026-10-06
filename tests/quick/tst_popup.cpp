@@ -1,3 +1,4 @@
+#include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
 #include <QtQml/QQmlComponent>
 #include <QtQml/QQmlEngine>
@@ -250,6 +251,43 @@ private slots:
     QVERIFY(editor->popupVisible());
     QTest::mouseMove(view.get(), QPoint(380, 190));
     QTRY_VERIFY_WITH_TIMEOUT(!editor->popupVisible(), 2000);
+  }
+
+  void thePopupTextCanBeSelectedAndCopied() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("let a = 1;\nlet b = oops;\nlet c = 3;"));
+    editor->setDiagnostics(QVariantList{lsp(1, 8, 12, 1, "oops is not defined")});
+    QTest::mouseMove(view.get(), charCenter(editor, 1, 9));
+    QTRY_VERIFY(editor->popupVisible());
+    QQuickItem *popup = popupItem(view.get());
+    QQuickItem *message = findItem(popup, QStringLiteral("diagnosticMessage"));
+    QVERIFY(message);
+    QCOMPARE(message->property("readOnly").toBool(), true);
+    QCOMPARE(message->property("selectByMouse").toBool(), true);
+    // A double-click on a word selects it and gives the popup the keyboard.
+    const QPoint inMessage = message->mapToScene(QPointF(8, message->height() / 2)).toPoint();
+    QTest::mouseMove(view.get(), inMessage);
+    QTest::mouseDClick(view.get(), Qt::LeftButton, {}, inMessage);
+    QTRY_VERIFY(message->hasActiveFocus());
+    QCOMPARE(message->property("selectedText").toString(), QStringLiteral("oops"));
+    // Moving away does not close a popup that holds the focus (the selection may be wanted).
+    QTest::mouseMove(view.get(), QPoint(380, 190));
+    QTest::qWait(500);
+    QVERIFY(editor->popupVisible());
+    // Copy.
+    QGuiApplication::clipboard()->clear();
+    QTest::keyClick(view.get(), Qt::Key_C, Qt::ControlModifier);
+    QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("oops"));
+    QVERIFY(editor->popupVisible()); // the keys went to the popup, not the editor
+    // Escape closes it and returns the keyboard to the editor.
+    QTest::keyClick(view.get(), Qt::Key_Escape);
+    QVERIFY(!editor->popupVisible());
+    QTRY_VERIFY(editor->hasActiveFocus());
+    // A click in the editor also closes it.
+    QTest::mouseMove(view.get(), charCenter(editor, 1, 9));
+    QTRY_VERIFY(editor->popupVisible());
+    QTest::mouseClick(view.get(), Qt::LeftButton, {}, charCenter(editor, 0, 1));
+    QVERIFY(!editor->popupVisible());
   }
 
   void theGutterIconAndTheEndOfLineMessageAlsoOpenIt() {
