@@ -304,7 +304,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - `popupDelegate`, `hoverDelay`, `diagnosticPopups`; hover on text, gutter icon or end-of-line message; also opened by F8 ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)). Checked on the software and Wayland GPU backends.
 - [x] **DIAG-05** Go to next/previous diagnostic — done 2026-10-05 (df8c6c1)
   - `gotoNextDiagnostic`/`gotoPreviousDiagnostic` (wrapping, minimum severity, opens folds, scrolls); F8 / Shift+F8.
-- [x] **DIAG-06** Inline virtual text and inlay hints — done 2026-10-05
+- [x] **DIAG-06** Inline virtual text and inlay hints — done 2026-10-05 (176cfa5)
   - Rendered as part of line layout so wrap and cursor movement account for them.
   - `setInlayHints` (LSP `InlayHint`) and `InlineText` decorations: injected into the row layout (a general injection list that the input-method composition now shares), widths fed to soft wrap, a pill behind each label ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
 
