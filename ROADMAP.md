@@ -299,8 +299,9 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
   - Done as the fallback: a pre-rendered wave strip per color in pooled image nodes, which every backend (software included) draws the same ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)); the material is DIAG-07.
 - [x] **DIAG-03** LSP-shaped diagnostic model — done 2026-10-05 (6697a5b)
   - Range, severity, message, code, source, related information, tags. LSP JSON in and out; shown through the decoration set ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
-- [ ] **DIAG-04** Hover and popup placement
+- [x] **DIAG-04** Hover and popup placement — done 2026-10-05
   - Popups are QML delegate `Component`s positioned using `rectForPosition()`; flip to stay on screen.
+  - `popupDelegate`, `hoverDelay`, `diagnosticPopups`; hover on text, gutter icon or end-of-line message; also opened by F8 ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)). Checked on the software and Wayland GPU backends.
 - [x] **DIAG-05** Go to next/previous diagnostic — done 2026-10-05 (df8c6c1)
   - `gotoNextDiagnostic`/`gotoPreviousDiagnostic` (wrapping, minimum severity, opens folds, scrolls); F8 / Shift+F8.
 - [ ] **DIAG-06** Inline virtual text and inlay hints

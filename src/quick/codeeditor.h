@@ -18,12 +18,14 @@
 #include "quick/textmetrics.h"
 #include "quick/theme.h"
 
+#include <QtCore/QPointer>
 #include <QtCore/QTimer>
 #include <QtGui/QClipboard>
 #include <QtCore/QUrl>
 #include <QtGui/QColor>
 #include <QtGui/QFont>
 #include <QtGui/QTextLayout>
+#include <QtQml/QQmlComponent>
 #include <QtQml/QQmlListProperty>
 #include <QtQml/qqmlregistration.h>
 #include <QtQuick/QQuickItem>
@@ -135,6 +137,10 @@ public:
   Q_PROPERTY(QQmlListProperty<qce::GutterColumn> gutterColumns READ gutterColumns FINAL)
   Q_PROPERTY(qreal gutterWidth READ gutterWidth NOTIFY gutterWidthChanged FINAL)
   Q_PROPERTY(int diagnosticCount READ diagnosticCount NOTIFY diagnosticsChanged FINAL)
+  Q_PROPERTY(QQmlComponent *popupDelegate READ popupDelegate WRITE setPopupDelegate NOTIFY popupDelegateChanged FINAL)
+  Q_PROPERTY(bool diagnosticPopups READ diagnosticPopups WRITE setDiagnosticPopups NOTIFY diagnosticPopupsChanged FINAL)
+  Q_PROPERTY(int hoverDelay READ hoverDelay WRITE setHoverDelay NOTIFY hoverDelayChanged FINAL)
+  Q_PROPERTY(bool popupVisible READ popupVisible NOTIFY popupVisibleChanged FINAL)
   Q_PROPERTY(
     DiagnosticMessages diagnosticMessages READ diagnosticMessages WRITE setDiagnosticMessages NOTIFY
       diagnosticMessagesChanged FINAL
@@ -270,6 +276,25 @@ public:
     return m_diagnostics.endOfLineMessages() ? EndOfLineMessages : NoMessages;
   }
   void setDiagnosticMessages(DiagnosticMessages messages);
+
+  // Popups (DIAG-04). Hovering a diagnostic (its text, its gutter icon or its end-of-line message)
+  // for `hoverDelay` ms, or navigating to it, shows a popup: an instance of `popupDelegate`, a
+  // Component whose root is an Item with two required properties, `diagnostics` (a list of LSP
+  // diagnostic objects, most severe first) and `editor` (this item). The editor creates it, parents
+  // it to the window's content item so it can reach beyond the editor, and places it with
+  // rectForPosition() below the character, flipped above it when it does not fit. Unset, a default
+  // (DiagnosticPopup.qml) is used. The popup stays while the pointer is on the diagnostic or on the
+  // popup and goes when either is left, on a key press, a click, scrolling, an edit or focus loss.
+  QQmlComponent *popupDelegate() const { return m_popupDelegate; }
+  void setPopupDelegate(QQmlComponent *delegate);
+  bool diagnosticPopups() const { return m_diagnosticPopups; }
+  void setDiagnosticPopups(bool enable);
+  int hoverDelay() const { return m_hoverTimer.interval(); }
+  void setHoverDelay(int ms);
+  bool popupVisible() const { return !m_popup.isNull(); }
+  // Shows the popup for the diagnostics at the character at `offset`; false when there are none.
+  Q_INVOKABLE bool showDiagnosticsAt(qsizetype offset);
+  Q_INVOKABLE void hidePopup();
 
   const qce::DisplayMap &displayMap() const { return m_map; }
   const qce::TextMetrics &metrics() const { return m_metrics; }
@@ -432,6 +457,10 @@ signals:
   void gutterWidthChanged();
   void diagnosticsChanged();
   void diagnosticMessagesChanged();
+  void popupDelegateChanged();
+  void diagnosticPopupsChanged();
+  void hoverDelayChanged();
+  void popupVisibleChanged();
   void foldProviderChanged();
   void foldCursorPolicyChanged();
   void loadFailed(const QString &error);
@@ -452,6 +481,7 @@ protected:
   void hoverMoveEvent(QHoverEvent *event) override;
   void hoverLeaveEvent(QHoverEvent *event) override;
   void wheelEvent(QWheelEvent *event) override;
+  bool eventFilter(QObject *watched, QEvent *event) override;
   QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) override;
   void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
@@ -522,6 +552,27 @@ private:
   // Decoration plumbing: spans for the rows of the plan, and the virtual text at the end of a line.
   void buildDecorations();
   bool gotoDiagnostic(bool forward, int leastSevere);
+  // What the pointer is over that a popup can be about: a character of text, or a whole line (its
+  // gutter icon, its end-of-line message).
+  struct HoverTarget {
+    enum Kind : quint8 { None, Text, Line } kind = None;
+    qsizetype value = -1; // an offset for Text, a buffer line for Line
+    bool operator==(const HoverTarget &) const = default;
+  };
+  HoverTarget popupTargetAt(const QPointF &pos);
+  void updatePopupHover(const QPointF &pos);
+  void onHoverTimer();
+  QList<qce::Diagnostic> diagnosticsFor(const HoverTarget &target) const;
+  QRectF anchorFor(const HoverTarget &target);
+  bool showPopup(const HoverTarget &target);
+  QQmlComponent *popupComponent();
+  QQmlComponent *m_popupDelegate = nullptr;
+  QQmlComponent *m_defaultPopup = nullptr;
+  QPointer<QQuickItem> m_popup;
+  HoverTarget m_popupTarget, m_pendingTarget;
+  QTimer m_hoverTimer, m_popupGrace;
+  bool m_popupHovered = false;
+  bool m_diagnosticPopups = true;
   void onDecorationsChanged(qsizetype firstLine, qsizetype lastLine, quint32 kinds);
   QString endOfLineText(qsizetype line, QColor *color) const;
   QList<qce::ColoredSpan> m_decoBackgroundSpans, m_decoUnderlineSpans, m_squiggleSpans;

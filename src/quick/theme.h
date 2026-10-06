@@ -76,7 +76,7 @@ public:
   QColor inlayHint() const { return m_inlayHint; }
   QColor inlayHintBackground() const { return m_inlayHintBackground; }
   // The color for a decoration severity (qce::DecorationSeverity, LSP numbering); the foreground for none.
-  QColor severityColor(int severity) const;
+  Q_INVOKABLE QColor severityColor(int severity) const;
 
   QVariantMap tokenStyles() const { return m_tokenStyles; }
   void setTokenStyles(const QVariantMap &styles);
