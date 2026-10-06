@@ -2,6 +2,7 @@
 #define CODEEDITOR_H
 
 #include "core/decorationset.h"
+#include "core/diagnostics.h"
 #include "core/displaymap.h"
 #include "core/foldprovider.h"
 #include "core/highlighter.h"
@@ -73,6 +74,10 @@ public:
   enum DecorationKind { Underline, Squiggle, Background, GutterIcon, EndOfLineText, InlineText };
   Q_ENUM(DecorationKind)
 
+  // Where a diagnostic's message is shown besides its squiggle and gutter icon.
+  enum DiagnosticMessages { NoMessages, EndOfLineMessages };
+  Q_ENUM(DiagnosticMessages)
+
   // How glyphs are rasterized. Names and values mirror Text.renderType and QSGTextNode::RenderType.
   enum RenderType { QtRendering, NativeRendering, CurveRendering };
   Q_ENUM(RenderType)
@@ -129,6 +134,11 @@ public:
   )
   Q_PROPERTY(QQmlListProperty<qce::GutterColumn> gutterColumns READ gutterColumns FINAL)
   Q_PROPERTY(qreal gutterWidth READ gutterWidth NOTIFY gutterWidthChanged FINAL)
+  Q_PROPERTY(int diagnosticCount READ diagnosticCount NOTIFY diagnosticsChanged FINAL)
+  Q_PROPERTY(
+    DiagnosticMessages diagnosticMessages READ diagnosticMessages WRITE setDiagnosticMessages NOTIFY
+      diagnosticMessagesChanged FINAL
+  )
 public:
   explicit CodeEditor(QQuickItem *parent = nullptr);
   ~CodeEditor() override;
@@ -237,6 +247,24 @@ public:
   Q_INVOKABLE bool removeDecoration(int id);
   // Removes every decoration of one layer.
   Q_INVOKABLE void clearDecorations(int layer = 0);
+
+  // Diagnostics (DIAG-03): the host pushes what its language server published, in LSP's JSON shape
+  // ({range: {start: {line, character}, end: ...}, severity, message, code, source,
+  // relatedInformation, tags, data}), and the editor shows them as squiggles (hints as underlines),
+  // gutter icons (with a DecorationColumn) and, if asked, end-of-line messages. They follow edits.
+  // Each call replaces the whole list, as publishDiagnostics does; 100k of them are fine.
+  qce::DiagnosticSet *diagnostics() { return &m_diagnostics; }
+  int diagnosticCount() const { return int(m_diagnostics.count()); }
+  Q_INVOKABLE void setDiagnostics(const QVariantList &diagnostics);
+  void setDiagnostics(const QList<qce::Diagnostic> &diagnostics);
+  Q_INVOKABLE void clearDiagnostics();
+  // The diagnostics whose range contains the character at `offset`, most severe first, as LSP
+  // objects with their ranges as they are now.
+  Q_INVOKABLE QVariantList diagnosticsAt(qsizetype offset) const;
+  DiagnosticMessages diagnosticMessages() const {
+    return m_diagnostics.endOfLineMessages() ? EndOfLineMessages : NoMessages;
+  }
+  void setDiagnosticMessages(DiagnosticMessages messages);
 
   const qce::DisplayMap &displayMap() const { return m_map; }
   const qce::TextMetrics &metrics() const { return m_metrics; }
@@ -397,6 +425,8 @@ signals:
   void wrapIndentExtraChanged();
   void wrappingChanged();
   void gutterWidthChanged();
+  void diagnosticsChanged();
+  void diagnosticMessagesChanged();
   void foldProviderChanged();
   void foldCursorPolicyChanged();
   void loadFailed(const QString &error);
@@ -483,6 +513,7 @@ private:
   qce::TextDocument m_document;
   qce::DisplayMap m_map{&m_document};
   qce::DecorationSet m_decorations{&m_document};
+  qce::DiagnosticSet m_diagnostics{&m_document, &m_decorations};
   // Decoration plumbing: spans for the rows of the plan, and the virtual text at the end of a line.
   void buildDecorations();
   void onDecorationsChanged(qsizetype firstLine, qsizetype lastLine, quint32 kinds);

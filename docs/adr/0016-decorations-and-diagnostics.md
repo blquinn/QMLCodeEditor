@@ -27,6 +27,14 @@ M9 adds squiggles, underlines, backgrounds, gutter icons, end-of-line messages a
 - **Phase comes from the source rectangle.** A span becomes one node (more only when it is wider than the strip) whose rectangle starts at the span's pixel-rounded x and whose source rectangle starts `x mod period` pixels into the strip. Waves of neighbouring spans, wrapped rows and re-laid-out rows therefore line up. Nearest filtering keeps the pre-rendered wave from blurring. Verified on the software backend in the tests and by eye on the Wayland GPU backend (the two renderings are identical).
 - **Wrapped rows** get a piece per row, because spans are built per row; an empty range gets one cell of wave.
 
+### Diagnostics (DIAG-03)
+
+- **`Diagnostic` is LSP's `Diagnostic`:** range (line and UTF-16 column, LSP's default encoding), severity (1 error to 4 hint, the same numbers as `DecorationSeverity`), message, code (number or string), source, related information, tags and opaque `data`. `fromLsp`/`toLsp` convert to and from the JSON shape as a variant map, so a host forwards `publishDiagnostics` untouched and a QML host passes the parsed array. A missing or out-of-range severity counts as an error.
+- **`DiagnosticSet` shows them through the `DecorationSet`,** in layer -1. Each diagnostic is up to three decorations that carry its index as `tag`: the range itself (a squiggle; an underline for hints), a gutter icon and, when `diagnosticMessages` is `EndOfLineMessages`, an end-of-line message. The icon and the message are empty ranges at the diagnostic's start, so the walk bound of `DecorationSet` is not inflated by them. Priority is `5 - severity`, so errors paint over warnings and win the gutter and the end-of-line slot. Theme colors are looked up when drawing, so a theme change recolors diagnostics.
+- **The list is replaced as a whole** (`setDiagnostics`), as `publishDiagnostics` does, with one `setLayer` call. Positions outside the text are clamped; a reversed range becomes empty.
+- **Lookups return current ranges.** `at(offset)` (the character under `offset`, most severe first) and `inRange` find the range decorations and rebuild each diagnostic with the positions its anchors have now; an edit therefore never leaves a stale range in what the host gets back.
+- **Tags** (unnecessary, deprecated) are kept and handed back but not drawn (no fading or strike-through yet).
+
 ## Consequences
 
 - Decorations do not change the cost of a frame without them: one counter check per layout and per plan build.
