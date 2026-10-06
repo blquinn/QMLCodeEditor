@@ -66,6 +66,7 @@ public:
     m_editor->setContentY(m_editor->m_contentY + qreal(rows) * m_editor->m_metrics.lineHeight());
   }
   void foldCommand(qce::FoldCommand command) override { m_editor->foldCommand(command); }
+  void gotoDiagnostic(bool forward) override { m_editor->gotoDiagnostic(forward, qce::HintSeverity); }
 
 private:
   CodeEditor *m_editor;
@@ -1715,6 +1716,18 @@ QVariantList CodeEditor::diagnosticsAt(qsizetype offset) const {
   for (const qce::Diagnostic &d : m_diagnostics.at(offset))
     list.append(d.toLsp());
   return list;
+}
+
+bool CodeEditor::gotoDiagnostic(bool forward, int leastSevere) {
+  const qsizetype from = cursorPosition();
+  const std::optional<qce::Diagnostic> found =
+    forward ? m_diagnostics.next(from, true, leastSevere) : m_diagnostics.previous(from, true, leastSevere);
+  if (!found)
+    return false;
+  // A cursor placed in folded text opens the fold (revealCursor); select() does not scroll.
+  setCursorPosition(m_document.rope().offsetAt(found->start));
+  ensureCursorVisible();
+  return true;
 }
 
 void CodeEditor::setDiagnosticMessages(DiagnosticMessages messages) {

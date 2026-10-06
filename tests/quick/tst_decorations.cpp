@@ -235,8 +235,8 @@ private slots:
     const QColor errorColor = editor->theme()->diagnosticError();
     auto reddish = [&](const QRect &rect) {
       const QImage image = view->grabWindow();
-      for (int y = rect.top(); y < rect.bottom(); ++y)
-        for (int x = rect.left(); x < rect.right(); ++x) {
+      for (int y = rect.top(); y < rect.bottom() && y < image.height(); ++y)
+        for (int x = rect.left(); x < rect.right() && x < image.width(); ++x) {
           const QColor c = image.pixelColor(x, y);
           if (c.red() > errorColor.red() * 6 / 10 && c.green() < 90 && c.blue() < 90)
             return true;
@@ -267,6 +267,55 @@ private slots:
     QCOMPARE(editor->diagnosticCount(), 0);
     QTRY_VERIFY(!reddish(textRow1.translated(0, lh)));
     QVERIFY(editor->diagnosticsAt(inside).isEmpty());
+  }
+
+  void gotoNextAndPreviousDiagnosticWrapAndScrollAndUnfold() {
+    auto [view, editor] = showEditor(120, 400);
+    QString text;
+    for (int i = 0; i < 100; ++i)
+      text += (i == 20 ? QStringLiteral("block {\n") : i == 21 || i == 22 ? QStringLiteral("  inner %1\n").arg(i) : QStringLiteral("line %1\n").arg(i));
+    editor->setText(text);
+    auto lsp = [](int line, int severity) {
+      return QVariantMap{{"range", QVariantMap{{"start", QVariantMap{{"line", line}, {"character", 1}}},
+                                                {"end", QVariantMap{{"line", line}, {"character", 3}}}}},
+                         {"severity", severity}, {"message", "m"}};
+    };
+    QVERIFY(!editor->gotoNextDiagnostic()); // none yet
+    editor->setDiagnostics(QVariantList{lsp(5, 1), lsp(21, 2), lsp(70, 3), lsp(90, 4)});
+    editor->setCursorPosition(0);
+    QVERIFY(editor->gotoNextDiagnostic());
+    QCOMPARE(editor->cursorLine(), 5);
+    QCOMPARE(editor->cursorColumn(), 1);
+    // Down in the text, the view follows.
+    editor->fold(20);
+    QVERIFY(editor->isFolded(20));
+    QVERIFY(editor->gotoNextDiagnostic()); // line 21 is folded away: the fold opens
+    QCOMPARE(editor->cursorLine(), 21);
+    QVERIFY(!editor->isFolded(20));
+    QVERIFY(editor->gotoNextDiagnostic());
+    QCOMPARE(editor->cursorLine(), 70);
+    const qreal lh = editor->metrics().lineHeight();
+    QVERIFY(editor->contentY() <= 70 * lh && editor->contentY() + editor->height() >= 71 * lh);
+    QVERIFY(editor->gotoNextDiagnostic());
+    QCOMPARE(editor->cursorLine(), 90);
+    QVERIFY(editor->gotoNextDiagnostic()); // wraps
+    QCOMPARE(editor->cursorLine(), 5);
+    QVERIFY(editor->gotoPreviousDiagnostic()); // wraps backwards
+    QCOMPARE(editor->cursorLine(), 90);
+    QVERIFY(editor->gotoPreviousDiagnostic());
+    QCOMPARE(editor->cursorLine(), 70);
+    // Only errors and warnings.
+    QVERIFY(editor->gotoNextDiagnostic(2));
+    QCOMPARE(editor->cursorLine(), 5);
+    QVERIFY(!editor->gotoNextDiagnostic(0));
+    // The keys.
+    editor->setCursorPosition(0);
+    QTest::keyClick(view.get(), Qt::Key_F8);
+    QCOMPARE(editor->cursorLine(), 5);
+    QTest::keyClick(view.get(), Qt::Key_F8);
+    QCOMPARE(editor->cursorLine(), 21);
+    QTest::keyClick(view.get(), Qt::Key_F8, Qt::ShiftModifier);
+    QCOMPARE(editor->cursorLine(), 5);
   }
 
   void foldedLinesDrawNothing() {
