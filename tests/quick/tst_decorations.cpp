@@ -346,6 +346,93 @@ private slots:
     QVERIFY(!hasColor(view->grabWindow(), rowRect(editor, 0), kRed));
   }
 
+  QRect cellRect(CodeEditor *editor, int row, int column) {
+    const int cell = int(editor->metrics().cellAdvance());
+    return QRect(int(editor->gutterWidth()) + column * cell + 1, row * int(editor->metrics().lineHeight()), cell - 2,
+                 int(editor->metrics().lineHeight()));
+  }
+
+  void bracketNextToTheCursorAndItsPartnerAreHighlighted() {
+    auto [view, editor] = showEditor();
+    editor->theme()->setProperty("bracketMatch", kRed);
+    editor->setText(QStringLiteral("(ab)\nxx"));
+    QVERIFY(editor->matchBrackets());
+    editor->setCursorPosition(0);
+    QTRY_VERIFY(hasColor(view->grabWindow(), cellRect(editor, 0, 0), kRed));
+    QImage image = view->grabWindow();
+    QVERIFY(hasColor(image, cellRect(editor, 0, 3), kRed));
+    QVERIFY(!hasColor(image, cellRect(editor, 0, 1), kRed));
+    QVERIFY(!hasColor(image, cellRect(editor, 0, 2), kRed));
+    // The bracket before the cursor counts when there is none after it.
+    editor->setCursorPosition(4);
+    QTRY_VERIFY(hasColor(view->grabWindow(), cellRect(editor, 0, 0), kRed));
+    QVERIFY(hasColor(view->grabWindow(), cellRect(editor, 0, 3), kRed));
+    // Away from any bracket nothing is drawn.
+    editor->setCursorPosition(2);
+    QTRY_VERIFY(!hasColor(view->grabWindow(), cellRect(editor, 0, 0), kRed));
+    QVERIFY(!hasColor(view->grabWindow(), cellRect(editor, 0, 3), kRed));
+  }
+
+  void matchBracketsCanBeTurnedOff() {
+    auto [view, editor] = showEditor();
+    editor->theme()->setProperty("bracketMatch", kRed);
+    editor->setText(QStringLiteral("(ab)"));
+    editor->setCursorPosition(0);
+    QTRY_VERIFY(hasColor(view->grabWindow(), cellRect(editor, 0, 3), kRed));
+    QSignalSpy spy(editor, &CodeEditor::matchBracketsChanged);
+    editor->setMatchBrackets(false);
+    QCOMPARE(spy.count(), 1);
+    editor->setMatchBrackets(false);
+    QCOMPARE(spy.count(), 1);
+    QTRY_VERIFY(!hasColor(view->grabWindow(), cellRect(editor, 0, 3), kRed));
+    QVERIFY(!hasColor(view->grabWindow(), cellRect(editor, 0, 0), kRed));
+    editor->setMatchBrackets(true);
+    QTRY_VERIFY(hasColor(view->grabWindow(), cellRect(editor, 0, 3), kRed));
+  }
+
+  void everyCursorGetsItsBracketsHighlighted() {
+    auto [view, editor] = showEditor();
+    editor->theme()->setProperty("bracketMatch", kRed);
+    editor->setText(QStringLiteral("(a)\n[b]"));
+    editor->setCursorPosition(0);
+    QVERIFY(editor->addCursorBelow());
+    QCOMPARE(editor->selectionCount(), 2);
+    QTRY_VERIFY(hasColor(view->grabWindow(), cellRect(editor, 1, 2), kRed));
+    const QImage image = view->grabWindow();
+    for (int row = 0; row < 2; ++row) {
+      QVERIFY(hasColor(image, cellRect(editor, row, 0), kRed));
+      QVERIFY(hasColor(image, cellRect(editor, row, 2), kRed));
+      QVERIFY(!hasColor(image, cellRect(editor, row, 1), kRed));
+    }
+  }
+
+  void editsUpdateTheHighlight() {
+    auto [view, editor] = showEditor();
+    editor->theme()->setProperty("bracketMatch", kRed);
+    editor->setText(QStringLiteral("(a)"));
+    editor->setCursorPosition(0);
+    QTRY_VERIFY(hasColor(view->grabWindow(), cellRect(editor, 0, 2), kRed));
+    editor->setCursorPosition(1);
+    editor->insert(QStringLiteral("bc"));
+    editor->setCursorPosition(0);
+    QTRY_VERIFY(hasColor(view->grabWindow(), cellRect(editor, 0, 4), kRed));
+    QVERIFY(!hasColor(view->grabWindow(), cellRect(editor, 0, 2), kRed));
+  }
+
+  void partnerHiddenByAFoldIsSkipped() {
+    auto [view, editor] = showEditor();
+    editor->theme()->setProperty("bracketMatch", kRed);
+    editor->setText(kCode);
+    editor->setCursorPosition(13); // after the "{" of "  c {" (line 2), whose "}" is on line 4
+    QTRY_VERIFY(hasColor(view->grabWindow(), cellRect(editor, 2, 4), kRed));
+    QVERIFY(hasColor(view->grabWindow(), cellRect(editor, 4, 2), kRed));
+    QVERIFY(editor->fold(2));
+    QTRY_VERIFY(!hasColor(view->grabWindow(), cellRect(editor, 4, 2), kRed));
+    const QImage image = view->grabWindow();
+    QVERIFY(hasColor(image, cellRect(editor, 2, 4), kRed));
+    QVERIFY(!hasColor(image, cellRect(editor, 3, 0), kRed)); // the "}" of line 5 is not its partner
+  }
+
   void endOfLineTextWidensTheContentAndIsDrawn() {
     auto [view, editor] = showEditor();
     editor->setText(QStringLiteral("ab\ncd"));

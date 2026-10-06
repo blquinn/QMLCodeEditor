@@ -7,3 +7,6 @@ target_link_libraries(bench_fold PRIVATE qce_bench QMLCodeEditor::Core qce_warni
 
 qt_add_executable(bench_decorations bench_decorations.cpp)
 target_link_libraries(bench_decorations PRIVATE qce_bench QMLCodeEditor::Core qce_warnings)
+
+qt_add_executable(bench_brackets bench_brackets.cpp)
+target_link_libraries(bench_brackets PRIVATE qce_bench QMLCodeEditor::Core qce_warnings)

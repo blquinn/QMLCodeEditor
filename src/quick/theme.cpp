@@ -94,6 +94,7 @@ void Theme::assign(const Theme &o) {
   m_virtualText = o.m_virtualText;
   m_inlayHint = o.m_inlayHint;
   m_inlayHintBackground = o.m_inlayHintBackground;
+  m_bracketMatch = o.m_bracketMatch;
   m_tokenStyles = o.m_tokenStyles;
   emit changed();
 }
@@ -157,6 +158,7 @@ Theme *Theme::createLight(QObject *parent) {
   t->m_virtualText = QColor(0x8a, 0x8a, 0x8a);
   t->m_inlayHint = QColor(0x6a, 0x72, 0x7c);
   t->m_inlayHintBackground = QColor(0xd8, 0xdc, 0xe2, 0x90);
+  t->m_bracketMatch = QColor(0xb4, 0xc4, 0xd8, 0xa0);
   t->m_tokenStyles = {
     {"keyword", style("#0000ff")},
     {"string", style("#a31515")},

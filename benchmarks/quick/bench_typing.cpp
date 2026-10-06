@@ -189,6 +189,7 @@ int main(int argc, char **argv) {
     {QStringLiteral("diagnostics"), QStringLiteral("Keep N diagnostics (squiggles, icons, messages) spread through the file."),
      QStringLiteral("n"), QStringLiteral("0")}
   );
+  parser.addOption({QStringLiteral("no-brackets"), QStringLiteral("Turn matching bracket highlighting off (the baseline).")});
   parser.addOption({{QStringLiteral("f"), QStringLiteral("filter")}, QStringLiteral("Only scenarios whose name matches this regex."), QStringLiteral("regex")});
   parser.process(app);
   const bool quick = parser.isSet(QStringLiteral("quick"));
@@ -263,6 +264,7 @@ int main(int argc, char **argv) {
   auto *editor = new CodeEditor(view.contentItem());
   editor->setSize(QSizeF(1280, 800));
   editor->setCursorBlinkInterval(0); // blink repaints would add frames the keystroke didn't ask for
+  editor->setMatchBrackets(!parser.isSet(QStringLiteral("no-brackets")));
   view.show();
   QElapsedTimer exposeWait;
   exposeWait.start();

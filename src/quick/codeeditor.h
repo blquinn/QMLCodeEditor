@@ -1,6 +1,7 @@
 #ifndef CODEEDITOR_H
 #define CODEEDITOR_H
 
+#include "core/bracketmatch.h"
 #include "core/decorationset.h"
 #include "core/diagnostics.h"
 #include "core/displaymap.h"
@@ -19,6 +20,7 @@
 #include "quick/textmetrics.h"
 #include "quick/theme.h"
 
+#include <QtCore/QHash>
 #include <QtCore/QPointer>
 #include <QtCore/QTimer>
 #include <QtGui/QClipboard>
@@ -97,6 +99,7 @@ public:
   )
   Q_PROPERTY(bool autoClose READ autoClose WRITE setAutoClose NOTIFY autoCloseChanged FINAL)
   Q_PROPERTY(QStringList autoClosePairs READ autoClosePairs WRITE setAutoClosePairs NOTIFY autoClosePairsChanged FINAL)
+  Q_PROPERTY(bool matchBrackets READ matchBrackets WRITE setMatchBrackets NOTIFY matchBracketsChanged FINAL)
   Q_PROPERTY(bool detectIndentation READ detectIndentation WRITE setDetectIndentation NOTIFY detectIndentationChanged FINAL)
   Q_PROPERTY(
     bool insertSpaces READ insertSpaces WRITE setInsertSpaces NOTIFY insertSpacesChanged FINAL
@@ -362,6 +365,12 @@ public:
   void setAutoClose(bool enable);
   QStringList autoClosePairs() const;
   void setAutoClosePairs(const QStringList &pairs);
+  // Highlights the bracket next to each cursor (the character after it, else the one before) and
+  // its partner, in the theme's `bracketMatch` color. Brackets are the entries of `autoClosePairs`
+  // whose two characters differ. The partner is found by counting nesting in the raw text, within
+  // a bounded distance, so brackets inside strings and comments count too. On by default.
+  bool matchBrackets() const { return m_matchBrackets; }
+  void setMatchBrackets(bool enable);
   bool detectIndentation() const { return m_detectIndentation; }
   void setDetectIndentation(bool detect);
   bool insertSpaces() const { return m_insertSpaces; }
@@ -449,6 +458,7 @@ signals:
   void undoLimitChanged();
   void autoCloseChanged();
   void autoClosePairsChanged();
+  void matchBracketsChanged();
   void detectIndentationChanged();
   void insertSpacesChanged();
   void indentWidthChanged();
@@ -564,6 +574,7 @@ private:
   qce::DiagnosticSet m_diagnostics{&m_document, &m_decorations};
   // Decoration plumbing: spans for the rows of the plan, and the virtual text at the end of a line.
   void buildDecorations();
+  void buildBracketMatches();
   bool gotoDiagnostic(bool forward, int leastSevere);
   // What the pointer is over that a popup can be about: a character of text, or a whole line (its
   // gutter icon, its end-of-line message).
@@ -675,6 +686,9 @@ private:
   int m_undoLimit = 0;
   bool m_autoClose = true;
   QList<std::pair<char16_t, char16_t>> m_autoClosePairs = qce::EditorSettings().autoClosePairs;
+  bool m_matchBrackets = true;
+  // Partner lookups by cursor offset, dropped by every edit and by changes to the pairs.
+  QHash<qsizetype, qce::BracketPair> m_bracketCache;
   bool m_detectIndentation = true;
   bool m_insertSpaces = true;
   int m_indentWidth = 4;

@@ -20,3 +20,4 @@ qce_add_test(tst_diagnostics SOURCES tst_diagnostics.cpp LIBS QMLCodeEditor::Cor
 qce_add_test(tst_foldmap SOURCES tst_foldmap.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_foldprovider SOURCES tst_foldprovider.cpp LIBS QMLCodeEditor::Core)
 qce_add_test(tst_textsearch SOURCES tst_textsearch.cpp testutil.h LIBS QMLCodeEditor::Core)
+qce_add_test(tst_bracketmatch SOURCES tst_bracketmatch.cpp testutil.h LIBS QMLCodeEditor::Core)

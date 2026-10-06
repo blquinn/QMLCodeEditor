@@ -1,4 +1,5 @@
 #include "codeeditor.h"
+#include "core/bracketmatch.h"
 
 #include "core/filesaver.h"
 #include "core/indentation.h"
@@ -606,7 +607,17 @@ void CodeEditor::setAutoClosePairs(const QStringList &pairs) {
   if (parsed == m_autoClosePairs)
     return;
   m_autoClosePairs = parsed;
+  m_bracketCache.clear();
+  invalidatePlan();
   emit autoClosePairsChanged();
+}
+
+void CodeEditor::setMatchBrackets(bool enable) {
+  if (enable == m_matchBrackets)
+    return;
+  m_matchBrackets = enable;
+  invalidatePlan();
+  emit matchBracketsChanged();
 }
 
 void CodeEditor::setDetectIndentation(bool detect) {
@@ -2061,6 +2072,7 @@ void CodeEditor::buildDecorations() {
       }
     }
   }
+  buildBracketMatches();
   const qsizetype drawn = m_decorations.count(DecorationKind::Underline) + m_decorations.count(DecorationKind::Squiggle) +
                           m_decorations.count(DecorationKind::Background);
   if (drawn == 0)
@@ -2133,6 +2145,66 @@ void CodeEditor::buildDecorations() {
   }
 }
 
+// Backgrounds for the bracket next to each cursor and its partner. Only cursors in the rows being
+// drawn are looked at (the selections are sorted), each lookup is cached until the next edit, and
+// the number of cursors is capped so a thousand of them cost one frame, not a scan each.
+void CodeEditor::buildBracketMatches() {
+  if (!m_matchBrackets || m_autoClosePairs.isEmpty())
+    return;
+  constexpr int kMaxCursors = 1000;
+  constexpr int kMaxCached = 4096;
+  const qce::Rope &rope = m_document.rope();
+  const qsizetype firstLine = m_map.rowAt(m_planFirst).line;
+  const qsizetype afterLine = m_map.folds().nextVisibleLine(m_map.rowAt(m_planLast).line);
+  const qsizetype lowOffset = rope.lineStart(firstLine);
+  const qsizetype highOffset = afterLine < rope.lineCount() ? rope.lineStart(afterLine) : rope.length();
+  const qreal cell = m_metrics.cellAdvance();
+  const qreal viewLeft = m_contentX - cell, viewRight = m_contentX + textViewportWidth() + cell;
+  const QColor color = m_theme->bracketMatch();
+
+  QList<qsizetype> drawn;
+  auto mark = [&](qsizetype offset) {
+    if (drawn.contains(offset))
+      return;
+    drawn.append(offset);
+    qce::TextPosition position = rope.positionAt(offset);
+    if (m_map.folds().isHidden(position.line))
+      return;
+    position = m_map.visiblePosition(position);
+    const qsizetype row = m_map.rowForPosition(position);
+    if (row < m_planFirst || row > m_planLast)
+      return;
+    const qce::LineLayout &layout = *m_plan[row - m_planFirst].layout;
+    const qreal x0 = xForColumn(layout, position.column);
+    const qreal x1 = xForColumn(layout, position.column + 1);
+    if (x1 > x0 && x1 >= viewLeft && x0 <= viewRight)
+      m_decoBackgroundSpans.append({row, x0, x1, 0, -1, color});
+  };
+
+  int cursors = 0;
+  for (int i = m_selections.lowerBound(lowOffset); i < m_selections.count() && cursors < kMaxCursors; ++i) {
+    const qce::Selection sel = m_selections.at(i);
+    if (sel.start() > highOffset)
+      break;
+    if (sel.head < lowOffset || sel.head > highOffset)
+      continue;
+    ++cursors;
+    auto cached = m_bracketCache.constFind(sel.head);
+    if (cached == m_bracketCache.constEnd()) {
+      if (m_bracketCache.size() >= kMaxCached)
+        m_bracketCache.clear();
+      qce::BracketPair pair;
+      if (const qsizetype at = qce::bracketNearCursor(rope, sel.head, m_autoClosePairs); at >= 0)
+        pair = qce::findMatchingBracket(rope, at, m_autoClosePairs);
+      cached = m_bracketCache.insert(sel.head, pair);
+    }
+    if (cached->valid()) {
+      mark(cached->open);
+      mark(cached->close);
+    }
+  }
+}
+
 CodeEditor::RenderStats CodeEditor::renderStats() const {
   return {m_layouts.stats().created, m_layouts.stats().hits, m_layouts.size(), m_plan.size(),
           m_polishCalls,             m_polishNs,                m_polishMaxNs,   m_sceneStats};
@@ -2178,6 +2250,7 @@ void CodeEditor::onDocumentReset() {
   updateUndoState();
   m_lastLineCount = lineCount();
   m_layouts.clear();
+  m_bracketCache.clear();
   m_maxLineWidth = 0;
   emit lineCountChanged();
   updateContentSize();
@@ -2187,6 +2260,7 @@ void CodeEditor::onDocumentReset() {
 
 void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
   hidePopup();
+  m_bracketCache.clear();
   const qsizetype first = change.startPos.line;
   m_layouts.invalidate(first, change.oldEndPos.line - first + 1, change.newEndPos.line - first + 1);
   if (const qsizetype count = lineCount(); count != m_lastLineCount) {
