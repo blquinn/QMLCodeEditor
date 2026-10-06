@@ -294,7 +294,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [x] **DIAG-01** Decoration API with anchored ranges — done 2026-10-05 (7cd058e)
   - Kinds: underline, squiggle, background, gutter icon, end-of-line virtual text. Ranges survive edits ([ADR 0006](docs/adr/0006-anchored-decorations.md), [ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
   - Squiggle spans are built here and drawn by DIAG-02; inline virtual text is DIAG-06.
-- [x] **DIAG-02** Squiggle rendering — done 2026-10-05
+- [x] **DIAG-02** Squiggle rendering — done 2026-10-05 (09c06f8)
   - Custom `QSGMaterial`, or a tiled geometry fallback; correct across wrapped rows.
   - Done as the fallback: a pre-rendered wave strip per color in pooled image nodes, which every backend (software included) draws the same ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)); the material is DIAG-07.
 - [ ] **DIAG-03** LSP-shaped diagnostic model
