@@ -87,7 +87,7 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   m_hoverTimer.setInterval(500);
   connect(&m_hoverTimer, &QTimer::timeout, this, &CodeEditor::onHoverTimer);
   m_popupGrace.setSingleShot(true);
-  m_popupGrace.setInterval(250);
+  m_popupGrace.setInterval(350);
   connect(&m_popupGrace, &QTimer::timeout, this, [this] {
     // A popup with the keyboard focus holds a selection someone may be copying: it stays.
     if (!m_popupHovered && !popupHasFocus())
@@ -1721,7 +1721,7 @@ QQmlComponent *CodeEditor::popupComponent() {
 
 QList<qce::Diagnostic> CodeEditor::diagnosticsFor(const HoverTarget &target) const {
   if (target.kind == HoverTarget::Text)
-    return m_diagnostics.at(target.value);
+    return m_diagnostics.at(target.offset);
   if (target.kind == HoverTarget::Line) {
     const qce::Rope &rope = m_document.rope();
     QList<qce::Diagnostic> list = m_diagnostics.inRange(rope.lineStart(target.value), rope.lineEnd(target.value));
@@ -1735,10 +1735,10 @@ QList<qce::Diagnostic> CodeEditor::diagnosticsFor(const HoverTarget &target) con
 // edge of its first row.
 QRectF CodeEditor::anchorFor(const HoverTarget &target) {
   if (target.kind == HoverTarget::Text)
-    return rectForPosition(target.value);
+    return rectForPosition(target.offset);
   const qreal lh = m_metrics.lineHeight();
   const qsizetype row = m_map.firstRowOfLine(target.value);
-  return QRectF(m_gutterWidth, qreal(row) * lh - m_contentY, 1, lh);
+  return QRectF(target.anchorX, qreal(row) * lh - m_contentY, 1, lh);
 }
 
 bool CodeEditor::showPopup(const HoverTarget &target) {
@@ -1785,7 +1785,14 @@ bool CodeEditor::popupHasFocus() const {
 }
 
 bool CodeEditor::showDiagnosticsAt(qsizetype offset) {
-  return showPopup({HoverTarget::Text, offset});
+  const QList<qce::Diagnostic> found = m_diagnostics.at(offset);
+  if (found.isEmpty())
+    return false;
+  HoverTarget target;
+  target.kind = HoverTarget::Text;
+  target.value = m_document.rope().offsetAt(found.first().start);
+  target.offset = offset;
+  return showPopup(target);
 }
 
 void CodeEditor::hidePopup() {
@@ -1827,8 +1834,9 @@ CodeEditor::HoverTarget CodeEditor::popupTargetAt(const QPointF &pos) {
     return {};
   const qce::DisplayRow displayRow = m_map.rowAt(row);
   if (pos.x() < m_gutterWidth)
-    return qobject_cast<qce::DecorationColumn *>(columnAt(pos.x())) ? HoverTarget{HoverTarget::Line, displayRow.line}
-                                                                      : HoverTarget{};
+    return qobject_cast<qce::DecorationColumn *>(columnAt(pos.x()))
+             ? HoverTarget{HoverTarget::Line, displayRow.line, -1, m_gutterWidth}
+             : HoverTarget{};
   const qce::TextSnapshot snapshot = m_document.snapshot();
   const auto layout = layoutForRow(displayRow, snapshot);
   const qreal x = pos.x() - m_gutterWidth + m_contentX;
@@ -1838,10 +1846,16 @@ CodeEditor::HoverTarget CodeEditor::popupTargetAt(const QPointF &pos) {
     // Cells run from one boundary to the next, so the boundary nearest half a cell to the left is the
     // start of the character under the pointer.
     const qsizetype column = qMax(displayRow.startColumn, columnForX(*layout, x - m_metrics.cellAdvance() / 2));
-    return {HoverTarget::Text, snapshot.rope().offsetAt({displayRow.line, column})};
+    const qsizetype offset = snapshot.rope().offsetAt({displayRow.line, column});
+    // Text with no diagnostic on it is nothing to show a popup for, and the way to a popup crosses it.
+    const QList<qce::Diagnostic> found = m_diagnostics.at(offset);
+    if (found.isEmpty())
+      return {};
+    return {HoverTarget::Text, snapshot.rope().offsetAt(found.first().start), offset, 0};
   }
-  if (displayRow.isLast() && x < layout->indentX + layout->fullWidth)
-    return {HoverTarget::Line, displayRow.line};
+  // The end-of-line message: the popup hangs from where the pointer is, so it is on the way down.
+  if (displayRow.isLast() && x < layout->indentX + layout->fullWidth && m_diagnostics.count() > 0)
+    return {HoverTarget::Line, displayRow.line, -1, pos.x()};
   return {};
 }
 
