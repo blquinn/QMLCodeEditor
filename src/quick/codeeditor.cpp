@@ -89,7 +89,8 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   m_popupGrace.setSingleShot(true);
   m_popupGrace.setInterval(250);
   connect(&m_popupGrace, &QTimer::timeout, this, [this] {
-    if (!m_popupHovered)
+    // A popup with the keyboard focus holds a selection someone may be copying: it stays.
+    if (!m_popupHovered && !popupHasFocus())
       hidePopup();
   });
   m_autoScrollTimer.setInterval(30);
@@ -1327,7 +1328,8 @@ void CodeEditor::focusOutEvent(QFocusEvent *event) {
   m_handler->reset();
   m_document.breakUndoCoalescing();
   endDrag();
-  hidePopup();
+  if (!popupHasFocus()) // focus moving into the popup (to select its text) must not close it
+    hidePopup();
   restartBlink(); // stops the timer
   update();
 }
@@ -1775,6 +1777,11 @@ bool CodeEditor::showPopup(const HoverTarget &target) {
   m_popupHovered = false;
   emit popupVisibleChanged();
   return true;
+}
+
+bool CodeEditor::popupHasFocus() const {
+  QQuickItem *focused = window() ? window()->activeFocusItem() : nullptr;
+  return m_popup && focused && (focused == m_popup.data() || m_popup->isAncestorOf(focused));
 }
 
 bool CodeEditor::showDiagnosticsAt(qsizetype offset) {
