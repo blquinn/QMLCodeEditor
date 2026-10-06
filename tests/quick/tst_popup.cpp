@@ -211,6 +211,33 @@ private slots:
     QVERIFY(editor->popupVisible());
   }
 
+  void approachingThePopupFromTheLeftOrDiagonallyKeepsIt() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("let b = oops;\nsecond line here\nthird"));
+    editor->setDiagnostics(QVariantList{lsp(0, 8, 12, 1, "oops is not defined")});
+    editor->setDiagnosticMessages(CodeEditor::EndOfLineMessages);
+    const qreal cell = editor->metrics().cellAdvance();
+    const int lh = int(editor->metrics().lineHeight());
+    QTRY_VERIFY(editor->contentWidth() > 20 * cell);
+    // From the squiggle's first character, and from the message's first, move down and to the left
+    // of where the popup starts, onto text that has no diagnostic, and rest there.
+    for (const int column : {8, 17}) {
+      QTest::mouseMove(view.get(), charCenter(editor, 0, column));
+      QTRY_VERIFY(editor->popupVisible());
+      QQuickItem *popup = popupItem(view.get());
+      QVERIFY(popup);
+      const QPoint nearLeft(int(popup->x()) - 8, int(popup->y()) + lh / 2);
+      QTest::mouseMove(view.get(), QPoint((nearLeft.x() + charCenter(editor, 0, column).x()) / 2, lh));
+      QTest::mouseMove(view.get(), nearLeft);
+      QTest::qWait(700);
+      QVERIFY2(editor->popupVisible(), qPrintable(QStringLiteral("column %1").arg(column)));
+      QCOMPARE(popupItem(view.get()), popup);
+      // Far away still closes it.
+      QTest::mouseMove(view.get(), QPoint(380, 190));
+      QTRY_VERIFY_WITH_TIMEOUT(!editor->popupVisible(), 2000);
+    }
+  }
+
   void thePopupFlipsAboveNearTheBottomOfTheWindow() {
     auto [view, editor] = showEditor(100, 400);
     QString text;

@@ -590,6 +590,7 @@ private:
   QQmlComponent *m_defaultPopup = nullptr;
   QPointer<QQuickItem> m_popup;
   HoverTarget m_popupTarget, m_pendingTarget;
+  QRectF m_popupAnchor; // what the popup hangs from, in item coordinates
   QTimer m_hoverTimer, m_popupGrace;
   bool m_popupHovered = false;
   bool m_diagnosticPopups = true;
