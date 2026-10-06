@@ -4,6 +4,8 @@
 #include "core/indentation.h"
 #include "core/folding.h"
 #include "core/textboundaries.h"
+#include "quick/decorationcolumn.h"
+#include "quick/popupplacement.h"
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QtCore/QFutureWatcher>
@@ -18,6 +20,8 @@
 #include <QtGui/QTextOption>
 #include <QtCore/QPointF>
 
+#include <QtQml/QQmlContext>
+#include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickWindow>
 #include <QtQuick/QSGRectangleNode>
 #include <QtCore/QElapsedTimer>
@@ -79,6 +83,15 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
   setCursor(Qt::IBeamCursor);
   setAcceptHoverEvents(true);
+  m_hoverTimer.setSingleShot(true);
+  m_hoverTimer.setInterval(500);
+  connect(&m_hoverTimer, &QTimer::timeout, this, &CodeEditor::onHoverTimer);
+  m_popupGrace.setSingleShot(true);
+  m_popupGrace.setInterval(250);
+  connect(&m_popupGrace, &QTimer::timeout, this, [this] {
+    if (!m_popupHovered)
+      hidePopup();
+  });
   m_autoScrollTimer.setInterval(30);
   connect(&m_autoScrollTimer, &QTimer::timeout, this, &CodeEditor::autoScrollDrag);
   m_cursorLayout = std::make_unique<EditorLayout>(this);
@@ -140,6 +153,8 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
 }
 
 CodeEditor::~CodeEditor() {
+  if (m_popup)
+    delete m_popup.data(); // lives under the window's content item, not under us
   m_highlighter->detach(); // it may outlive the document that is about to go
   // Columns may outlive the editor (QML owns them); they must let go of the document and items first.
   const QList<qce::GutterColumn *> columns = m_columns;
@@ -667,6 +682,7 @@ void CodeEditor::afterCommand() {
 }
 
 void CodeEditor::keyPressEvent(QKeyEvent *event) {
+  hidePopup();
   qce::EditContext ctx = editContext();
   if (m_handler->keyPress(event, ctx, *m_host)) {
     event->accept();
@@ -771,9 +787,11 @@ void CodeEditor::updateHover(const QPointF &pos) {
   if (shape != cursor().shape())
     setCursor(shape);
   m_cursorInGutter = inGutter;
+  updatePopupHover(pos);
 }
 
 void CodeEditor::handlePress(QMouseEvent *event, bool doubleClick) {
+  hidePopup();
   if (event->position().x() < m_gutterWidth) {
     handleGutterPress(event, doubleClick);
     return;
@@ -1303,6 +1321,7 @@ void CodeEditor::focusOutEvent(QFocusEvent *event) {
   m_handler->reset();
   m_document.breakUndoCoalescing();
   endDrag();
+  hidePopup();
   restartBlink(); // stops the timer
   update();
 }
@@ -1312,6 +1331,7 @@ void CodeEditor::setContentX(qreal x) {
   if (x == m_contentX)
     return;
   m_contentX = x;
+  hidePopup();
   emit contentXChanged();
   invalidatePlan(); // the current-line highlight spans the visible columns
 }
@@ -1321,6 +1341,7 @@ void CodeEditor::setContentY(qreal y) {
   if (y == m_contentY)
     return;
   m_contentY = y;
+  hidePopup();
   if (!m_reanchoring)
     captureAnchor();
   emit contentYChanged();
@@ -1657,6 +1678,203 @@ void CodeEditor::buildFoldChips() {
   }
 }
 
+// Popups -------------------------------------------------------------------------------------
+
+void CodeEditor::setPopupDelegate(QQmlComponent *delegate) {
+  if (delegate == m_popupDelegate)
+    return;
+  hidePopup();
+  m_popupDelegate = delegate;
+  emit popupDelegateChanged();
+}
+
+void CodeEditor::setDiagnosticPopups(bool enable) {
+  if (enable == m_diagnosticPopups)
+    return;
+  m_diagnosticPopups = enable;
+  if (!enable)
+    hidePopup();
+  emit diagnosticPopupsChanged();
+}
+
+void CodeEditor::setHoverDelay(int ms) {
+  ms = qMax(0, ms);
+  if (ms == m_hoverTimer.interval())
+    return;
+  m_hoverTimer.setInterval(ms);
+  emit hoverDelayChanged();
+}
+
+QQmlComponent *CodeEditor::popupComponent() {
+  if (m_popupDelegate)
+    return m_popupDelegate;
+  if (!m_defaultPopup) {
+    QQmlEngine *engine = qmlEngine(this);
+    if (!engine)
+      return nullptr; // an editor made in C++ with no engine has no default popup
+    m_defaultPopup = new QQmlComponent(engine, QUrl(u"qrc:/qt/qml/me/blq/qmlcodeeditor/DiagnosticPopup.qml"_s), this);
+    if (m_defaultPopup->isError())
+      qWarning() << m_defaultPopup->errors();
+  }
+  return m_defaultPopup;
+}
+
+QList<qce::Diagnostic> CodeEditor::diagnosticsFor(const HoverTarget &target) const {
+  if (target.kind == HoverTarget::Text)
+    return m_diagnostics.at(target.value);
+  if (target.kind == HoverTarget::Line) {
+    const qce::Rope &rope = m_document.rope();
+    QList<qce::Diagnostic> list = m_diagnostics.inRange(rope.lineStart(target.value), rope.lineEnd(target.value));
+    std::stable_sort(list.begin(), list.end(), [](const auto &a, const auto &b) { return a.severity < b.severity; });
+    return list;
+  }
+  return {};
+}
+
+// Where the popup hangs from, in item coordinates: the character cell, or for a whole line the left
+// edge of its first row.
+QRectF CodeEditor::anchorFor(const HoverTarget &target) {
+  if (target.kind == HoverTarget::Text)
+    return rectForPosition(target.value);
+  const qreal lh = m_metrics.lineHeight();
+  const qsizetype row = m_map.firstRowOfLine(target.value);
+  return QRectF(m_gutterWidth, qreal(row) * lh - m_contentY, 1, lh);
+}
+
+bool CodeEditor::showPopup(const HoverTarget &target) {
+  hidePopup();
+  const QList<qce::Diagnostic> diagnostics = diagnosticsFor(target);
+  QQmlComponent *component = popupComponent();
+  if (diagnostics.isEmpty() || !component || !window())
+    return false;
+  QVariantList list;
+  for (const qce::Diagnostic &d : diagnostics)
+    list.append(d.toLsp());
+  QObject *object = component->createWithInitialProperties(
+    {{u"diagnostics"_s, list}, {u"editor"_s, QVariant::fromValue(this)}}, qmlContext(this)
+  );
+  auto *item = qobject_cast<QQuickItem *>(object);
+  if (!item) {
+    if (component->isError())
+      qWarning() << component->errors();
+    delete object;
+    return false;
+  }
+  QQuickItem *root = window()->contentItem();
+  item->setParentItem(root);
+  item->setZ(1e6);
+  item->setAcceptHoverEvents(true);
+  item->installEventFilter(this);
+  // The delegate sizes itself, or leaves it to its implicit size.
+  if (item->width() <= 0)
+    item->setWidth(item->implicitWidth());
+  if (item->height() <= 0)
+    item->setHeight(item->implicitHeight());
+  const QRectF bounds(QPointF(0, 0), root->size());
+  item->setPosition(qce::placePopup(mapRectToItem(root, anchorFor(target)), item->size(), bounds));
+  m_popup = item;
+  m_popupTarget = target;
+  m_popupHovered = false;
+  emit popupVisibleChanged();
+  return true;
+}
+
+bool CodeEditor::showDiagnosticsAt(qsizetype offset) {
+  return showPopup({HoverTarget::Text, offset});
+}
+
+void CodeEditor::hidePopup() {
+  m_hoverTimer.stop();
+  m_popupGrace.stop();
+  m_popupTarget = {};
+  m_popupHovered = false;
+  if (!m_popup)
+    return;
+  QQuickItem *item = m_popup;
+  m_popup.clear();
+  item->removeEventFilter(this);
+  item->setVisible(false);
+  item->setParentItem(nullptr); // gone from the scene now, deleted when the event loop gets to it
+  item->deleteLater();
+  emit popupVisibleChanged();
+}
+
+bool CodeEditor::eventFilter(QObject *watched, QEvent *event) {
+  if (m_popup && watched == m_popup.data()) {
+    if (event->type() == QEvent::HoverEnter) {
+      m_popupHovered = true;
+      m_popupGrace.stop();
+    } else if (event->type() == QEvent::HoverLeave) {
+      m_popupHovered = false;
+      m_popupGrace.start();
+    }
+  }
+  return QQuickItem::eventFilter(watched, event);
+}
+
+// What a popup could be about at `pos`: the character under the pointer, or the line of a gutter icon
+// or of the end-of-line message the pointer is on.
+CodeEditor::HoverTarget CodeEditor::popupTargetAt(const QPointF &pos) {
+  if (pos.x() < 0 || pos.y() < 0 || pos.x() >= width() || pos.y() >= height())
+    return {};
+  const qsizetype row = qsizetype(std::floor((pos.y() + m_contentY) / m_metrics.lineHeight()));
+  if (row < 0 || row >= m_map.rowCount())
+    return {};
+  const qce::DisplayRow displayRow = m_map.rowAt(row);
+  if (pos.x() < m_gutterWidth)
+    return qobject_cast<qce::DecorationColumn *>(columnAt(pos.x())) ? HoverTarget{HoverTarget::Line, displayRow.line}
+                                                                      : HoverTarget{};
+  const qce::TextSnapshot snapshot = m_document.snapshot();
+  const auto layout = layoutForRow(displayRow, snapshot);
+  const qreal x = pos.x() - m_gutterWidth + m_contentX;
+  if (x < layout->indentX)
+    return {};
+  if (x < layout->indentX + layout->width) {
+    // Cells run from one boundary to the next, so the boundary nearest half a cell to the left is the
+    // start of the character under the pointer.
+    const qsizetype column = qMax(displayRow.startColumn, columnForX(*layout, x - m_metrics.cellAdvance() / 2));
+    return {HoverTarget::Text, snapshot.rope().offsetAt({displayRow.line, column})};
+  }
+  if (displayRow.isLast() && x < layout->indentX + layout->fullWidth)
+    return {HoverTarget::Line, displayRow.line};
+  return {};
+}
+
+void CodeEditor::updatePopupHover(const QPointF &pos) {
+  if (!m_diagnosticPopups || (m_diagnostics.count() == 0 && !m_popup))
+    return;
+  if (m_popup && window()) {
+    // The pointer over the popup itself keeps it open, whatever lies under it.
+    QQuickItem *root = window()->contentItem();
+    if (m_popup->boundingRect().contains(m_popup->mapFromItem(root, mapToItem(root, pos)))) {
+      m_popupGrace.stop();
+      return;
+    }
+  }
+  const HoverTarget target = popupTargetAt(pos);
+  if (m_popup && target == m_popupTarget) {
+    m_popupGrace.stop();
+    return;
+  }
+  if (target.kind == HoverTarget::None) {
+    m_hoverTimer.stop();
+    m_pendingTarget = {};
+    if (m_popup && !m_popupHovered && !m_popupGrace.isActive())
+      m_popupGrace.start();
+    return;
+  }
+  if (target == m_pendingTarget && m_hoverTimer.isActive())
+    return;
+  hidePopup(); // the pointer moved on to something else
+  m_pendingTarget = target;
+  m_hoverTimer.start();
+}
+
+void CodeEditor::onHoverTimer() {
+  if (m_pendingTarget.kind != HoverTarget::None)
+    showPopup(m_pendingTarget);
+}
+
 // Decorations --------------------------------------------------------------------------------
 
 static_assert(int(CodeEditor::Underline) == int(qce::DecorationKind::Underline));
@@ -1725,8 +1943,11 @@ bool CodeEditor::gotoDiagnostic(bool forward, int leastSevere) {
   if (!found)
     return false;
   // A cursor placed in folded text opens the fold (revealCursor); select() does not scroll.
-  setCursorPosition(m_document.rope().offsetAt(found->start));
+  const qsizetype offset = m_document.rope().offsetAt(found->start);
+  setCursorPosition(offset);
   ensureCursorVisible();
+  if (m_diagnosticPopups)
+    showDiagnosticsAt(offset);
   return true;
 }
 
@@ -1740,6 +1961,7 @@ void CodeEditor::setDiagnosticMessages(DiagnosticMessages messages) {
 void CodeEditor::onDecorationsChanged(qsizetype firstLine, qsizetype lastLine, quint32 kinds) {
   // Virtual text is part of a row's layout, so the rows it was added to or removed from are laid out
   // again; the rest only changes what is drawn over them.
+  hidePopup(); // what it shows may be gone
   constexpr quint32 inLayout =
     qce::decorationKindBit(qce::DecorationKind::EndOfLineText) | qce::decorationKindBit(qce::DecorationKind::InlineText);
   if (kinds & inLayout) {
@@ -1910,6 +2132,7 @@ void CodeEditor::onDocumentReset() {
 }
 
 void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
+  hidePopup();
   const qsizetype first = change.startPos.line;
   m_layouts.invalidate(first, change.oldEndPos.line - first + 1, change.newEndPos.line - first + 1);
   if (const qsizetype count = lineCount(); count != m_lastLineCount) {
