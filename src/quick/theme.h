@@ -42,6 +42,7 @@ class Theme : public QObject {
   Q_PROPERTY(QColor virtualText MEMBER m_virtualText NOTIFY changed)
   Q_PROPERTY(QColor inlayHint MEMBER m_inlayHint NOTIFY changed)
   Q_PROPERTY(QColor inlayHintBackground MEMBER m_inlayHintBackground NOTIFY changed)
+  Q_PROPERTY(QColor bracketMatch MEMBER m_bracketMatch NOTIFY changed)
   // Style name -> { color, bold, italic }; names are the TokenStyle names from core/highlighter.h
   // in lower case ("keyword", "string", ...). Unlisted styles use the foreground color.
   Q_PROPERTY(QVariantMap tokenStyles READ tokenStyles WRITE setTokenStyles NOTIFY changed)
@@ -75,6 +76,7 @@ public:
   QColor virtualText() const { return m_virtualText; }
   QColor inlayHint() const { return m_inlayHint; }
   QColor inlayHintBackground() const { return m_inlayHintBackground; }
+  QColor bracketMatch() const { return m_bracketMatch; }
   // The color for a decoration severity (qce::DecorationSeverity, LSP numbering); the foreground for none.
   Q_INVOKABLE QColor severityColor(int severity) const;
 
@@ -121,6 +123,7 @@ private:
   QColor m_virtualText{0x7a, 0x7a, 0x7a};
   QColor m_inlayHint{0x8b, 0x94, 0x9f};
   QColor m_inlayHintBackground{0x40, 0x44, 0x4a, 0x80};
+  QColor m_bracketMatch{0x4a, 0x50, 0x58, 0xa0};
   void rebuildFormats();
 
   QVariantMap m_tokenStyles;

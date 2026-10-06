@@ -339,6 +339,7 @@ int main(int argc, char **argv) {
      QStringLiteral("600")}
   );
   parser.addOption({QStringLiteral("quick"), QStringLiteral("Small input and few frames (smoke test).")});
+  parser.addOption({QStringLiteral("no-brackets"), QStringLiteral("Turn matching bracket highlighting off (the baseline).")});
   parser.addOption({QStringLiteral("gutter"), QStringLiteral("Show line numbers, change bars and markers.")});
   parser.addOption({QStringLiteral("relative"), QStringLiteral("With --gutter: relative line numbers.")});
   parser.addOption({QStringLiteral("wrap"), QStringLiteral("Wrap at the viewport width.")});
@@ -385,6 +386,7 @@ int main(int argc, char **argv) {
   auto *editor = new CodeEditor(view.contentItem());
   editor->setSize(QSizeF(1280, 800));
   editor->setCursorBlinkInterval(0); // blink repaints would add frames the scroll didn't ask for
+  editor->setMatchBrackets(!parser.isSet(QStringLiteral("no-brackets")));
   QString variant;
   qce::MarkerColumn *markers = nullptr;
   if (parser.isSet(QStringLiteral("gutter"))) {

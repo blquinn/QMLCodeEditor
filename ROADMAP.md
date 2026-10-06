@@ -353,12 +353,17 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **API-04** Find/replace
   - Incremental search with regex, match highlighting, replace all as one transaction; runs on rope snapshots in a worker thread.
 - [ ] **API-05** Go-to-definition and find-references request signals
-- [ ] **API-06** Matching bracket highlight (auto-pairing is INPUT-13)
+- [~] **API-06** Matching bracket highlight (auto-pairing is INPUT-13)
+  - `matchBrackets` property (default on); the bracket next to each visible cursor and its partner get a background (`bracketMatch` theme color), with soft wrap and folds.
+  - Raw-text match over the `autoClosePairs` that differ at both ends, scan bounded so a stray bracket in a huge file stays cheap; strings and comments are not recognised (API-10).
+  - Benchmark: worst-case scan, typing and scroll with the highlight on and off.
 - [ ] **API-07** Accessibility basics
   - Screen-reader text and cursor exposure through `QAccessible`.
 - [ ] **API-08** Documented QML API
   - qdoc/markdown reference for all properties, signals and methods.
 - [ ] **API-09** Code actions and quick-fix hooks
+- [ ] **API-10** Bracket matching that skips strings and comments
+  - Ask the tree-sitter tree for the bracket's partner (sibling bracket nodes under the same parent) instead of scanning, without moving the parse window; fall back to the raw scan outside the parsed range.
 
 ## M12 — Performance hardening
 

@@ -233,6 +233,12 @@ ApplicationWindow {
                 checked: editor.autoClose
                 onToggled: editor.autoClose = checked
             }
+            MenuItem {
+                text: qsTr("Highlight matching brackets")
+                checkable: true
+                checked: editor.matchBrackets
+                onToggled: editor.matchBrackets = checked
+            }
             MenuSeparator {}
             MenuSpin {
                 label: qsTr("Indent width")
