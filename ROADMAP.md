@@ -353,7 +353,7 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **API-04** Find/replace
   - Incremental search with regex, match highlighting, replace all as one transaction; runs on rope snapshots in a worker thread.
 - [ ] **API-05** Go-to-definition and find-references request signals
-- [~] **API-06** Matching bracket highlight (auto-pairing is INPUT-13)
+- [x] **API-06** Matching bracket highlight (auto-pairing is INPUT-13) — done 2026-10-06 (8f0656d)
   - `matchBrackets` property (default on); the bracket next to each visible cursor and its partner get a background (`bracketMatch` theme color), with soft wrap and folds.
   - Raw-text match over the `autoClosePairs` that differ at both ends, scan bounded so a stray bracket in a huge file stays cheap; strings and comments are not recognised (API-10).
   - Benchmark: worst-case scan, typing and scroll with the highlight on and off.
