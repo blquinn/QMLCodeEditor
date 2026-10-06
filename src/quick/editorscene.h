@@ -211,15 +211,22 @@ private:
   class ImageBatch {
   public:
     explicit ImageBatch(QQuickWindow *window) : m_window(window), m_group(new QSGNode) {}
+    ~ImageBatch();
     QSGNode *node() const { return m_group; }
     void update(const QList<GutterImage> &images, qreal lineHeight, qsizetype originRow);
 
   private:
+    // One texture per distinct image (by cache key), shared by every node showing it: icons repeat
+    // down the gutter, so scrolling moves them between nodes without uploading anything, and the
+    // renderer can batch nodes that share a texture.
+    QSGTexture *textureFor(const QImage &image);
+
     QQuickWindow *m_window;
     QSGNode *m_group;
     QList<QSGImageNode *> m_nodes;
     QList<QRectF> m_rects;
     QList<qint64> m_keys;
+    std::unordered_map<qint64, QSGTexture *> m_textures;
   };
   // Squiggles (ADR 0016): a pre-rendered wave strip per color, drawn with pooled image nodes whose
   // source rectangle starts at the span's phase, so the wave is continuous across spans and rows and

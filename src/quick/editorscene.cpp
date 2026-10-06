@@ -229,21 +229,36 @@ void EditorScene::SquiggleBatch::update(const QList<ColoredSpan> &spans, qreal l
   }
 }
 
+EditorScene::ImageBatch::~ImageBatch() {
+  // Nodes belong to the tree; the textures are ours.
+  for (auto &[key, texture] : m_textures)
+    delete texture;
+}
+
+QSGTexture *EditorScene::ImageBatch::textureFor(const QImage &image) {
+  const qint64 key = image.cacheKey();
+  if (const auto it = m_textures.find(key); it != m_textures.end())
+    return it->second;
+  return m_textures.emplace(key, m_window->createTextureFromImage(image)).first->second;
+}
+
 void EditorScene::ImageBatch::update(const QList<GutterImage> &images, qreal lh, qsizetype originRow) {
   while (m_nodes.size() > images.size()) {
     delete m_nodes.takeLast();
     m_keys.removeLast();
     m_rects.removeLast();
   }
+  std::unordered_map<qint64, bool> used;
   for (qsizetype i = 0; i < images.size(); ++i) {
     const GutterImage &image = images[i];
     const QRectF rect = image.rect.translated(0, double(image.row - originRow) * lh);
+    used[image.image.cacheKey()] = true;
     if (i >= m_nodes.size()) {
       // A node needs its texture and rectangle before it joins the tree: the software renderer
       // reads both when it first sees the node.
       QSGImageNode *node = m_window->createImageNode();
-      node->setTexture(m_window->createTextureFromImage(image.image));
-      node->setOwnsTexture(true);
+      node->setTexture(textureFor(image.image));
+      node->setOwnsTexture(false);
       node->setRect(rect);
       m_group->appendChildNode(node);
       m_nodes.append(node);
@@ -252,12 +267,24 @@ void EditorScene::ImageBatch::update(const QList<GutterImage> &images, qreal lh,
       continue;
     }
     if (m_keys[i] != image.image.cacheKey()) {
-      m_nodes[i]->setTexture(m_window->createTextureFromImage(image.image));
+      m_nodes[i]->setTexture(textureFor(image.image));
       m_keys[i] = image.image.cacheKey();
     }
     if (m_rects[i] != rect) {
       m_nodes[i]->setRect(rect);
       m_rects[i] = rect;
+    }
+  }
+  // Images that nothing shows any more (a theme change makes new ones): every node now points at a
+  // texture used this frame, so the rest can go.
+  if (m_textures.size() > 32) {
+    for (auto it = m_textures.begin(); it != m_textures.end();) {
+      if (used.count(it->first)) {
+        ++it;
+      } else {
+        delete it->second;
+        it = m_textures.erase(it);
+      }
     }
   }
 }

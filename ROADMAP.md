@@ -289,7 +289,7 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 ## M9 — Diagnostics & decorations
 
-**Exit criteria:** a host can push 100k diagnostics and the editor stays at 120 fps; squiggles, gutter icons and end-of-line messages render correctly with wrap and folds; hovering a diagnostic shows a QML popup.
+**Exit criteria (demonstrated 2026-10-05: tests tst_decorationset, tst_diagnostics, tst_decorations, tst_popup, tst_inlay, tst_wrapmap, tst_input; ADR 0016 benchmarks: 100k diagnostics (spread, dense, dense with wrap) scroll a 100 MB file at the 144 Hz display's rate with at most 1.8% dropped frames, one push takes about 130 ms; hands-on mouse use in a real window not done, scrolling with folds and diagnostics together and keystroke-to-frame with diagnostics not measured on the GPU because the display went away mid-session):** a host can push 100k diagnostics and the editor stays at 120 fps; squiggles, gutter icons and end-of-line messages render correctly with wrap and folds; hovering a diagnostic shows a QML popup.
 
 - [x] **DIAG-01** Decoration API with anchored ranges — done 2026-10-05 (7cd058e)
   - Kinds: underline, squiggle, background, gutter icon, end-of-line virtual text. Ranges survive edits ([ADR 0006](docs/adr/0006-anchored-decorations.md), [ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
@@ -307,6 +307,10 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 - [x] **DIAG-06** Inline virtual text and inlay hints — done 2026-10-05 (176cfa5)
   - Rendered as part of line layout so wrap and cursor movement account for them.
   - `setInlayHints` (LSP `InlayHint`) and `InlineText` decorations: injected into the row layout (a general injection list that the input-method composition now shares), widths fed to soft wrap, a pill behind each label ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
+- [x] **DIAG-08** Diagnostics benchmarks and demo — done 2026-10-05
+  - `bench_decorations` (core: 100k diagnostics set, edits, queries, hints with wrap), `--diagnostics N` and `--dense` for `bench_scroll`, `--diagnostics N` for `bench_typing`; results in `benchmarks/results/2026-10-05-diagnostics-*.json`.
+  - Demo: a Diagnostics menu (sample and 100k diagnostics, next/previous, messages, popups, icons, inlay hints), the icon column, and `--diagnostics`/`--hints` for screenshots.
+  - Found by the benchmark and fixed: gutter images share one texture per image instead of uploading one per node ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
 
 ## M10 — Vim mode
 

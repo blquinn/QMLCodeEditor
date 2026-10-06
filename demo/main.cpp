@@ -14,8 +14,11 @@ int main(int argc, char **argv) {
   // --grab <png>: save a screenshot of the window once it has settled, then exit.
   // --fold-level <n>: fold the regions of that nesting level shortly before the grab.
   // --occurrences: select every occurrence of the word at the start of the text before the grab.
+  // --diagnostics <n>: show n sample diagnostics (and with --hints some inlay hints) before the grab.
   bool smoke = false;
   int foldLevel = 0;
+  int diagnostics = 0;
+  bool hints = false;
   bool occurrences = false;
   QString grabPath;
   QUrl initialFile; // the first argument that isn't an option is a file to open
@@ -29,6 +32,10 @@ int main(int argc, char **argv) {
       occurrences = true;
     else if (args[i] == QLatin1String("--fold-level") && i + 1 < args.size())
       foldLevel = args[++i].toInt();
+    else if (args[i] == QLatin1String("--diagnostics") && i + 1 < args.size())
+      diagnostics = args[++i].toInt();
+    else if (args[i] == QLatin1String("--hints"))
+      hints = true;
     else if (!args[i].startsWith(QLatin1Char('-')) && initialFile.isEmpty())
       initialFile = QUrl::fromLocalFile(QDir::current().absoluteFilePath(args[i]));
   }
@@ -62,6 +69,14 @@ int main(int argc, char **argv) {
     QTimer::singleShot(1000, &app, [&] {
       if (QObject *editor = window->findChild<QObject *>(QStringLiteral("editor")))
         QMetaObject::invokeMethod(editor, "foldToLevel", Q_ARG(int, foldLevel));
+    });
+  }
+  if (diagnostics > 0 || hints) {
+    QTimer::singleShot(1000, &app, [&] {
+      if (diagnostics > 0)
+        QMetaObject::invokeMethod(window, "sampleDiagnostics", Q_ARG(QVariant, diagnostics));
+      if (hints)
+        QMetaObject::invokeMethod(window, "sampleHints");
     });
   }
   if (occurrences) {

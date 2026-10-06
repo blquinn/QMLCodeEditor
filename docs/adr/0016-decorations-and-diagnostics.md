@@ -1,6 +1,6 @@
 # 0016. Decorations and diagnostics: one anchored set, spans in the frame plan
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-05
 
 ## Context
@@ -60,7 +60,27 @@ M9 adds squiggles, underlines, backgrounds, gutter icons, end-of-line messages a
 
 ## Consequences
 
-- Decorations do not change the cost of a frame without them: one counter check per layout and per plan build.
+Measured on the release build (Fedora 44, Ryzen AI 9 365, Qt 6.11.2, Wayland with the GPU backend, a display refreshing every 6.94 ms). Results are in `benchmarks/results/2026-10-05-diagnostics-*.json`.
+
+- **Pushing 100k diagnostics** (2M-line text): `setDiagnostics` takes 112 ms (124 ms with end-of-line messages, which makes 300k decorations), replacing the list 117 ms, clearing it 33 ms; in the editor the push costs 127 to 157 ms of GUI thread, one stalled frame for what is in practice a rare, large publish. About 1.1 µs per diagnostic, most of it creating the four hundred thousand anchors. Typing with the 100k present costs 4.0 µs a keystroke and a line break near the top 3.1 µs (the anchors after it move as blocks). A viewport query takes 1.0 µs, the diagnostics at an offset 0.25 µs, "next diagnostic" 0.83 µs.
+- **Scrolling a 100 MB, 2M-line file with 100k diagnostics** (squiggles, gutter icons and end-of-line messages) keeps every scenario at the display period, so the editor holds the display's rate: smooth, fling, random jumps and cursor movement against a same-session baseline, as frame interval, dropped frames (over 1.5 periods) and polish time:
+
+  | | interval (ms) | dropped | polish (µs) |
+  |---|---|---|---|
+  | baseline: smooth / fling / jumps / cursor | 6.93 / 6.94 / 6.93 / 6.95 | 0.3 / 0 / 0.3 / 0.2 % | 111 / 238 / 1391 / 88 |
+  | 100k spread through the file | 6.96 / 6.95 / 6.94 / 6.95 | 0 / 0 / 0.5 / 0 % | 125 / 287 / 1614 / 98 |
+  | 100k dense (a diagnostic on every row in the middle of the file) | 6.94 / 6.95 / 6.93 / 6.96 | 0 / 0 / 1.8 / 0 % | 243 / 495 / 1553 / 211 |
+  | dense, wrapped at the window | 6.96 / 6.94 / 6.94 / 6.95 | 0 / 0 / 0.7 / 0.2 % | 315 / 557 / 1529 / 291 |
+
+  Dense is the worst case a screen can show (every row has a squiggle, an icon and a message) and costs about 130 µs of polish and 45 µs of render-thread sync a frame; run to run noise is a few percent (ADR 0012).
+- **Inlay hints with wrap** (core benchmarks, 2M lines wrapped at 30 columns): setting hints on 2,000 lines, wrapping them on the spot, takes 5.1 ms; on 100k lines 45 ms (2,000 wrapped at once, the rest marked and settled later); a row query with 100k hints costs 5.2 µs (about 2.5 µs without); a keystroke on a hinted line with wrap on 60 µs. Without wrap hints cost the map nothing.
+- **The benchmark found a cost in the gutter and fixed it.** `ImageBatch` created a texture for every new image node and re-uploaded one whenever scrolling gave a node a different image, which a column of icons does on almost every frame: dense diagnostics dropped 5% of cursor-scenario frames. Textures are now shared per image (by cache key), like the squiggle strips, so scrolling uploads nothing and equal icons batch: dense cursor-scenario drops fell from 5.0% to 0% and render-thread sync from 116 to 74 µs.
+- **Squiggles cost** about a render-thread node per span; with no diagnostics every path is as before (a counter check per layout and per plan build).
 - A text reset clears every layer, like markers do; a host that wants decorations back pushes them again.
 
-(Sections for squiggles, diagnostics, popups and inlay hints follow with their items.)
+## Not done / not measured
+
+- Hands-on mouse use in a real window. Hover, popups and the gutter icons are tested with synthetic events and looked at in screenshots on the software and GPU backends, not driven by hand.
+- Scrolling with folds and diagnostics together, and keystroke-to-frame with diagnostics, were not measured on the GPU: the display stopped presenting windows partway through the session. Both were run on the offscreen software backend as a functional check (they complete, no stalls) and the benchmark options (`bench_scroll --gutter --folds --diagnostics N`, `bench_typing --diagnostics N`) are there to run when a display is available. The core numbers above cover the edit costs.
+- Diagnostic tags (fading, strike-through), hover or click on a hint, a tooltip for hints, and hints on very long lines beyond the rows asked for.
+- A bulk anchor creation (`AnchorSet::createSorted`) would make the 100k push cheaper; not worth doing until a host pushes that much often.

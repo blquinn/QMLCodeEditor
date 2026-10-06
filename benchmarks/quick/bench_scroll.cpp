@@ -3,12 +3,14 @@
 // much layout and node churn scrolling causes, and memory growth.
 //
 //   bench_scroll [--json out.json] [--frames N] [--quick] [--filter REGEX] [--gutter] [--relative] [--wrap]
-//                [--folds]
+//                [--folds] [--diagnostics N] [--dense]
 //
 // --gutter adds line numbers, a change column and a marker column (M5); --relative makes the numbers
 // relative to the cursor; --wrap wraps at the viewport. The "cursor" scenarios move the cursor one line per
 // frame, which renumbers every row in relative mode. --folds folds 20,000 regions spread through the file
-// (M7) once it is open; with --gutter the fold column joins the others.
+// (M7) once it is open; with --gutter the fold column joins the others. --diagnostics N pushes N diagnostics
+// (squiggles, gutter icons and end-of-line messages, M9) once the file is open, spread through the whole file
+// or, with --dense, one per line in the stretch around the middle where scrolling happens.
 //
 // Inputs are generated once into $QCE_BENCH_DIR (default: the system temp dir) and reused. Run from a release
 // build on a real display for meaningful numbers; --quick uses a small file and few frames (the ctest smoke
@@ -17,6 +19,7 @@
 #include "datagen.h"
 #include "frametimer.h"
 #include "quick/changecolumn.h"
+#include "quick/decorationcolumn.h"
 #include "quick/foldcolumn.h"
 #include "quick/codeeditor.h"
 #include "quick/linenumbercolumn.h"
@@ -345,6 +348,11 @@ int main(int argc, char **argv) {
   );
   parser.addOption({QStringLiteral("folds"), QStringLiteral("Fold 20,000 regions spread through the file.")});
   parser.addOption(
+    {QStringLiteral("diagnostics"), QStringLiteral("Show N diagnostics (squiggles, icons, end-of-line messages)."),
+     QStringLiteral("n"), QStringLiteral("0")}
+  );
+  parser.addOption({QStringLiteral("dense"), QStringLiteral("With --diagnostics: one per line around the middle of the file.")});
+  parser.addOption(
     {{QStringLiteral("f"), QStringLiteral("filter")},
      QStringLiteral("Only scenarios whose name matches this regex."),
      QStringLiteral("regex")}
@@ -392,6 +400,13 @@ int main(int argc, char **argv) {
     variant += QStringLiteral("gutter/");
   }
   const bool folds = parser.isSet(QStringLiteral("folds"));
+  const int diagnostics = parser.value(QStringLiteral("diagnostics")).toInt();
+  const bool dense = parser.isSet(QStringLiteral("dense"));
+  if (diagnostics > 0) {
+    editor->addGutterColumn(new qce::DecorationColumn(editor));
+    editor->setDiagnosticMessages(CodeEditor::EndOfLineMessages);
+    variant += QStringLiteral("diagnostics%1%2/").arg(diagnostics).arg(dense ? QStringLiteral("dense") : QString());
+  }
   const int cursors = parser.value(QStringLiteral("cursors")).toInt();
   if (cursors > 0)
     variant += QStringLiteral("cursors%1/").arg(cursors);
@@ -431,6 +446,33 @@ int main(int argc, char **argv) {
         editor->setCursorPosition(0);
         for (int i = 1; i < cursors && i * step < lines; ++i)
           editor->addSelection(rope.lineStart(i * step), rope.lineStart(i * step));
+        editor->setContentY(0);
+      }
+      if (diagnostics > 0) {
+        const qce::Rope &rope = editor->document()->rope();
+        const qsizetype lines = editor->lineCount();
+        const qsizetype first = dense ? qMax<qsizetype>(0, lines / 2 - diagnostics / 2) : 0;
+        const qsizetype step = dense ? 1 : qMax<qsizetype>(1, lines / diagnostics);
+        QList<qce::Diagnostic> list;
+        list.reserve(diagnostics);
+        for (int i = 0; i < diagnostics; ++i) {
+          const qsizetype line = first + qsizetype(i) * step;
+          if (line >= lines)
+            break;
+          const qsizetype length = rope.lineLength(line);
+          qce::Diagnostic d;
+          d.start = {line, qMin<qsizetype>(2, length)};
+          d.end = {line, qMin<qsizetype>(6, length)};
+          d.severity = 1 + i % 4;
+          d.message = QStringLiteral("benchmark diagnostic %1").arg(i);
+          list.append(d);
+        }
+        QElapsedTimer diagnosticsTimer;
+        diagnosticsTimer.start();
+        editor->setDiagnostics(list);
+        const qint64 setNs = diagnosticsTimer.nsecsElapsed();
+        std::fprintf(stderr, "pushed %d diagnostics in %lld ms\n", int(list.size()), setNs / 1000000);
+        results << valueResult(QStringLiteral("scroll/") + variant + s.name + QStringLiteral("/diagnostics_set"), double(setNs), QStringLiteral("ns"));
         editor->setContentY(0);
       }
       if (folds) {
