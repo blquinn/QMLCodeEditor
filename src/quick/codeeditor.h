@@ -567,10 +567,16 @@ private:
   bool gotoDiagnostic(bool forward, int leastSevere);
   // What the pointer is over that a popup can be about: a character of text, or a whole line (its
   // gutter icon, its end-of-line message).
+  // Two targets are the same thing when kind and value are: `value` is where the most severe
+  // diagnostic under the pointer starts (Text) or the buffer line (Line), so moving along one
+  // diagnostic's range does not make a new target. `offset` (the character the popup hangs from, for
+  // Text) and `anchorX` (where a Line popup hangs, in item coordinates) are where it was first hit.
   struct HoverTarget {
     enum Kind : quint8 { None, Text, Line } kind = None;
-    qsizetype value = -1; // an offset for Text, a buffer line for Line
-    bool operator==(const HoverTarget &) const = default;
+    qsizetype value = -1;
+    qsizetype offset = -1;
+    qreal anchorX = 0;
+    friend bool operator==(const HoverTarget &a, const HoverTarget &b) { return a.kind == b.kind && a.value == b.value; }
   };
   HoverTarget popupTargetAt(const QPointF &pos);
   void updatePopupHover(const QPointF &pos);

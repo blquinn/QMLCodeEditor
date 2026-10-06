@@ -161,6 +161,56 @@ private slots:
     QVERIFY(editor->popupVisible());
   }
 
+  void movingAlongTheSquiggleOrOverPlainTextTowardsThePopupKeepsIt() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("let b = oops(1, 2);\nsecond line\nthird"));
+    editor->setDiagnostics(QVariantList{lsp(0, 8, 12, 1, "oops is not defined")});
+    QTest::mouseMove(view.get(), charCenter(editor, 0, 8));
+    QTRY_VERIFY(editor->popupVisible());
+    QQuickItem *popup = popupItem(view.get());
+    QVERIFY(popup);
+    const auto stillThere = [&] {
+      QTest::qWait(60);
+      return editor->popupVisible() && popupItem(view.get()) == popup;
+    };
+    // Along the diagnostic's own range: the same popup, not a new one.
+    for (int col = 9; col < 12; ++col) {
+      QTest::mouseMove(view.get(), charCenter(editor, 0, col));
+      QVERIFY2(stillThere(), qPrintable(QStringLiteral("column %1").arg(col)));
+    }
+    // Out of the range onto text with no diagnostic, on the way down to the popup: it stays through
+    // the grace period, and the pointer reaching the popup keeps it for good.
+    QTest::mouseMove(view.get(), charCenter(editor, 0, 14));
+    QVERIFY(stillThere());
+    QTest::mouseMove(view.get(), charCenter(editor, 0, 15));
+    QVERIFY(stillThere());
+    const QPoint onPopup = popup->mapToScene(QPointF(popup->width() / 2, popup->height() / 2)).toPoint();
+    QTest::mouseMove(view.get(), onPopup);
+    QTest::qWait(700);
+    QVERIFY(editor->popupVisible());
+    QCOMPARE(popupItem(view.get()), popup);
+  }
+
+  void theEndOfLineMessagePopupHangsFromThePointerAndSurvivesTheApproach() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("let b = oops;\nsecond line"));
+    editor->setDiagnostics(QVariantList{lsp(0, 8, 12, 1, "oops is not defined")});
+    editor->setDiagnosticMessages(CodeEditor::EndOfLineMessages);
+    const qreal cell = editor->metrics().cellAdvance();
+    QTRY_VERIFY(editor->contentWidth() > 20 * cell);
+    QTest::mouseMove(view.get(), charCenter(editor, 0, 20)); // inside the message
+    QTRY_VERIFY(editor->popupVisible());
+    QQuickItem *popup = popupItem(view.get());
+    QVERIFY(popup);
+    // Under the pointer, not at the left edge of the editor.
+    QVERIFY(popup->x() > 10 * cell);
+    QVERIFY(qAbs(popup->x() - 20 * cell) < 2 * cell || popup->x() + popup->width() >= editor->width() - 1);
+    // Down onto the popup: it stays.
+    QTest::mouseMove(view.get(), QPoint(int(20.5 * cell), int(editor->metrics().lineHeight() * 1.5)));
+    QTest::qWait(700);
+    QVERIFY(editor->popupVisible());
+  }
+
   void thePopupFlipsAboveNearTheBottomOfTheWindow() {
     auto [view, editor] = showEditor(100, 400);
     QString text;
