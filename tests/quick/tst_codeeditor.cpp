@@ -1015,6 +1015,117 @@ private slots:
     QCOMPARE(editor->positionAt(adv * 6 + 1, 1), 3);  // "c" is now at cells 5..6
   }
 
+  // ---- Vim mode (M10) ----
+
+  void vimModeTogglesAtRuntime() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    QVERIFY(editor->vim());
+    editor->setText(QStringLiteral("hello world"));
+    editor->setCursorPosition(0);
+    QVERIFY(!editor->vimMode());
+    QSignalSpy toggled(editor, &CodeEditor::vimModeChanged);
+    editor->setVimMode(true);
+    QVERIFY(editor->vimMode());
+    QCOMPARE(toggled.size(), 1);
+    QCOMPARE(editor->vim()->mode(), qce::VimInputHandler::Mode::Normal);
+    typeText(view.get(), "dw");
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("world"));
+    typeText(view.get(), "ihi ");
+    QCOMPARE(editor->vim()->mode(), qce::VimInputHandler::Mode::Insert);
+    QTest::keyClick(view.get(), Qt::Key_Escape);
+    QCOMPARE(editor->vim()->mode(), qce::VimInputHandler::Mode::Normal);
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("hi world"));
+    typeText(view.get(), "u"); // the whole insert is one undo step
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("world"));
+    // Back to the default keymap, mid-insert: the open insert ends and keys type again.
+    typeText(view.get(), "ix");
+    editor->setVimMode(false);
+    QVERIFY(!editor->vimMode());
+    QCOMPARE(toggled.size(), 2);
+    typeText(view.get(), "y");
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("yxworld")); // leaving vim ends the insert like <Esc>
+    QCOMPARE(editor->selectionCount(), 1);
+    editor->setVimMode(true);
+    QCOMPARE(editor->vim()->mode(), qce::VimInputHandler::Mode::Normal);
+    typeText(view.get(), "x"); // a command now, not text
+    QCOMPARE(editor->document()->rope().toString().size(), 6);
+  }
+
+  void vimInputMethodOnlyInInsertMode() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("ab"));
+    editor->setVimMode(true);
+    QVERIFY(!editor->inputMethodQuery(Qt::ImEnabled).toBool());
+    sendIme(editor, {}, QStringLiteral("x"));
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("ab"));
+    typeText(view.get(), "i");
+    QVERIFY(editor->inputMethodQuery(Qt::ImEnabled).toBool());
+    sendIme(editor, {}, QStringLiteral("日本"));
+    QTest::keyClick(view.get(), Qt::Key_Escape);
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("日本ab"));
+    typeText(view.get(), "0."); // dot repeats the committed text
+    QCOMPARE(editor->document()->rope().toString(), QStringLiteral("日本日本ab"));
+  }
+
+  void vimBlockCursorCoversTheCharacter() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("MMMMMMMMMM\nMMMMMMMMMM"));
+    QTRY_VERIFY(editor->renderStats().rowsInPlan >= 2);
+    const qreal lh = editor->metrics().lineHeight();
+    const qreal adv = editor->metrics().cellAdvance();
+    const auto *theme = editor->theme();
+    auto pixel = [&](qreal x, int row) { return view->grabWindow().pixelColor(int(x), int((row + 1) * lh) - 1); };
+    editor->setCursorPosition(4);
+    QTRY_COMPARE(pixel(adv * 4 + 1, 0), theme->cursor()); // a bar in the default keymap
+    QCOMPARE(pixel(adv * 4 + adv - 2, 0), theme->currentLine());
+    editor->setVimMode(true);
+    QTRY_VERIFY(pixel(adv * 4 + adv - 2, 0) != theme->currentLine()); // the block spans the cell
+    QCOMPARE(pixel(adv * 5 + 2, 0), theme->currentLine());
+    QCOMPARE(pixel(adv * 3 + adv - 2, 0), theme->currentLine());
+    // In insert mode it is a bar again.
+    typeText(view.get(), "i");
+    QTRY_COMPARE(pixel(adv * 4 + 1, 0), theme->cursor());
+    QCOMPARE(pixel(adv * 4 + adv - 2, 0), theme->currentLine());
+    QTest::keyClick(view.get(), Qt::Key_Escape);
+  }
+
+  void vimSearchHighlightsMatchesInView() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("MMMM xx MMMM\nMMMM xx MMMM"));
+    editor->setVimMode(true);
+    editor->setCursorPosition(0);
+    QTRY_VERIFY(editor->renderStats().rowsInPlan >= 2);
+    const qreal lh = editor->metrics().lineHeight();
+    const qreal adv = editor->metrics().cellAdvance();
+    const auto *theme = editor->theme();
+    auto pixel = [&](qreal x, int row) { return view->grabWindow().pixelColor(int(x), int((row + 1) * lh) - 1); };
+    const QColor plain = pixel(adv * 5.5, 1);
+    QCOMPARE(plain, theme->background());
+    typeText(view.get(), "/xx");
+    QTest::keyClick(view.get(), Qt::Key_Return);
+    QTRY_VERIFY(pixel(adv * 5.5, 1) != plain); // both rows' matches are marked
+    QVERIFY(pixel(adv * 5.5, 0) != theme->currentLine() || pixel(adv * 5.5, 0) != plain);
+    QCOMPARE(pixel(adv * 1.5, 1), plain);
+    typeText(view.get(), ":noh");
+    QTest::keyClick(view.get(), Qt::Key_Return);
+    QTRY_COMPARE(pixel(adv * 5.5, 1), plain);
+  }
+
+  void vimWriteAndQuitSignalsReachQml() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setVimMode(true);
+    QSignalSpy write(editor->vim(), &qce::VimInputHandler::writeRequested);
+    typeText(view.get(), ":w x.txt");
+    QTest::keyClick(view.get(), Qt::Key_Return);
+    QCOMPARE(write.size(), 1);
+    QCOMPARE(editor->vim()->commandLine(), QString());
+  }
+
   void inputMethodIgnoredWhenReadOnly() {
     auto [view, editor] = showEditor();
     QVERIFY(editor);

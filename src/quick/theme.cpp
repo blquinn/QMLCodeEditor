@@ -95,6 +95,7 @@ void Theme::assign(const Theme &o) {
   m_inlayHint = o.m_inlayHint;
   m_inlayHintBackground = o.m_inlayHintBackground;
   m_bracketMatch = o.m_bracketMatch;
+  m_searchMatch = o.m_searchMatch;
   m_indentGuide = o.m_indentGuide;
   m_indentGuideActive = o.m_indentGuideActive;
   m_tokenStyles = o.m_tokenStyles;
@@ -161,6 +162,7 @@ Theme *Theme::createLight(QObject *parent) {
   t->m_inlayHint = QColor(0x6a, 0x72, 0x7c);
   t->m_inlayHintBackground = QColor(0xd8, 0xdc, 0xe2, 0x90);
   t->m_bracketMatch = QColor(0xb4, 0xc4, 0xd8, 0xa0);
+  t->m_searchMatch = QColor(0xff, 0xd3, 0x3d, 0x90);
   t->m_indentGuide = QColor(0xdc, 0xdc, 0xdc);
   t->m_indentGuideActive = QColor(0x9a, 0x9a, 0x9a);
   t->m_tokenStyles = {

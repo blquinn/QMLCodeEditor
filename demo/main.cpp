@@ -15,11 +15,14 @@ int main(int argc, char **argv) {
   // --fold-level <n>: fold the regions of that nesting level shortly before the grab.
   // --occurrences: select every occurrence of the word at the start of the text before the grab.
   // --diagnostics <n>: show n sample diagnostics (and with --hints some inlay hints) before the grab.
+  // --vim: start in vim mode; --vim-keys <keys>: then run keys (vim notation) before the grab.
   bool smoke = false;
   int foldLevel = 0;
   int diagnostics = 0;
   bool hints = false;
   bool occurrences = false;
+  bool vim = false;
+  QString vimKeys;
   QString grabPath;
   QUrl initialFile; // the first argument that isn't an option is a file to open
   const QStringList args = app.arguments();
@@ -36,6 +39,12 @@ int main(int argc, char **argv) {
       diagnostics = args[++i].toInt();
     else if (args[i] == QLatin1String("--hints"))
       hints = true;
+    else if (args[i] == QLatin1String("--vim"))
+      vim = true;
+    else if (args[i] == QLatin1String("--vim-keys") && i + 1 < args.size()) {
+      vim = true;
+      vimKeys = args[++i];
+    }
     else if (!args[i].startsWith(QLatin1Char('-')) && initialFile.isEmpty())
       initialFile = QUrl::fromLocalFile(QDir::current().absoluteFilePath(args[i]));
   }
@@ -77,6 +86,15 @@ int main(int argc, char **argv) {
         QMetaObject::invokeMethod(window, "sampleDiagnostics", Q_ARG(QVariant, diagnostics));
       if (hints)
         QMetaObject::invokeMethod(window, "sampleHints");
+    });
+  }
+  if (vim) {
+    QTimer::singleShot(600, &app, [&] {
+      if (QObject *editor = window->findChild<QObject *>(QStringLiteral("editor"))) {
+        editor->setProperty("vimMode", true);
+        if (!vimKeys.isEmpty())
+          QMetaObject::invokeMethod(editor, "sendVimKeys", Q_ARG(QString, vimKeys));
+      }
     });
   }
   if (occurrences) {
