@@ -318,39 +318,39 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 
 **Exit criteria (demonstrated 2026-10-07: tests tst_vim (about 380 table rows plus a key fuzzer, also clean under ASan/UBSan), tst_codeeditor (runtime switch, block cursor pixels, input-method gating, search highlight); ADR 0017 benchmarks: typical commands cost 2–80 µs on a 90 MB file, scrolling with the vim cursor or a match-everywhere highlight stays under the frame budget; hands-on use with a real input method and a real window not done):** a scripted vim test suite (keystrokes → expected buffer and cursor) passes; the vim handler can be switched on and off at runtime; dot-repeat and macros work across insert-mode edits.
 
-- [x] **VIM-01** Vim `InputHandler` and mode state machine — done 2026-10-07
+- [x] **VIM-01** Vim `InputHandler` and mode state machine — done 2026-10-07 (8fd6542)
   - Normal, insert, replace, visual (char/line/block); mode-change signals for a host status bar.
   - `VimInputHandler` in `core/vim` (headless): modes Normal, Insert, Replace and the three visual modes, with OperatorPending and CommandLine as states; `mode`, `pendingKeys`, `commandLine`, `recordingRegister` and `message` feed a status bar; new `InputHandler` hooks (`activate`, `deactivate`, `cursorShape`, `cursorOffset`, `acceptsTextInput`, `commitText`); block and underline cursors; `CodeEditor.vimMode` and `vim` ([ADR 0017](docs/adr/0017-vim-input-handler.md)).
-- [x] **VIM-02** Operator-pending grammar — done 2026-10-07
+- [x] **VIM-02** Operator-pending grammar — done 2026-10-07 (34ef643)
   - `[count][register]operator[count]motion`, including doubled operators (`dd`, `yy`, `cc`).
   - Counts, registers and doubled operators for `d c y > < g~ gu gU`, and `x X s S D C Y p P J gJ r ~ <C-a> <C-x>`; vim's exclusive/inclusive/linewise rules, `cw` as `ce`, `dw` on the last word of a line.
-- [x] **VIM-03** Motions — done 2026-10-07
+- [x] **VIM-03** Motions — done 2026-10-07 (34ef643)
   - `hjkl`, `w b e W B E`, `0 ^ $`, `gg G`, `f t F T ; ,`, `% { } ( )`, `H M L`, `Ctrl-d/u/f/b`. Visual-row aware with wrap (`gj`/`gk`).
   - Also `| g_ gE g0 g^ g$ ]d [d zt zz zb zo zc zR zM`; paragraph and sentence scans are bounded (ADR 0017).
-- [x] **VIM-04** Text objects — done 2026-10-07
+- [x] **VIM-04** Text objects — done 2026-10-07 (34ef643)
   - `iw aw`, `is as`, `ip ap`, quotes, brackets, tags.
   - Words, WORDs, sentences, paragraphs, quotes, brackets (counts widen; the inside of a multi-line block is its lines) and tags; in visual mode an object that is already selected grows.
-- [x] **VIM-05** Registers — done 2026-10-07
+- [x] **VIM-05** Registers — done 2026-10-07 (34ef643)
   - Unnamed, named `a–z` (append with `A–Z`), `0`, `1–9`, `+`/`*` mapped to the system clipboard.
   - Also `-`, `_` and the read-only `. : /`; one piece per cursor, distributed on paste.
-- [x] **VIM-06** Dot-repeat — done 2026-10-07
+- [x] **VIM-06** Dot-repeat — done 2026-10-07 (34ef643)
   - Replays the keys of the last change, insert-mode text and input-method commits included; a new count replaces the old one; visual changes repeat over a region of the same size; `"1p` steps through the numbered registers.
-- [x] **VIM-07** Marks and jump list — done 2026-10-07
+- [x] **VIM-07** Marks and jump list — done 2026-10-07 (34ef643)
   - Marks are anchors (`a-z A-Z ' . ^ < > [ ]`), the jump list holds 100 anchors, `<C-o>` and `<C-i>`.
-- [x] **VIM-08** Macros (`q`, `@`) — done 2026-10-07
+- [x] **VIM-08** Macros (`q`, `@`) — done 2026-10-07 (34ef643)
   - A register holds the macro as notation text (`"ap` shows it, `@a` runs a yanked line); `@@`, counts, `:normal`; a macro or `.` is one undo step.
-- [x] **VIM-09** Search — done 2026-10-07
+- [x] **VIM-09** Search — done 2026-10-07 (8fd6542)
   - `/ ? n N * #` with highlight of matches; shares the regex engine with find/replace (API-04).
   - The regex engine is `vim::compilePattern` (vim syntax to `QRegularExpression`) with `search::findRegex` and `findAllRegex` in `core/textsearch`, for API-04 to build on; plain-text patterns take a chunked fast path. `CodeEditor` marks matches in the frame plan (`searchMatch` theme color); `:noh`, `:set ic scs hls`.
-- [x] **VIM-10** Visual block via multi-cursor — done 2026-10-07
+- [x] **VIM-10** Visual block via multi-cursor — done 2026-10-07 (34ef643)
   - Block selection maps onto `SelectionSet`; `I`/`A`/`c` in block mode edit all rows.
   - `<C-v>` is one `SelectionSet` entry per line over a display-column range (tabs expanded, `$` to each line end); `I A c d y r ~ u U >` apply to every row in one undo step and leave the cursor at the block's top-left.
-- [x] **VIM-11** Ex command subset — done 2026-10-07
+- [x] **VIM-11** Ex command subset — done 2026-10-07 (34ef643)
   - `:s`, `:g`, `:d`, `:N`, `:noh`; `:w`/`:q`/`:wq` emitted as signals to the host.
   - Ranges with marks, patterns and offsets; `:s` (`\1`, `\r`, `\U`, flags `g i I n`), `:g`, `:g!`, `:v`, `:d`, `:y`, `:normal`, `:>`, `:<`, `:N`, `:k`, `:noh`, `:set`; `:w :q :wq :x` and ZZ/ZQ as signals; unknown commands go out as `exCommand`.
-- [x] **VIM-12** Multi-cursor interaction defined and tested — done 2026-10-07
+- [x] **VIM-12** Multi-cursor interaction defined and tested — done 2026-10-07 (34ef643)
   - Every motion and operator applies per cursor; insert, `.`, macros and `p` work on the whole set; `<Esc>` in normal mode keeps the primary. Decided in ADR 0017, tested in `tst_vim` (`multi`).
-- [x] **VIM-13** Vim test harness — done 2026-10-07
+- [x] **VIM-13** Vim test harness — done 2026-10-07 (34ef643)
   - Table-driven tests: initial text, keystrokes, expected text and selection.
   - `tests/core/tst_vim.cpp`: rows of initial text with markup (`|` cursor, `‹ ›` selection), keys in vim notation and the expected markup, run through `VimInputHandler` with a fake host; plus mode, signal, clipboard, highlight, key-event and fuzz tests.
 
