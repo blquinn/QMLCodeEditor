@@ -22,23 +22,71 @@ Theme::Theme(QObject *parent) : QObject(parent) {
   connect(this, &Theme::changed, this, &Theme::rebuildFormats);
 }
 
+void Theme::buildFormat(size_t index, const QString &name) const {
+  QTextCharFormat format;
+  format.setForeground(m_foreground);
+  const QVariantMap entry = m_tokenStyles.value(name).toMap();
+  if (const QColor color = entry.value("color"_L1).value<QColor>(); color.isValid())
+    format.setForeground(color);
+  if (entry.value("bold"_L1).toBool())
+    format.setFontWeight(QFont::Bold);
+  if (entry.value("italic"_L1).toBool())
+    format.setFontItalic(true);
+  m_formats[index] = format;
+  m_backgrounds[index] = entry.value("background"_L1).value<QColor>();
+}
+
 void Theme::rebuildFormats() {
-  for (size_t i = 0; i < size_t(TokenStyle::Count); ++i) {
-    QTextCharFormat format;
-    format.setForeground(m_foreground);
-    const QVariantMap entry = m_tokenStyles.value(tokenStyleName(TokenStyle(i))).toMap();
-    if (const QColor color = entry.value("color"_L1).value<QColor>(); color.isValid())
-      format.setForeground(color);
-    if (entry.value("bold"_L1).toBool())
-      format.setFontWeight(QFont::Bold);
-    if (entry.value("italic"_L1).toBool())
-      format.setFontItalic(true);
-    m_formats[i] = format;
-  }
+  for (size_t i = 0; i < size_t(TokenStyle::Count); ++i)
+    buildFormat(i, tokenStyleName(TokenStyle(i)));
+  const QStringList custom = customTokenStyleNames();
+  for (qsizetype i = 0; i < custom.size(); ++i)
+    buildFormat(size_t(TokenStyle::FirstCustom) + size_t(i), custom[i]);
+  m_customBuilt = int(custom.size());
+  m_hasBackgrounds = false;
+  for (const QColor &c : m_backgrounds)
+    if (c.isValid() && c.alpha() > 0) {
+      m_hasBackgrounds = true;
+      break;
+    }
 }
 
 QTextCharFormat Theme::charFormat(TokenStyle style) const {
-  return m_formats[qMin(size_t(style), size_t(TokenStyle::Count) - 1)];
+  const size_t index = size_t(quint8(style));
+  if (isCustomTokenStyle(style)) {
+    if (int(index) - int(TokenStyle::FirstCustom) >= m_customBuilt) {
+      const_cast<Theme *>(this)->rebuildFormats(); // registered since the last build
+      if (int(index) - int(TokenStyle::FirstCustom) >= m_customBuilt) { // not a registered style at all
+        QTextCharFormat plain;
+        plain.setForeground(m_foreground);
+        return plain;
+      }
+    }
+    return m_formats[index];
+  }
+  return m_formats[qMin(index, size_t(TokenStyle::Count) - 1)];
+}
+
+QColor Theme::styleBackground(TokenStyle style) const {
+  if (!m_hasBackgrounds)
+    return {};
+  const size_t index = size_t(quint8(style));
+  if (isCustomTokenStyle(style)) {
+    charFormat(style); // makes sure a style registered since the last build is covered
+    return m_backgrounds[index];
+  }
+  return m_backgrounds[qMin(index, size_t(TokenStyle::Count) - 1)];
+}
+
+void Theme::setTokenStyle(const QString &name, const QColor &color, const QColor &background, bool bold, bool italic) {
+  const TokenStyle style = registerTokenStyle(name);
+  if (style == TokenStyle::Default)
+    return;
+  QVariantMap entry{{"color"_L1, color}, {"bold"_L1, bold}, {"italic"_L1, italic}};
+  if (background.isValid())
+    entry.insert("background"_L1, background);
+  m_tokenStyles.insert(name.trimmed().toLower(), entry);
+  emit changed();
 }
 
 QList<QTextLayout::FormatRange> Theme::formatRanges(const QList<HighlightSpan> &spans) const {

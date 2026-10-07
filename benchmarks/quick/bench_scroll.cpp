@@ -3,7 +3,7 @@
 // much layout and node churn scrolling causes, and memory growth.
 //
 //   bench_scroll [--json out.json] [--frames N] [--quick] [--filter REGEX] [--gutter] [--relative] [--wrap]
-//                [--folds] [--diagnostics N] [--dense] [--vim] [--search REGEX]
+//                [--folds] [--diagnostics N] [--dense] [--vim] [--search REGEX] [--overlay]
 //
 // --gutter adds line numbers, a change column and a marker column (M5); --relative makes the numbers
 // relative to the cursor; --wrap wraps at the viewport. The "cursor" scenarios move the cursor one line per
@@ -11,7 +11,8 @@
 // (M7) once it is open; with --gutter the fold column joins the others. --diagnostics N pushes N diagnostics
 // (squiggles, gutter icons and end-of-line messages, M9) once the file is open, spread through the whole file
 // or, with --dense, one per line in the stretch around the middle where scrolling happens. --vim scrolls with
-// the vim handler active (block cursor), --search REGEX highlights every match in view (M10).
+// the vim handler active (block cursor), --search REGEX highlights every match in view (M10). --overlay installs
+// a highlight overlay that styles every number in a custom token style with a background (API-14).
 //
 // Inputs are generated once into $QCE_BENCH_DIR (default: the system temp dir) and reused. Run from a release
 // build on a real display for meaningful numbers; --quick uses a small file and few frames (the ctest smoke
@@ -25,6 +26,7 @@
 #include "quick/codeeditor.h"
 #include "quick/linenumbercolumn.h"
 #include "quick/markercolumn.h"
+#include "quick/theme.h"
 
 #include <QtCore/QCommandLineParser>
 #include <QtCore/QDir>
@@ -42,6 +44,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <memory>
 #include <random>
 
 using namespace qce::bench;
@@ -359,6 +362,7 @@ int main(int argc, char **argv) {
     {QStringLiteral("search"), QStringLiteral("Highlight the matches of this regular expression in view."),
      QStringLiteral("regex")}
   );
+  parser.addOption({QStringLiteral("overlay"), QStringLiteral("Install a highlight overlay that styles every number.")});
   parser.addOption({QStringLiteral("dense"), QStringLiteral("With --diagnostics: one per line around the middle of the file.")});
   parser.addOption(
     {{QStringLiteral("f"), QStringLiteral("filter")},
@@ -424,6 +428,39 @@ int main(int argc, char **argv) {
   if (parser.isSet(QStringLiteral("search"))) {
     editor->setSearchHighlight(QRegularExpression(parser.value(QStringLiteral("search"))));
     variant += QStringLiteral("search/");
+  }
+  std::unique_ptr<qce::Highlighter> overlay;
+  if (parser.isSet(QStringLiteral("overlay"))) {
+    // The kind of overlay a host writes: scan the line, hand back spans in a registered style.
+    struct NumberOverlay : qce::Highlighter {
+      qce::TokenStyle style = qce::registerTokenStyle(u"bench.number");
+      QList<QList<qce::HighlightSpan>> highlightLines(const qce::TextSnapshot &text, qsizetype first, qsizetype last) override {
+        QList<QList<qce::HighlightSpan>> out;
+        const qce::Rope &rope = text.rope();
+        for (qsizetype line = qMax<qsizetype>(first, 0); line <= qMin(last, text.lineCount() - 1); ++line) {
+          QList<qce::HighlightSpan> spans;
+          const QString content = text.toString(rope.lineStart(line), rope.lineEnd(line));
+          for (qsizetype i = 0; i < content.size();) {
+            if (!content[i].isDigit()) {
+              ++i;
+              continue;
+            }
+            qsizetype j = i;
+            while (j < content.size() && content[j].isDigit())
+              ++j;
+            spans.append({i, j - i, style});
+            i = j;
+          }
+          out.append(spans);
+        }
+        return out;
+      }
+    };
+    auto numbers = std::make_unique<NumberOverlay>();
+    editor->theme()->setTokenStyle(QStringLiteral("bench.number"), QColor(0xff, 0x80, 0x00), QColor(0x30, 0x30, 0x60));
+    editor->addOverlay(numbers.get());
+    overlay = std::move(numbers);
+    variant += QStringLiteral("overlay/");
   }
   const int cursors = parser.value(QStringLiteral("cursors")).toInt();
   if (cursors > 0)

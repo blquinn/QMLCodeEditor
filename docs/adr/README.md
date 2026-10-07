@@ -21,6 +21,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0015](0015-multi-cursor.md) | Multi-cursor: reused anchors, grouped edits that coalesce, culled overlays | Accepted |
 | [0016](0016-decorations-and-diagnostics.md) | Decorations and diagnostics: one anchored set, spans in the frame plan | Proposed |
 | [0017](0017-vim-input-handler.md) | Vim as an input handler over the command layer | Accepted |
+| [0018](0018-host-extensions.md) | Host extensions: registered languages, token styles and highlight overlays | Accepted |
 
 ## Adding one
 

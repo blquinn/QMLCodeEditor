@@ -5,6 +5,10 @@
 
 #include <QtCore/QList>
 #include <QtCore/QObject>
+#include <QtCore/QString>
+#include <QtCore/QStringList>
+
+#include <optional>
 
 namespace qce {
 
@@ -31,11 +35,28 @@ enum class TokenStyle : quint8 {
   Strong,
   Link,
   Code,
-  Count
+  Count,
+  // Styles a host registers with registerTokenStyle() take the values from here to 255.
+  FirstCustom = 64
 };
+constexpr int kMaxCustomTokenStyles = 256 - int(TokenStyle::FirstCustom);
 
-// Lower-case name of a style ("keyword"), or an empty string for Default and Count.
-QLatin1StringView tokenStyleName(TokenStyle style);
+constexpr bool isCustomTokenStyle(TokenStyle style) { return quint8(style) >= quint8(TokenStyle::FirstCustom); }
+
+// Lower-case name of a style ("keyword"), or an empty string for Default, Count and unregistered values.
+QString tokenStyleName(TokenStyle style);
+
+// Host-defined token styles (API-13). A name is lower case and may have dots ("variable.defined"); a
+// query capture `@variable.defined` maps to it by the same longest-prefix rule as the built-in names, and
+// Theme colors it by that name. Registering is idempotent, thread-safe and permanent; a built-in name
+// returns the built-in style. Returns Default when all kMaxCustomTokenStyles slots are taken or the name is
+// empty. Register styles before the languages whose queries use them: a query's capture styles are fixed
+// when it compiles.
+TokenStyle registerTokenStyle(QStringView name);
+// The built-in or registered style with this name (case-insensitive).
+std::optional<TokenStyle> tokenStyleFromName(QStringView name);
+// Names of the registered custom styles, in registration order (style FirstCustom + index).
+QStringList customTokenStyleNames();
 
 // A styled range inside one line: UTF-16 columns, [start, start + length).
 struct HighlightSpan {
@@ -73,6 +94,11 @@ signals:
   // its cached layouts for them.
   void invalidated(qsizetype firstLine, qsizetype lastLine);
 };
+
+// One line's spans with `overlay` painted over `base`: base spans are cut around the overlay's, so the
+// result is sorted and non-overlapping. Default and empty overlay spans are skipped (they don't erase the
+// style underneath). Inputs are sorted by start and non-overlapping, as highlightLines() promises.
+QList<HighlightSpan> overlaySpans(const QList<HighlightSpan> &base, const QList<HighlightSpan> &overlay);
 
 // Styles nothing.
 class NullHighlighter : public Highlighter {

@@ -7,6 +7,7 @@
 // as a language server with a lot to say about a big file might leave them.
 #include "bench.h"
 #include "core/decorationset.h"
+#include "core/highlighter.h"
 #include "core/diagnostics.h"
 #include "core/displaymap.h"
 #include "core/wrapmeasure.h"
@@ -84,6 +85,26 @@ struct Fixture {
 int main(int argc, char **argv) {
   QCoreApplication app(argc, argv);
   Runner runner;
+
+  // Merging an overlay's spans into a line's (API-14): what every layout of a visible row pays when an
+  // overlay is installed. A line of 40 base spans with 0, 1 and 8 overlay spans on it.
+  for (const int overlayCount : {1, 8}) {
+    runner.add(
+      u"overlay/merge_spans_"_s + QString::number(overlayCount),
+      [overlayCount](Context &ctx) {
+        QList<HighlightSpan> base, overlay;
+        for (int i = 0; i < 40; ++i)
+          base.append({qsizetype(i) * 4, 3, TokenStyle::Keyword});
+        for (int i = 0; i < overlayCount; ++i)
+          overlay.append({qsizetype(i) * 19 + 2, 7, TokenStyle(int(TokenStyle::FirstCustom))});
+        constexpr int kLinesPerIteration = 10000;
+        ctx.setItems(kLinesPerIteration);
+        for (int i = 0; i < kLinesPerIteration; ++i)
+          doNotOptimize(overlaySpans(base, overlay));
+      },
+      10, 2
+    );
+  }
 
   for (const bool messages : {false, true}) {
     const QString suffix = messages ? u"_with_messages"_s : QString();

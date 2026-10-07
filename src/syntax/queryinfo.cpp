@@ -66,6 +66,9 @@ std::optional<TokenStyle> styleForCapture(QStringView name) {
   }();
   QStringView prefix = name;
   while (!prefix.isEmpty()) {
+    // Host-registered styles (API-13) win over the built-in table at the same prefix.
+    if (const auto custom = tokenStyleFromName(prefix); custom && isCustomTokenStyle(*custom))
+      return custom;
     if (auto it = table.constFind(prefix.toString()); it != table.constEnd())
       return it.value();
     const qsizetype dot = prefix.lastIndexOf(u'.');

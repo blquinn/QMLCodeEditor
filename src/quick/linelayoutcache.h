@@ -2,6 +2,7 @@
 #define QCE_LINELAYOUTCACHE_H
 
 #include <QtCore/QtGlobal>
+#include <QtGui/QColor>
 #include <QtGui/QTextLayout>
 
 #include <functional>
@@ -29,6 +30,13 @@ struct Injection {
 
 // One laid-out display row: a buffer line, or with soft wrap one column range of it. `id` is unique per layout ever created by the cache, so a node that
 // remembers the id it was filled from knows whether its glyphs are still current.
+// A stretch of the row (columns relative to its start) whose token style has a background (API-13).
+struct StyleBackground {
+  int start = 0;
+  int end = 0;
+  QColor color;
+};
+
 struct LineLayout {
   quint64 id = 0;
   std::unique_ptr<QTextLayout> layout;
@@ -42,6 +50,7 @@ struct LineLayout {
   // text is `text` with these put in, so it is longer than `text`; the two index spaces are
   // converted with layoutIndex() and columnForLayoutIndex().
   QList<Injection> injections;
+  QList<StyleBackground> styleBackgrounds; // drawn behind the text; empty unless the theme has any
 
   // Index in the laid-out text of the cursor at `column` (relative to the row): injected text at
   // earlier columns goes before it, and at this column so far as it leans on the text before.

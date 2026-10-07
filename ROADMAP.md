@@ -383,6 +383,15 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
   - Guides of neighbouring rows are merged into one rectangle per column to keep the node count down.
   - Benchmark: enclosing-bracket scan and the per-frame indent lookup; scroll and typing with guides on and off.
 
+- [~] **API-12** Language registration
+  - `LanguageRegistry::registerLanguage(LanguageInfo)` (startup, GUI thread): hosts add or replace a language (built-ins can be overridden, not removed); queries as resource/file paths or inline strings; found by `find`/`detect`/`compiled` and as an injection target; lazy compile kept. A `SyntaxHighlighter` picks it up on its next `language`/`fileName` change ([ADR 0018](docs/adr/0018-host-extensions.md)).
+  - Tests in `tst_languageregistry` (register, detect, highlight, replace, override, rejects, `compiled()` from several threads) and `tst_editorsyntax` (registered after the editor exists, Markdown fence injection).
+- [~] **API-13** Host-defined token styles
+  - `registerTokenStyle(name)` (192 slots), capture names map to them, `Theme.tokenStyles` entries (and `Theme.setTokenStyle`) take `color`, `background`, `bold`, `italic`; backgrounds are drawn behind the text by the editor.
+- [~] **API-14** Highlight overlays
+  - `CodeEditor.overlays`: any `Highlighter` painted over the main one, merged by the editor (`overlaySpans`), invalidating only the lines it names; several coexist, typed for qmlcachegen. Replaces wrapping a highlighter (Repose's `VariableHighlighter`).
+  - Bracket match and search highlight stay per-frame rectangles (ADR 0018). Benchmarks: `bench_decorations` (merge), `bench_scroll --overlay`.
+
 ## M12 — Performance hardening
 
 **Exit criteria:** all performance targets above are met and enforced by benchmark thresholds in CI; a measured decision on the glyph-atlas renderer is recorded in an ADR.
