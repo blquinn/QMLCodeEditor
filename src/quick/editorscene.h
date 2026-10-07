@@ -136,7 +136,7 @@ struct SceneStats {
 //
 //   EditorScene
 //    |- background rect
-//    |- clip -- scroll transform -+- backdrop: current line, decoration backgrounds, indent guides, selection, marks, fold chips
+//    |- clip -- scroll transform -+- backdrop: current line, decoration backgrounds, selection, indent guides, marks, fold chips
 //    |                            |- rows: row transform -- text node   (one pair per row, pooled)
 //    |                            |- decoration underlines, squiggles
 //    |                            '- opacity -- cursor rect

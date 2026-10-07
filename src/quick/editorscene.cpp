@@ -80,9 +80,9 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_decoBackgrounds = std::make_unique<ColorBatch>(window);
   m_backdrop->appendChildNode(m_currentLineBatch->node());
   m_backdrop->appendChildNode(m_decoBackgrounds->node());
-  m_backdrop->appendChildNode(m_guideBatch->node());
-  m_backdrop->appendChildNode(m_activeGuideBatch->node());
   m_backdrop->appendChildNode(m_selectionBatch->node());
+  m_backdrop->appendChildNode(m_guideBatch->node()); // over the selection, which would hide them
+  m_backdrop->appendChildNode(m_activeGuideBatch->node());
   m_backdrop->appendChildNode(m_markBatch->node());
   m_backdrop->appendChildNode(m_chipBatch->node());
   m_backdrop->appendChildNode(m_chipDotBatch->node());

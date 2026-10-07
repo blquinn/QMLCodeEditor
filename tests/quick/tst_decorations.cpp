@@ -464,6 +464,18 @@ private slots:
     QVERIFY(!hasColor(image, guideRect(editor, 3, 0), kBlue));
   }
 
+  void guidesShowOverTheSelection() {
+    auto [view, editor] = showEditor();
+    editor->theme()->setProperty("selection", kRed);
+    const int end = setUpGuides(editor, QStringLiteral("a\n        b\n    c\nd"));
+    editor->setCursorPosition(end);
+    editor->selectAll();
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 1, 4), kBlue));
+    const QImage image = view->grabWindow();
+    QVERIFY(hasColor(image, guideRect(editor, 1, 0), kBlue));
+    QVERIFY(hasColor(image, guideRect(editor, 1, 4), kRed)); // the selection is there around it
+  }
+
   void blankLinesContinueTheGuides() {
     auto [view, editor] = showEditor();
     const int end = setUpGuides(editor, QStringLiteral("a\n        b\n\n        c\nd"));
