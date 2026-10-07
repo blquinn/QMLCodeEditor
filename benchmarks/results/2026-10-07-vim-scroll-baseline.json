@@ -1,0 +1,212 @@
+{
+    "meta": {
+        "compiler": "clang 22.1.8 (Fedora 22.1.8-4.fc44)",
+        "cores": 24,
+        "cpu": "AMD Ryzen 9 5900X 12-Core Processor",
+        "date": "2026-10-07T14:41:59Z",
+        "optimized": true,
+        "os": "Fedora Linux 44 (KDE Plasma Desktop Edition)",
+        "qt": "6.11.2",
+        "suite": "bench_scroll"
+    },
+    "results": [
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 30042209,
+            "median_ns": 30042209,
+            "median_ns_per_item": 30042209,
+            "min_ns": 30042209,
+            "name": "short_10MB/open/first_frame",
+            "p95_ns": 30042209,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 40631890,
+            "median_ns": 40631890,
+            "median_ns_per_item": 40631890,
+            "min_ns": 40631890,
+            "name": "short_10MB/open/load_complete",
+            "p95_ns": 40631890,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 20971520,
+            "median_ns": 20971520,
+            "median_ns_per_item": 20971520,
+            "min_ns": 20971520,
+            "name": "short_10MB/memory/rope_bytes",
+            "p95_ns": 20971520,
+            "unit": "bytes"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 28667904,
+            "median_ns": 28667904,
+            "median_ns_per_item": 28667904,
+            "min_ns": 28667904,
+            "name": "short_10MB/memory/rss_growth_load",
+            "p95_ns": 28667904,
+            "unit": "bytes"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 161014,
+            "median_ns": 161014,
+            "median_ns_per_item": 161014,
+            "min_ns": 161014,
+            "name": "short_10MB/lines",
+            "p95_ns": 161014,
+            "unit": "count"
+        },
+        {
+            "items": 1,
+            "iterations": 600,
+            "mean_ns": 182846.50666666665,
+            "median_ns": 182388.5,
+            "median_ns_per_item": 182388.5,
+            "min_ns": 128888,
+            "name": "scroll/short_10MB/smooth/frame/sync",
+            "p95_ns": 203208,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 600,
+            "mean_ns": 1251025.4116666666,
+            "median_ns": 1258098,
+            "median_ns_per_item": 1258098,
+            "min_ns": 989441,
+            "name": "scroll/short_10MB/smooth/frame/render",
+            "p95_ns": 1408627,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 599,
+            "mean_ns": 5679407.866444074,
+            "median_ns": 5686707,
+            "median_ns_per_item": 5686707,
+            "min_ns": 5411579,
+            "name": "scroll/short_10MB/smooth/frame/interval",
+            "p95_ns": 5844955,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 5686707,
+            "median_ns": 5686707,
+            "median_ns_per_item": 5686707,
+            "min_ns": 5686707,
+            "name": "scroll/short_10MB/smooth/frame/refresh_period",
+            "p95_ns": 5686707,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 0,
+            "median_ns": 0,
+            "median_ns_per_item": 0,
+            "min_ns": 0,
+            "name": "scroll/short_10MB/smooth/frame/dropped",
+            "p95_ns": 0,
+            "unit": "count"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 0,
+            "median_ns": 0,
+            "median_ns_per_item": 0,
+            "min_ns": 0,
+            "name": "scroll/short_10MB/smooth/frame/dropped_pct",
+            "p95_ns": 0,
+            "unit": "percent"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 172219.71166666667,
+            "median_ns": 172219.71166666667,
+            "median_ns_per_item": 172219.71166666667,
+            "min_ns": 172219.71166666667,
+            "name": "scroll/short_10MB/smooth/polish_mean",
+            "p95_ns": 172219.71166666667,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 1524516,
+            "median_ns": 1524516,
+            "median_ns_per_item": 1524516,
+            "min_ns": 1524516,
+            "name": "scroll/short_10MB/smooth/polish_max",
+            "p95_ns": 1524516,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 2.5,
+            "median_ns": 2.5,
+            "median_ns_per_item": 2.5,
+            "min_ns": 2.5,
+            "name": "scroll/short_10MB/smooth/layouts_per_frame",
+            "p95_ns": 2.5,
+            "unit": "count"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 0,
+            "median_ns": 0,
+            "median_ns_per_item": 0,
+            "min_ns": 0,
+            "name": "scroll/short_10MB/smooth/nodes_created",
+            "p95_ns": 0,
+            "unit": "count"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 2.5,
+            "median_ns": 2.5,
+            "median_ns_per_item": 2.5,
+            "min_ns": 2.5,
+            "name": "scroll/short_10MB/smooth/nodes_recycled_per_frame",
+            "p95_ns": 2.5,
+            "unit": "count"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 330,
+            "median_ns": 330,
+            "median_ns_per_item": 330,
+            "min_ns": 330,
+            "name": "scroll/short_10MB/smooth/layouts_cached",
+            "p95_ns": 330,
+            "unit": "count"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 2224128,
+            "median_ns": 2224128,
+            "median_ns_per_item": 2224128,
+            "min_ns": 2224128,
+            "name": "scroll/short_10MB/smooth/memory/rss_growth_scroll",
+            "p95_ns": 2224128,
+            "unit": "bytes"
+        }
+    ]
+}
