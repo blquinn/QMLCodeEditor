@@ -6,6 +6,7 @@
 // scans the whole allowed distance in either direction.
 #include "bench.h"
 #include "core/bracketmatch.h"
+#include "core/indentguides.h"
 #include "core/rope.h"
 
 #include <QtCore/QCoreApplication>
@@ -107,6 +108,48 @@ int main(int argc, char **argv) {
       ctx.stopTimer();
     },
     20, 2
+  );
+
+  // Indent guides (API-11): the active block's scan has no enclosing bracket to find, so it covers
+  // the whole allowed distance; the indents are what one frame asks for (a viewport of lines).
+  runner.add(
+    "enclosing/worst_case_none",
+    [](Context &ctx) {
+      const Rope &rope = plainRope();
+      ctx.setItems(1);
+      ctx.startTimer();
+      doNotOptimize(findEnclosingBrackets(rope, rope.length() / 2, kPairs));
+      ctx.stopTimer();
+    },
+    20, 2
+  );
+
+  runner.add(
+    "enclosing/inside_stray_block",
+    [](Context &ctx) {
+      const Rope &rope = strayRope();
+      ctx.setItems(1);
+      ctx.startTimer();
+      doNotOptimize(findEnclosingBrackets(rope, 100000, kPairs)); // the "{" is within the limit
+      ctx.stopTimer();
+    },
+    20, 2
+  );
+
+  runner.add(
+    "indents/viewport_100_lines",
+    [](Context &ctx) {
+      const Rope &rope = plainRope();
+      std::mt19937_64 rng(3);
+      ctx.setItems(1000);
+      ctx.startTimer();
+      for (int i = 0; i < 1000; ++i) {
+        const qsizetype first = qsizetype(rng() % quint64(kLines - 100));
+        doNotOptimize(effectiveIndents(rope, first, first + 99, 4, 4));
+      }
+      ctx.stopTimer();
+    },
+    10, 1
   );
 
   return runner.exec(app.arguments());

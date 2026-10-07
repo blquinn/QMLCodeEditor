@@ -3,6 +3,7 @@
 
 #include "core/filesaver.h"
 #include "core/indentation.h"
+#include "core/indentguides.h"
 #include "core/folding.h"
 #include "core/textboundaries.h"
 #include "quick/decorationcolumn.h"
@@ -608,6 +609,7 @@ void CodeEditor::setAutoClosePairs(const QStringList &pairs) {
     return;
   m_autoClosePairs = parsed;
   m_bracketCache.clear();
+  m_activeBlockCache.reset();
   invalidatePlan();
   emit autoClosePairsChanged();
 }
@@ -618,6 +620,14 @@ void CodeEditor::setMatchBrackets(bool enable) {
   m_matchBrackets = enable;
   invalidatePlan();
   emit matchBracketsChanged();
+}
+
+void CodeEditor::setShowIndentGuides(bool show) {
+  if (show == m_showIndentGuides)
+    return;
+  m_showIndentGuides = show;
+  invalidatePlan();
+  emit showIndentGuidesChanged();
 }
 
 void CodeEditor::setDetectIndentation(bool detect) {
@@ -642,6 +652,7 @@ void CodeEditor::setInsertSpaces(bool spaces) {
   if (spaces == m_insertSpaces)
     return;
   m_insertSpaces = spaces;
+  invalidatePlan();
   emit insertSpacesChanged();
 }
 
@@ -650,6 +661,7 @@ void CodeEditor::setIndentWidth(int columns) {
   if (columns == m_indentWidth)
     return;
   m_indentWidth = columns;
+  invalidatePlan();
   emit indentWidthChanged();
 }
 
@@ -2073,6 +2085,7 @@ void CodeEditor::buildDecorations() {
     }
   }
   buildBracketMatches();
+  buildIndentGuides();
   const qsizetype drawn = m_decorations.count(DecorationKind::Underline) + m_decorations.count(DecorationKind::Squiggle) +
                           m_decorations.count(DecorationKind::Background);
   if (drawn == 0)
@@ -2152,7 +2165,6 @@ void CodeEditor::buildBracketMatches() {
   if (!m_matchBrackets || m_autoClosePairs.isEmpty())
     return;
   constexpr int kMaxCursors = 1000;
-  constexpr int kMaxCached = 4096;
   const qce::Rope &rope = m_document.rope();
   const qsizetype firstLine = m_map.rowAt(m_planFirst).line;
   const qsizetype afterLine = m_map.folds().nextVisibleLine(m_map.rowAt(m_planLast).line);
@@ -2189,20 +2201,133 @@ void CodeEditor::buildBracketMatches() {
     if (sel.head < lowOffset || sel.head > highOffset)
       continue;
     ++cursors;
-    auto cached = m_bracketCache.constFind(sel.head);
-    if (cached == m_bracketCache.constEnd()) {
-      if (m_bracketCache.size() >= kMaxCached)
-        m_bracketCache.clear();
-      qce::BracketPair pair;
-      if (const qsizetype at = qce::bracketNearCursor(rope, sel.head, m_autoClosePairs); at >= 0)
-        pair = qce::findMatchingBracket(rope, at, m_autoClosePairs);
-      cached = m_bracketCache.insert(sel.head, pair);
-    }
-    if (cached->valid()) {
-      mark(cached->open);
-      mark(cached->close);
+    const qce::BracketPair pair = bracketPairAt(sel.head);
+    if (pair.valid()) {
+      mark(pair.open);
+      mark(pair.close);
     }
   }
+}
+
+// The pair of the bracket next to a cursor at `head`, cached until the next edit.
+qce::BracketPair CodeEditor::bracketPairAt(qsizetype head) {
+  constexpr int kMaxCached = 4096;
+  if (const auto cached = m_bracketCache.constFind(head); cached != m_bracketCache.constEnd())
+    return *cached;
+  if (m_bracketCache.size() >= kMaxCached)
+    m_bracketCache.clear();
+  qce::BracketPair pair;
+  const qce::Rope &rope = m_document.rope();
+  if (const qsizetype at = qce::bracketNearCursor(rope, head, m_autoClosePairs); at >= 0)
+    pair = qce::findMatchingBracket(rope, at, m_autoClosePairs);
+  m_bracketCache.insert(head, pair);
+  return pair;
+}
+
+// Guides for the rows of the plan, one per indent step inside the leading whitespace. The block
+// around the primary cursor gets the active color on the lines strictly between its brackets.
+void CodeEditor::buildIndentGuides() {
+  m_guideSpans.clear();
+  m_activeGuideSpans.clear();
+  if (!m_showIndentGuides)
+    return;
+  constexpr qsizetype kMaxGuides = 4000;
+  const int unit = m_insertSpaces ? m_indentWidth : m_metrics.tabWidth();
+  if (unit <= 0 || m_plan.isEmpty())
+    return;
+  const qce::Rope &rope = m_document.rope();
+  const qreal cell = m_metrics.cellAdvance();
+  const qreal viewLeft = m_contentX - 2, viewRight = m_contentX + textViewportWidth() + 2;
+
+  // The block of the active guide: the pair next to the primary cursor, else the one around it.
+  qsizetype activeFrom = -1, activeTo = -1; // buffer lines strictly between the brackets, inclusive
+  int activeColumn = -1;
+  if (!m_autoClosePairs.isEmpty()) {
+    const qsizetype head = m_selections.primary().head;
+    if (!m_activeBlockCache || m_activeBlockCache->first != head) {
+      qce::BracketPair pair = bracketPairAt(head);
+      if (!pair.valid())
+        pair = qce::findEnclosingBrackets(rope, head, m_autoClosePairs);
+      m_activeBlockCache = std::make_pair(head, pair);
+    }
+    if (const qce::BracketPair pair = m_activeBlockCache->second; pair.valid()) {
+      const qsizetype openLine = rope.lineAt(pair.open), closeLine = rope.lineAt(pair.close);
+      if (closeLine - openLine > 1) {
+        const QList<int> opener = qce::effectiveIndents(rope, openLine, openLine, m_metrics.tabWidth(), unit);
+        activeFrom = openLine + 1;
+        activeTo = closeLine - 1;
+        activeColumn = opener.first() / unit * unit;
+      }
+    }
+  }
+
+  // Guides of neighbouring rows join into one tall rectangle per column, so a screenful costs a few
+  // dozen scene-graph nodes rather than one per row and level.
+  struct Run {
+    qsizetype first, last;
+    qreal x;
+    bool active;
+  };
+  QHash<int, Run> open; // by column * 2 + active
+  const qreal lineHeight = m_metrics.lineHeight();
+  auto flush = [&](const Run &run) {
+    auto &spans = run.active ? m_activeGuideSpans : m_guideSpans;
+    spans.append({run.first, run.x, run.x + 1, 0, qreal(run.last - run.first + 1) * lineHeight});
+  };
+
+  // Indents are worked out per run of consecutive buffer lines, so a blank line sees the text around
+  // it and a fold doesn't make the range as long as the lines it hides.
+  qsizetype runFirst = 0;
+  QList<int> run;
+  for (qsizetype i = 0; i < m_plan.size(); ++i) {
+    const qce::FramePlanRow &planRow = m_plan[i];
+    const qsizetype line = planRow.display.line;
+    if (run.isEmpty() || line < runFirst || line >= runFirst + run.size()) {
+      qsizetype last = line;
+      for (qsizetype j = i + 1; j < m_plan.size(); ++j) {
+        const qsizetype next = m_plan[j].display.line;
+        if (next > last + 1)
+          break;
+        last = qMax(last, next);
+      }
+      runFirst = line;
+      run = qce::effectiveIndents(rope, runFirst, last, m_metrics.tabWidth(), unit);
+    }
+    const int indent = run[line - runFirst];
+    const bool active = line >= activeFrom && line <= activeTo;
+    const qreal rowIndent = planRow.layout->indentX;
+    QList<int> touched;
+    for (int column = 0; column < indent; column += unit) {
+      const qreal x = qRound(column * cell);
+      if (!planRow.display.isFirst() && x >= rowIndent)
+        break;
+      if (x + 1 < viewLeft)
+        continue;
+      if (x > viewRight)
+        break;
+      const int key = column * 2 + (active && column == activeColumn ? 1 : 0);
+      touched.append(key);
+      if (auto it = open.find(key); it != open.end() && it->last == planRow.row - 1)
+        it->last = planRow.row;
+      else {
+        if (it != open.end())
+          flush(*it);
+        open.insert(key, {planRow.row, planRow.row, x, (key & 1) != 0});
+      }
+    }
+    for (auto it = open.begin(); it != open.end();) {
+      if (touched.contains(it.key())) {
+        ++it;
+        continue;
+      }
+      flush(*it);
+      it = open.erase(it);
+    }
+    if (m_guideSpans.size() + m_activeGuideSpans.size() >= kMaxGuides)
+      return;
+  }
+  for (const Run &r : std::as_const(open))
+    flush(r);
 }
 
 CodeEditor::RenderStats CodeEditor::renderStats() const {
@@ -2251,6 +2376,7 @@ void CodeEditor::onDocumentReset() {
   m_lastLineCount = lineCount();
   m_layouts.clear();
   m_bracketCache.clear();
+  m_activeBlockCache.reset();
   m_maxLineWidth = 0;
   emit lineCountChanged();
   updateContentSize();
@@ -2261,6 +2387,7 @@ void CodeEditor::onDocumentReset() {
 void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
   hidePopup();
   m_bracketCache.clear();
+  m_activeBlockCache.reset();
   const qsizetype first = change.startPos.line;
   m_layouts.invalidate(first, change.oldEndPos.line - first + 1, change.newEndPos.line - first + 1);
   if (const qsizetype count = lineCount(); count != m_lastLineCount) {
@@ -2631,6 +2758,10 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.squiggles = &m_squiggleSpans;
   params.devicePixelRatio = window() ? window()->effectiveDevicePixelRatio() : 1.0;
   params.cursors = &m_cursorSpans;
+  params.indentGuideColor = m_theme->indentGuide();
+  params.indentGuides = &m_guideSpans;
+  params.activeIndentGuideColor = m_theme->indentGuideActive();
+  params.activeIndentGuides = &m_activeGuideSpans;
   params.cursorVisible = m_cursorVisible && m_hasFocus;
   params.gutterWidth = m_gutterWidth;
   params.gutterBackground = m_theme->gutterBackground();

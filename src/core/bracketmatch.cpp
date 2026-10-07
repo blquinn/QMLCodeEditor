@@ -75,6 +75,31 @@ BracketPair findMatchingBracket(const Rope &rope, qsizetype offset, const Bracke
   return {};
 }
 
+BracketPair findEnclosingBrackets(const Rope &rope, qsizetype offset, const BracketPairs &pairs, qsizetype maxScan) {
+  offset = qBound<qsizetype>(0, offset, rope.length());
+  const qsizetype floor = qMax<qsizetype>(0, offset - maxScan);
+  QList<char16_t> closers; // closers seen while walking back that their openers have yet to pair with
+  qsizetype end = offset;
+  while (end > floor) {
+    const qsizetype start = qMax(floor, end - kBackwardBlock);
+    const QString block = rope.toString(start, end);
+    for (qsizetype i = block.size() - 1; i >= 0; --i) {
+      bool opens = false;
+      const auto *pair = pairOf(block[i].unicode(), pairs, &opens);
+      if (!pair)
+        continue;
+      if (!opens)
+        closers.append(pair->second);
+      else if (const qsizetype at = closers.lastIndexOf(pair->second); at >= 0)
+        closers.resize(at); // paired; a stray closer of another kind above it is dropped with it
+      else
+        return findMatchingBracket(rope, start + i, pairs, maxScan);
+    }
+    end = start;
+  }
+  return {};
+}
+
 qsizetype bracketNearCursor(const Rope &rope, qsizetype head, const BracketPairs &pairs) {
   bool opens = false;
   if (head >= 0 && head < rope.length() && pairOf(rope.at(head).unicode(), pairs, &opens))

@@ -70,6 +70,8 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_scroll->appendChildNode(m_cursorFade);
   // Fixed order gives the stacking: current line, selection, marks, then (above the text) the cursor.
   m_currentLineBatch = std::make_unique<RectBatch>(window);
+  m_guideBatch = std::make_unique<RectBatch>(window);
+  m_activeGuideBatch = std::make_unique<RectBatch>(window);
   m_selectionBatch = std::make_unique<RectBatch>(window);
   m_markBatch = std::make_unique<RectBatch>(window);
   m_chipBatch = std::make_unique<RectBatch>(window);
@@ -78,6 +80,8 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_decoBackgrounds = std::make_unique<ColorBatch>(window);
   m_backdrop->appendChildNode(m_currentLineBatch->node());
   m_backdrop->appendChildNode(m_decoBackgrounds->node());
+  m_backdrop->appendChildNode(m_guideBatch->node());
+  m_backdrop->appendChildNode(m_activeGuideBatch->node());
   m_backdrop->appendChildNode(m_selectionBatch->node());
   m_backdrop->appendChildNode(m_markBatch->node());
   m_backdrop->appendChildNode(m_chipBatch->node());
@@ -325,6 +329,8 @@ void EditorScene::syncOverlays(const FrameParams &p) {
     return out;
   };
   bool changed = m_currentLineBatch->update(rects(p.currentLine), p.currentLineColor);
+  changed |= m_guideBatch->update(rects(p.indentGuides), p.indentGuideColor);
+  changed |= m_activeGuideBatch->update(rects(p.activeIndentGuides), p.activeIndentGuideColor);
   changed |= m_selectionBatch->update(rects(p.selection), p.selectionColor);
   changed |= m_markBatch->update(rects(p.marks), p.markColor);
   changed |= m_chipBatch->update(rects(p.chips), p.chipColor);

@@ -15,6 +15,8 @@ Q_IMPORT_QML_PLUGIN(me_blq_qmlcodeeditorPlugin)
 namespace {
 
 const QColor kRed(0xff, 0x00, 0x00);
+const QColor kBlue(0x00, 0x00, 0xff);
+const QColor kGreen(0x00, 0xff, 0x00);
 
 bool hasColor(const QImage &image, const QRect &rect, const QColor &color) {
   for (int y = rect.top(); y < rect.bottom() && y < image.height(); ++y)
@@ -431,6 +433,117 @@ private slots:
     const QImage image = view->grabWindow();
     QVERIFY(hasColor(image, cellRect(editor, 2, 4), kRed));
     QVERIFY(!hasColor(image, cellRect(editor, 3, 0), kRed)); // the "}" of line 5 is not its partner
+  }
+
+  // A strip a few pixels wide around the guide at `column` of a row.
+  QRect guideRect(CodeEditor *editor, int row, int column) {
+    const int x = int(editor->gutterWidth()) + qRound(column * editor->metrics().cellAdvance());
+    return QRect(column ? x - 1 : x, row * int(editor->metrics().lineHeight()), 3, int(editor->metrics().lineHeight()));
+  }
+  int setUpGuides(CodeEditor *editor, const QString &text) {
+    editor->theme()->setProperty("indentGuide", kBlue);
+    editor->theme()->setProperty("indentGuideActive", kGreen);
+    editor->setDetectIndentation(false);
+    editor->setIndentWidth(4);
+    editor->setText(text);
+    return int(text.size());
+  }
+
+  void guidesAreDrawnAtEveryIndentStep() {
+    auto [view, editor] = showEditor();
+    const int end = setUpGuides(editor, QStringLiteral("a\n        b\n    c\nd"));
+    editor->setCursorPosition(end); // top level: no active block
+    QVERIFY(editor->showIndentGuides());
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 1, 4), kBlue));
+    const QImage image = view->grabWindow();
+    QVERIFY(hasColor(image, guideRect(editor, 1, 0), kBlue));
+    QVERIFY(!hasColor(image, guideRect(editor, 1, 8), kBlue));
+    QVERIFY(hasColor(image, guideRect(editor, 2, 0), kBlue));
+    QVERIFY(!hasColor(image, guideRect(editor, 2, 4), kBlue));
+    QVERIFY(!hasColor(image, guideRect(editor, 0, 0), kBlue));
+    QVERIFY(!hasColor(image, guideRect(editor, 3, 0), kBlue));
+  }
+
+  void blankLinesContinueTheGuides() {
+    auto [view, editor] = showEditor();
+    const int end = setUpGuides(editor, QStringLiteral("a\n        b\n\n        c\nd"));
+    editor->setCursorPosition(end);
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 2, 4), kBlue));
+    QVERIFY(hasColor(view->grabWindow(), guideRect(editor, 2, 0), kBlue));
+  }
+
+  void guidesCanBeTurnedOff() {
+    auto [view, editor] = showEditor();
+    const int end = setUpGuides(editor, QStringLiteral("a\n    b\nc"));
+    editor->setCursorPosition(end);
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 1, 0), kBlue));
+    QSignalSpy spy(editor, &CodeEditor::showIndentGuidesChanged);
+    editor->setShowIndentGuides(false);
+    editor->setShowIndentGuides(false);
+    QCOMPARE(spy.count(), 1);
+    QTRY_VERIFY(!hasColor(view->grabWindow(), guideRect(editor, 1, 0), kBlue));
+    editor->setShowIndentGuides(true);
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 1, 0), kBlue));
+  }
+
+  void activeGuideFollowsTheBracketBlock() {
+    auto [view, editor] = showEditor();
+    const int end = setUpGuides(editor, QStringLiteral("f {\n    a\n    b\n    c\n}\ntail"));
+    editor->setCursorPosition(3); // right after the "{"
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 2, 0), kGreen));
+    QImage image = view->grabWindow();
+    for (int row = 1; row <= 3; ++row) {
+      QVERIFY(hasColor(image, guideRect(editor, row, 0), kGreen));
+      QVERIFY(!hasColor(image, guideRect(editor, row, 0), kBlue));
+    }
+    QVERIFY(!hasColor(image, guideRect(editor, 0, 0), kGreen));
+    QVERIFY(!hasColor(image, guideRect(editor, 4, 0), kGreen));
+    // Inside the block, away from any bracket, the enclosing pair is used.
+    editor->setCursorPosition(10);
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 1, 0), kGreen));
+    QVERIFY(hasColor(view->grabWindow(), guideRect(editor, 3, 0), kGreen));
+    // Outside every block the guides are plain.
+    editor->setCursorPosition(end);
+    QTRY_VERIFY(!hasColor(view->grabWindow(), guideRect(editor, 2, 0), kGreen));
+    QVERIFY(hasColor(view->grabWindow(), guideRect(editor, 2, 0), kBlue));
+  }
+
+  void onlyTheInnermostBlockIsActive() {
+    auto [view, editor] = showEditor();
+    setUpGuides(editor, QStringLiteral("f {\n    g {\n        a\n        b\n    }\n}\ntail"));
+    editor->setCursorPosition(21); // after the "a" of line 2
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 2, 4), kGreen));
+    const QImage image = view->grabWindow();
+    QVERIFY(hasColor(image, guideRect(editor, 2, 0), kBlue));
+    QVERIFY(!hasColor(image, guideRect(editor, 2, 0), kGreen));
+    QVERIFY(hasColor(image, guideRect(editor, 3, 4), kGreen));
+    QVERIFY(hasColor(image, guideRect(editor, 1, 0), kBlue)); // "g {" is inside the outer block only
+    QVERIFY(!hasColor(image, guideRect(editor, 1, 0), kGreen));
+  }
+
+  void guidesStayInsideTheHangingIndent() {
+    auto [view, editor] = showEditor();
+    const int end = setUpGuides(editor, QStringLiteral("        ") + QString(200, u'x') + QStringLiteral("\nend"));
+    editor->setCursorPosition(end);
+    editor->setWrapMode(CodeEditor::WrapAtViewport);
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 1, 4), kBlue));
+    QVERIFY(hasColor(view->grabWindow(), guideRect(editor, 1, 0), kBlue));
+    editor->setWrapIndent(false);
+    QTRY_VERIFY(!hasColor(view->grabWindow(), guideRect(editor, 1, 4), kBlue));
+    QVERIFY(!hasColor(view->grabWindow(), guideRect(editor, 1, 0), kBlue));
+    QVERIFY(hasColor(view->grabWindow(), guideRect(editor, 0, 0), kBlue));
+  }
+
+  void foldedLinesTakeTheirGuidesWithThem() {
+    auto [view, editor] = showEditor();
+    const int end = setUpGuides(editor, QStringLiteral("a {\n    x\n    c {\n        z\n    }\n}\ntail"));
+    editor->setCursorPosition(end);
+    QTRY_VERIFY(hasColor(view->grabWindow(), guideRect(editor, 3, 4), kBlue));
+    QVERIFY(editor->fold(2));
+    QTRY_VERIFY(!hasColor(view->grabWindow(), guideRect(editor, 3, 4), kBlue));
+    // Row 3 is now the "    }" of the folded block: one level deep, not two.
+    QVERIFY(hasColor(view->grabWindow(), guideRect(editor, 3, 0), kBlue));
+    QVERIFY(hasColor(view->grabWindow(), guideRect(editor, 1, 0), kBlue));
   }
 
   void endOfLineTextWidensTheContentAndIsDrawn() {

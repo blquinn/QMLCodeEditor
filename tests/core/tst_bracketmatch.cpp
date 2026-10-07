@@ -90,6 +90,42 @@ private slots:
     const Rope two = Rope::fromString(u")("_s);
     QCOMPARE(bracketNearCursor(two, 1, kPairs), qsizetype(1));
   }
+
+  void enclosing_data() {
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<int>("offset");
+    QTest::addColumn<int>("open");
+    QTest::addColumn<int>("close");
+    QTest::newRow("inside") << u"(ab)"_s << 2 << 0 << 3;
+    QTest::newRow("innermost") << u"(a(bc)d)"_s << 4 << 2 << 5;
+    QTest::newRow("after inner") << u"(a(bc)d)"_s << 6 << 0 << 7;
+    QTest::newRow("between siblings") << u"{(a) (b)}"_s << 4 << 0 << 8;
+    QTest::newRow("mixed kinds") << u"{[a] x}"_s << 5 << 0 << 6;
+    QTest::newRow("stray closer of another kind") << u"{ ] a }"_s << 5 << 0 << 6;
+    QTest::newRow("across lines") << u"{\n  a\n}"_s << 4 << 0 << 6;
+    QTest::newRow("top level") << u"(a) b"_s << 4 << -1 << -1;
+    QTest::newRow("unclosed") << u"(a b"_s << 3 << -1 << -1;
+    QTest::newRow("just after opener") << u"(a)"_s << 1 << 0 << 2;
+    QTest::newRow("at start") << u"(a)"_s << 0 << -1 << -1;
+  }
+  void enclosing() {
+    QFETCH(QString, text);
+    QFETCH(int, offset);
+    QFETCH(int, open);
+    QFETCH(int, close);
+    const BracketPair pair = findEnclosingBrackets(Rope::fromString(text), offset, kPairs);
+    QCOMPARE(pair.open, qsizetype(open));
+    QCOMPARE(pair.close, qsizetype(close));
+  }
+
+  void enclosingScanLimit() {
+    const QString text = u"("_s + QString(50, u'x') + u")"_s;
+    QVERIFY(findEnclosingBrackets(Rope::fromString(text), 51, kPairs, 100).valid());
+    QVERIFY(!findEnclosingBrackets(Rope::fromString(text), 51, kPairs, 10).valid());
+    const QString filler = QString(40000, u'x');
+    const QString big = u"{"_s + filler + u"[()]"_s + filler + u"}"_s;
+    QCOMPARE(findEnclosingBrackets(Rope::fromString(big), 40010, kPairs).open, qsizetype(0));
+  }
 };
 
 QTEST_APPLESS_MAIN(TstBracketMatch)

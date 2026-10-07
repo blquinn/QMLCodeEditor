@@ -239,6 +239,12 @@ ApplicationWindow {
                 checked: editor.matchBrackets
                 onToggled: editor.matchBrackets = checked
             }
+            MenuItem {
+                text: qsTr("Show indent guides")
+                checkable: true
+                checked: editor.showIndentGuides
+                onToggled: editor.showIndentGuides = checked
+            }
             MenuSeparator {}
             MenuSpin {
                 label: qsTr("Indent width")
