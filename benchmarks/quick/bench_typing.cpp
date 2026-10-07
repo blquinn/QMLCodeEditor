@@ -190,6 +190,7 @@ int main(int argc, char **argv) {
      QStringLiteral("n"), QStringLiteral("0")}
   );
   parser.addOption({QStringLiteral("no-brackets"), QStringLiteral("Turn matching bracket highlighting off (the baseline).")});
+  parser.addOption({QStringLiteral("no-guides"), QStringLiteral("Turn indent guides off (the baseline).")});
   parser.addOption({{QStringLiteral("f"), QStringLiteral("filter")}, QStringLiteral("Only scenarios whose name matches this regex."), QStringLiteral("regex")});
   parser.process(app);
   const bool quick = parser.isSet(QStringLiteral("quick"));
@@ -265,6 +266,7 @@ int main(int argc, char **argv) {
   editor->setSize(QSizeF(1280, 800));
   editor->setCursorBlinkInterval(0); // blink repaints would add frames the keystroke didn't ask for
   editor->setMatchBrackets(!parser.isSet(QStringLiteral("no-brackets")));
+  editor->setShowIndentGuides(!parser.isSet(QStringLiteral("no-guides")));
   view.show();
   QElapsedTimer exposeWait;
   exposeWait.start();

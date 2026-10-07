@@ -100,6 +100,7 @@ public:
   Q_PROPERTY(bool autoClose READ autoClose WRITE setAutoClose NOTIFY autoCloseChanged FINAL)
   Q_PROPERTY(QStringList autoClosePairs READ autoClosePairs WRITE setAutoClosePairs NOTIFY autoClosePairsChanged FINAL)
   Q_PROPERTY(bool matchBrackets READ matchBrackets WRITE setMatchBrackets NOTIFY matchBracketsChanged FINAL)
+  Q_PROPERTY(bool showIndentGuides READ showIndentGuides WRITE setShowIndentGuides NOTIFY showIndentGuidesChanged FINAL)
   Q_PROPERTY(bool detectIndentation READ detectIndentation WRITE setDetectIndentation NOTIFY detectIndentationChanged FINAL)
   Q_PROPERTY(
     bool insertSpaces READ insertSpaces WRITE setInsertSpaces NOTIFY insertSpacesChanged FINAL
@@ -371,6 +372,13 @@ public:
   // a bounded distance, so brackets inside strings and comments count too. On by default.
   bool matchBrackets() const { return m_matchBrackets; }
   void setMatchBrackets(bool enable);
+  // Faint vertical lines at every indent step inside a line's leading whitespace (one step is
+  // `indentWidth` columns, or `tabWidth` when indenting with tabs). A blank line continues the
+  // guides of the lines around it. The guide of the block around the primary cursor is drawn in
+  // the theme's `indentGuideActive` color: the block of the bracket next to the cursor (the pair
+  // `matchBrackets` shows) or else the innermost bracket pair that encloses it. On by default.
+  bool showIndentGuides() const { return m_showIndentGuides; }
+  void setShowIndentGuides(bool show);
   bool detectIndentation() const { return m_detectIndentation; }
   void setDetectIndentation(bool detect);
   bool insertSpaces() const { return m_insertSpaces; }
@@ -459,6 +467,7 @@ signals:
   void autoCloseChanged();
   void autoClosePairsChanged();
   void matchBracketsChanged();
+  void showIndentGuidesChanged();
   void detectIndentationChanged();
   void insertSpacesChanged();
   void indentWidthChanged();
@@ -575,6 +584,8 @@ private:
   // Decoration plumbing: spans for the rows of the plan, and the virtual text at the end of a line.
   void buildDecorations();
   void buildBracketMatches();
+  void buildIndentGuides();
+  qce::BracketPair bracketPairAt(qsizetype head);
   bool gotoDiagnostic(bool forward, int leastSevere);
   // What the pointer is over that a popup can be about: a character of text, or a whole line (its
   // gutter icon, its end-of-line message).
@@ -689,6 +700,10 @@ private:
   bool m_matchBrackets = true;
   // Partner lookups by cursor offset, dropped by every edit and by changes to the pairs.
   QHash<qsizetype, qce::BracketPair> m_bracketCache;
+  bool m_showIndentGuides = true;
+  // The block around the primary cursor for the active guide, by cursor offset; dropped with m_bracketCache.
+  std::optional<std::pair<qsizetype, qce::BracketPair>> m_activeBlockCache;
+  QList<qce::RowSpan> m_guideSpans, m_activeGuideSpans;
   bool m_detectIndentation = true;
   bool m_insertSpaces = true;
   int m_indentWidth = 4;

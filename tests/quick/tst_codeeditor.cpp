@@ -494,6 +494,7 @@ private slots:
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
     editor->setCursorBlinkInterval(0);
+    editor->setShowIndentGuides(false); // a guide inside the tab would be ink too
     editor->setText(QStringLiteral("\tM"));
     editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
     const int lh = int(editor->metrics().lineHeight());

@@ -99,6 +99,10 @@ struct FrameParams {
   const QList<RowSpan> *cursors = nullptr; // x0 is a cursor's x; x1 - x0 its width
   bool cursorVisible = true; // the blink phase; drawn through opacity so a blink costs no geometry
   QColor chipColor;
+  QColor indentGuideColor;
+  const QList<RowSpan> *indentGuides = nullptr;
+  QColor activeIndentGuideColor;
+  const QList<RowSpan> *activeIndentGuides = nullptr;
   const QList<RowSpan> *chips = nullptr; // placeholders after folded lines
   QColor chipDotColor;
   const QList<RowSpan> *chipDots = nullptr;
@@ -132,7 +136,7 @@ struct SceneStats {
 //
 //   EditorScene
 //    |- background rect
-//    |- clip -- scroll transform -+- backdrop: current line, decoration backgrounds, selection, marks, fold chips
+//    |- clip -- scroll transform -+- backdrop: current line, decoration backgrounds, indent guides, selection, marks, fold chips
 //    |                            |- rows: row transform -- text node   (one pair per row, pooled)
 //    |                            |- decoration underlines, squiggles
 //    |                            '- opacity -- cursor rect
@@ -282,7 +286,7 @@ private:
   RowPool m_textPool, m_labelPool;
   quint64 m_frame = 0;
   QSGOpacityNode *m_cursorFade = nullptr;
-  std::unique_ptr<RectBatch> m_currentLineBatch, m_selectionBatch, m_markBatch, m_chipBatch, m_chipDotBatch, m_cursorBatch;
+  std::unique_ptr<RectBatch> m_currentLineBatch, m_guideBatch, m_activeGuideBatch, m_selectionBatch, m_markBatch, m_chipBatch, m_chipDotBatch, m_cursorBatch;
   qsizetype m_originRow = 0;
   bool m_haveOrigin = false;
   QColor m_textColor;

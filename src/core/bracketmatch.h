@@ -32,6 +32,14 @@ BracketPair findMatchingBracket(
   const Rope &rope, qsizetype offset, const BracketPairs &pairs, qsizetype maxScan = kBracketScanLimit
 );
 
+// The innermost pair that encloses `offset` (a cursor position): the nearest opener before it that
+// no closer between it and `offset` pairs with, and that opener's partner. Same raw-text counting
+// and `maxScan` as above (the opener must be within it, and so must the closer, from the opener).
+// Invalid at the top level or when the enclosing opener is never closed.
+BracketPair findEnclosingBrackets(
+  const Rope &rope, qsizetype offset, const BracketPairs &pairs, qsizetype maxScan = kBracketScanLimit
+);
+
 // The offset of the bracket a cursor at `head` is next to: the character after it, else the one
 // before it. -1 when neither is a bracket.
 qsizetype bracketNearCursor(const Rope &rope, qsizetype head, const BracketPairs &pairs);

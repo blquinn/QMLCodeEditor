@@ -43,6 +43,8 @@ class Theme : public QObject {
   Q_PROPERTY(QColor inlayHint MEMBER m_inlayHint NOTIFY changed)
   Q_PROPERTY(QColor inlayHintBackground MEMBER m_inlayHintBackground NOTIFY changed)
   Q_PROPERTY(QColor bracketMatch MEMBER m_bracketMatch NOTIFY changed)
+  Q_PROPERTY(QColor indentGuide MEMBER m_indentGuide NOTIFY changed)
+  Q_PROPERTY(QColor indentGuideActive MEMBER m_indentGuideActive NOTIFY changed)
   // Style name -> { color, bold, italic }; names are the TokenStyle names from core/highlighter.h
   // in lower case ("keyword", "string", ...). Unlisted styles use the foreground color.
   Q_PROPERTY(QVariantMap tokenStyles READ tokenStyles WRITE setTokenStyles NOTIFY changed)
@@ -77,6 +79,8 @@ public:
   QColor inlayHint() const { return m_inlayHint; }
   QColor inlayHintBackground() const { return m_inlayHintBackground; }
   QColor bracketMatch() const { return m_bracketMatch; }
+  QColor indentGuide() const { return m_indentGuide; }
+  QColor indentGuideActive() const { return m_indentGuideActive; }
   // The color for a decoration severity (qce::DecorationSeverity, LSP numbering); the foreground for none.
   Q_INVOKABLE QColor severityColor(int severity) const;
 
@@ -124,6 +128,8 @@ private:
   QColor m_inlayHint{0x8b, 0x94, 0x9f};
   QColor m_inlayHintBackground{0x40, 0x44, 0x4a, 0x80};
   QColor m_bracketMatch{0x4a, 0x50, 0x58, 0xa0};
+  QColor m_indentGuide{0x3a, 0x3e, 0x44};
+  QColor m_indentGuideActive{0x6a, 0x70, 0x7a};
   void rebuildFormats();
 
   QVariantMap m_tokenStyles;
