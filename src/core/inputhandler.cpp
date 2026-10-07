@@ -45,6 +45,10 @@ bool isPrintable(const QString &text, Qt::KeyboardModifiers modifiers) {
 
 } // namespace
 
+bool InputHandler::commitText(const QString &text, EditContext &ctx, InputHost &) {
+  return commands::typeText(ctx, text);
+}
+
 bool DefaultInputHandler::keyPress(QKeyEvent *event, EditContext &ctx, InputHost &host) {
   using namespace commands;
 
