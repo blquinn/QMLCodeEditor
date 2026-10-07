@@ -10,3 +10,6 @@ target_link_libraries(bench_decorations PRIVATE qce_bench QMLCodeEditor::Core qc
 
 qt_add_executable(bench_brackets bench_brackets.cpp)
 target_link_libraries(bench_brackets PRIVATE qce_bench QMLCodeEditor::Core qce_warnings)
+
+qt_add_executable(bench_vim bench_vim.cpp)
+target_link_libraries(bench_vim PRIVATE qce_bench QMLCodeEditor::Core qce_warnings)

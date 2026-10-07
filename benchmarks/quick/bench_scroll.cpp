@@ -3,14 +3,15 @@
 // much layout and node churn scrolling causes, and memory growth.
 //
 //   bench_scroll [--json out.json] [--frames N] [--quick] [--filter REGEX] [--gutter] [--relative] [--wrap]
-//                [--folds] [--diagnostics N] [--dense]
+//                [--folds] [--diagnostics N] [--dense] [--vim] [--search REGEX]
 //
 // --gutter adds line numbers, a change column and a marker column (M5); --relative makes the numbers
 // relative to the cursor; --wrap wraps at the viewport. The "cursor" scenarios move the cursor one line per
 // frame, which renumbers every row in relative mode. --folds folds 20,000 regions spread through the file
 // (M7) once it is open; with --gutter the fold column joins the others. --diagnostics N pushes N diagnostics
 // (squiggles, gutter icons and end-of-line messages, M9) once the file is open, spread through the whole file
-// or, with --dense, one per line in the stretch around the middle where scrolling happens.
+// or, with --dense, one per line in the stretch around the middle where scrolling happens. --vim scrolls with
+// the vim handler active (block cursor), --search REGEX highlights every match in view (M10).
 //
 // Inputs are generated once into $QCE_BENCH_DIR (default: the system temp dir) and reused. Run from a release
 // build on a real display for meaningful numbers; --quick uses a small file and few frames (the ctest smoke
@@ -353,6 +354,11 @@ int main(int argc, char **argv) {
     {QStringLiteral("diagnostics"), QStringLiteral("Show N diagnostics (squiggles, icons, end-of-line messages)."),
      QStringLiteral("n"), QStringLiteral("0")}
   );
+  parser.addOption({QStringLiteral("vim"), QStringLiteral("Use the vim input handler (a block cursor).")});
+  parser.addOption(
+    {QStringLiteral("search"), QStringLiteral("Highlight the matches of this regular expression in view."),
+     QStringLiteral("regex")}
+  );
   parser.addOption({QStringLiteral("dense"), QStringLiteral("With --diagnostics: one per line around the middle of the file.")});
   parser.addOption(
     {{QStringLiteral("f"), QStringLiteral("filter")},
@@ -410,6 +416,14 @@ int main(int argc, char **argv) {
     editor->addGutterColumn(new qce::DecorationColumn(editor));
     editor->setDiagnosticMessages(CodeEditor::EndOfLineMessages);
     variant += QStringLiteral("diagnostics%1%2/").arg(diagnostics).arg(dense ? QStringLiteral("dense") : QString());
+  }
+  if (parser.isSet(QStringLiteral("vim"))) {
+    editor->setVimMode(true);
+    variant += QStringLiteral("vim/");
+  }
+  if (parser.isSet(QStringLiteral("search"))) {
+    editor->setSearchHighlight(QRegularExpression(parser.value(QStringLiteral("search"))));
+    variant += QStringLiteral("search/");
   }
   const int cursors = parser.value(QStringLiteral("cursors")).toInt();
   if (cursors > 0)
