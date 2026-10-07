@@ -22,3 +22,4 @@ qce_add_test(tst_foldprovider SOURCES tst_foldprovider.cpp LIBS QMLCodeEditor::C
 qce_add_test(tst_textsearch SOURCES tst_textsearch.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_bracketmatch SOURCES tst_bracketmatch.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_indentguides SOURCES tst_indentguides.cpp testutil.h LIBS QMLCodeEditor::Core)
+qce_add_test(tst_vim SOURCES tst_vim.cpp LIBS QMLCodeEditor::Core)
