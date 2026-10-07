@@ -1115,6 +1115,22 @@ private slots:
     QTRY_COMPARE(pixel(adv * 5.5, 1), plain);
   }
 
+  void vimBlockSelectionKeepsItsColumnGoingDown() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    editor->setText(QStringLiteral("abcdefghij\nabcdefghij\nabcdefghij\nabcdefghij"));
+    editor->setVimMode(true);
+    editor->setCursorPosition(0);
+    QTest::keyClick(view.get(), Qt::Key_V, Qt::ControlModifier);
+    typeText(view.get(), "jlllj"); // the goal set by the first j must not outlive the l presses
+    QCOMPARE(editor->selectionCount(), 3);
+    for (int row = 0; row < 3; ++row) {
+      const qce::Selection sel = editor->selections()->at(row);
+      QCOMPARE(sel.start(), qsizetype(row * 11));
+      QCOMPARE(sel.end(), qsizetype(row * 11 + 4));
+    }
+  }
+
   void vimWriteAndQuitSignalsReachQml() {
     auto [view, editor] = showEditor();
     QVERIFY(editor);

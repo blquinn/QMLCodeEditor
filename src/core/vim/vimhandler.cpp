@@ -822,8 +822,8 @@ void VimInputHandler::executeMotion(const Cmd &cmd) {
   bool toEol = false;
   for (int i = 0; i < positions.size(); ++i) {
     const Target &t = targets[i];
-    if (!t.ok) {
-      goals.append(-2);
+    if (!t.ok) { // a failed motion changes nothing, the goal column included
+      goals.append(m_goalFor == positions && i < m_goal.size() ? m_goal[i] : -2);
       continue;
     }
     qsizetype to = t.to;
@@ -840,10 +840,8 @@ void VimInputHandler::executeMotion(const Cmd &cmd) {
       to = clampNormal(to);
     }
     out[i] = to;
-    if (t.goal == -2)
-      goals.append(m_goalFor == positions && i < m_goal.size() ? m_goal[i] : -2);
-    else
-      goals.append(t.goal);
+    // Only vertical motions (and $) set a goal column; any other motion forgets it.
+    goals.append(t.goal);
   }
   if (visual) {
     for (int i = 0; i < m_vis.size() && i < out.size(); ++i)
