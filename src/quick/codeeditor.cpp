@@ -188,6 +188,10 @@ CodeEditor::~CodeEditor() {
   if (m_popup)
     delete m_popup.data(); // lives under the window's content item, not under us
   m_highlighter->detach(); // it may outlive the document that is about to go
+  for (qce::Highlighter *overlay : std::as_const(m_overlays)) {
+    disconnect(overlay, nullptr, this, nullptr);
+    overlay->detach();
+  }
   // Columns may outlive the editor (QML owns them); they must let go of the document and items first.
   const QList<qce::GutterColumn *> columns = m_columns;
   m_columns.clear();
@@ -525,6 +529,46 @@ void CodeEditor::setHighlighter(qce::Highlighter *highlighter) {
   m_highlighter->attach(&m_document);
   onHighlightInvalidated(qce::Highlighter::AllLines, qce::Highlighter::AllLines);
   emit highlighterChanged();
+}
+
+QQmlListProperty<qce::Highlighter> CodeEditor::overlays() {
+  return QQmlListProperty<qce::Highlighter>(
+    this, nullptr,
+    [](QQmlListProperty<qce::Highlighter> *list, qce::Highlighter *overlay) {
+      static_cast<CodeEditor *>(list->object)->addOverlay(overlay);
+    },
+    [](QQmlListProperty<qce::Highlighter> *list) { return static_cast<CodeEditor *>(list->object)->m_overlays.size(); },
+    [](QQmlListProperty<qce::Highlighter> *list, qsizetype index) {
+      return static_cast<CodeEditor *>(list->object)->m_overlays.at(index);
+    },
+    [](QQmlListProperty<qce::Highlighter> *list) {
+      auto *self = static_cast<CodeEditor *>(list->object);
+      const QList<qce::Highlighter *> overlays = self->m_overlays;
+      for (qce::Highlighter *overlay : overlays)
+        self->removeOverlay(overlay);
+    }
+  );
+}
+
+void CodeEditor::addOverlay(qce::Highlighter *overlay) {
+  if (!overlay || overlay == m_highlighter || m_overlays.contains(overlay))
+    return;
+  m_overlays.append(overlay);
+  connect(overlay, &qce::Highlighter::invalidated, this, &CodeEditor::onHighlightInvalidated);
+  connect(overlay, &QObject::destroyed, this, [this, overlay] {
+    if (m_overlays.removeOne(overlay))
+      invalidateLayouts();
+  });
+  overlay->attach(&m_document);
+  invalidateLayouts();
+}
+
+void CodeEditor::removeOverlay(qce::Highlighter *overlay) {
+  if (!m_overlays.removeOne(overlay))
+    return;
+  disconnect(overlay, nullptr, this, nullptr);
+  overlay->detach();
+  invalidateLayouts();
 }
 
 void CodeEditor::onHighlightInvalidated(qsizetype firstLine, qsizetype lastLine) {
@@ -2162,6 +2206,17 @@ void CodeEditor::buildDecorations() {
       }
     }
   }
+  if (m_theme->hasStyleBackgrounds()) {
+    for (const qce::FramePlanRow &planRow : std::as_const(m_plan)) {
+      const qce::LineLayout &layout = *planRow.layout;
+      for (const qce::StyleBackground &b : layout.styleBackgrounds) {
+        const qreal x0 = xForColumn(layout, layout.startColumn + b.start),
+                    x1 = xForColumn(layout, layout.startColumn + b.end);
+        if (x1 > x0)
+          m_decoBackgroundSpans.append({planRow.row, x0, x1, 0, -1, b.color});
+      }
+    }
+  }
   buildBracketMatches();
   buildSearchMatches();
   buildIndentGuides();
@@ -2626,10 +2681,31 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
   option.setTabStopDistance(m_metrics.tabWidth() * m_metrics.cellAdvance());
   layout->setTextOption(option);
   layout->setCacheEnabled(true);
-  const auto spans = m_highlighter->highlightLines(snapshot, row.line, row.line);
-  QList<QTextLayout::FormatRange> formats;
-  if (!spans.isEmpty())
-    formats = m_theme->formatRanges(sliceSpans(spans.first(), row.startColumn, row.endColumn));
+  auto spans = m_highlighter->highlightLines(snapshot, row.line, row.line);
+  if (spans.isEmpty())
+    spans.append(QList<qce::HighlightSpan>());
+  for (qce::Highlighter *overlay : std::as_const(m_overlays)) {
+    const auto over = overlay->highlightLines(snapshot, row.line, row.line);
+    if (!over.isEmpty() && !over.first().isEmpty())
+      spans.first() = qce::overlaySpans(spans.first(), over.first());
+  }
+  const QList<qce::HighlightSpan> rowSpans = sliceSpans(spans.first(), row.startColumn, row.endColumn);
+  QList<QTextLayout::FormatRange> formats = m_theme->formatRanges(rowSpans);
+  // Token styles with a background (API-13): the backdrop draws them, once the layout says where.
+  QList<qce::StyleBackground> styleBackgrounds;
+  if (m_theme->hasStyleBackgrounds()) {
+    const int rowLength = int(text.size());
+    for (const qce::HighlightSpan &span : rowSpans) {
+      const QColor color = m_theme->styleBackground(span.style);
+      const int from = int(qMax<qsizetype>(span.start, 0)), to = int(qMin<qsizetype>(span.start + span.length, rowLength));
+      if (!color.isValid() || to <= from)
+        continue;
+      if (!styleBackgrounds.isEmpty() && styleBackgrounds.last().end == from && styleBackgrounds.last().color == color)
+        styleBackgrounds.last().end = to;
+      else
+        styleBackgrounds.append({from, to, color});
+    }
+  }
   if (m_showWhitespace)
     formats = withWhitespaceFormats(text, std::move(formats), m_theme->whitespace());
   // Text that is shown in the row without being in the document: inline decorations (inlay hints) and
@@ -2753,6 +2829,7 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
   result->indentX = row.indent;
   result->endsLine = row.isLast();
   result->injections = std::move(injections);
+  result->styleBackgrounds = std::move(styleBackgrounds);
   return result;
 }
 

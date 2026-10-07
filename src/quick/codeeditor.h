@@ -141,6 +141,7 @@ public:
   Q_PROPERTY(RenderType renderType READ renderType WRITE setRenderType RESET resetRenderType NOTIFY renderTypeChanged FINAL)
   Q_PROPERTY(qce::Theme *theme READ theme WRITE setTheme NOTIFY themeChanged FINAL)
   Q_PROPERTY(qce::Highlighter *highlighter READ highlighter WRITE setHighlighter NOTIFY highlighterChanged FINAL)
+  Q_PROPERTY(QQmlListProperty<qce::Highlighter> overlays READ overlays FINAL)
   Q_PROPERTY(WrapMode wrapMode READ wrapMode WRITE setWrapMode NOTIFY wrapModeChanged FINAL)
   Q_PROPERTY(int wrapColumn READ wrapColumn WRITE setWrapColumn NOTIFY wrapColumnChanged FINAL)
   Q_PROPERTY(bool wordWrap READ wordWrap WRITE setWordWrap NOTIFY wordWrapChanged FINAL)
@@ -201,6 +202,17 @@ public:
   // nullptr restores it. The editor does not take ownership.
   qce::Highlighter *highlighter() const { return m_highlighter; }
   void setHighlighter(qce::Highlighter *highlighter);
+
+  // Highlighters painted over `highlighter` (API-14): where an overlay styles a range, its style replaces
+  // the main highlighter's there, later overlays over earlier ones, and the editor does the merging. A
+  // host draws `{{variable}}` references, search hits or a matching bracket with one, in a style from
+  // registerTokenStyle() (colored by Theme::setTokenStyle). An overlay is attached to the document like the
+  // main highlighter and says which lines changed through invalidated(), which re-lays out only those. The
+  // editor does not own overlays; one that is destroyed leaves the list.
+  QQmlListProperty<qce::Highlighter> overlays();
+  const QList<qce::Highlighter *> &overlayList() const { return m_overlays; }
+  void addOverlay(qce::Highlighter *overlay);
+  void removeOverlay(qce::Highlighter *overlay);
 
   // Soft wrap (M4). With WrapAtViewport rows follow the item's width; WrapAtColumn wraps at a fixed
   // number of characters. Lines break after whitespace (`wordWrap`) or between any two characters;
@@ -663,6 +675,7 @@ private:
   qce::GutterColumn *m_hoverColumn = nullptr;
   qsizetype m_hoverLine = -1;
   QList<qce::GutterColumn *> m_columns;
+  QList<qce::Highlighter *> m_overlays;
   qce::GutterPlan m_gutter;
   qreal m_gutterWidth = 0;
   bool m_cursorInGutter = false;

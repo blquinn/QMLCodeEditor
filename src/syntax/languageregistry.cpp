@@ -1,10 +1,12 @@
 #include "syntax/languageregistry.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMutex>
 #include <QtCore/QMutexLocker>
 #include <QtCore/QRegularExpression>
+#include <QtCore/QThread>
 
 #include <map>
 
@@ -33,7 +35,9 @@ CompiledLanguage::~CompiledLanguage() {
 namespace {
 
 QString readResource(const QString &path) {
-  QFile file(u":/qce/syntax/"_s + path);
+  // Built-in queries are named relative to the module's resources; a host's start with ":" or "/".
+  const bool own = path.startsWith(u':') || path.startsWith(u'/');
+  QFile file(own ? path : u":/qce/syntax/"_s + path);
   if (!file.open(QIODevice::ReadOnly))
     return {};
   return QString::fromUtf8(file.readAll());
@@ -130,7 +134,7 @@ TSQuery *compileQuery(const TSLanguage *language, const QString &source, QString
 }
 
 LanguageRegistry::LanguageRegistry() {
-  auto add = [this](LanguageInfo info) { m_languages.append(std::move(info)); };
+  auto add = [this](LanguageInfo info) { m_languages.push_back(std::move(info)); };
   add({u"json"_s,
        u"JSON"_s,
        {u"json"_s, u"jsonc"_s, u"geojson"_s, u"webmanifest"_s},
@@ -189,9 +193,72 @@ LanguageRegistry::LanguageRegistry() {
   add(std::move(inlineMd));
 }
 
+namespace {
+QMutex &cacheMutex() {
+  static QMutex mutex;
+  return mutex;
+}
+std::map<QString, std::shared_ptr<const CompiledLanguage>> &compiledCache() {
+  static std::map<QString, std::shared_ptr<const CompiledLanguage>> cache;
+  return cache;
+}
+LanguageRegistry &mutableInstance() {
+  return const_cast<LanguageRegistry &>(LanguageRegistry::instance());
+}
+} // namespace
+
 const LanguageRegistry &LanguageRegistry::instance() {
-  static const LanguageRegistry registry;
+  static LanguageRegistry registry;
   return registry;
+}
+
+bool LanguageRegistry::registerLanguage(LanguageInfo info, QString *error) {
+  auto fail = [error](const QString &reason) {
+    if (error)
+      *error = reason;
+    return false;
+  };
+  Q_ASSERT_X(
+    !QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread(),
+    "LanguageRegistry::registerLanguage", "register languages on the GUI thread, before editors parse"
+  );
+  info.id = info.id.trimmed().toLower();
+  if (info.id.isEmpty())
+    return fail(u"a language needs an id"_s);
+  if (!info.grammar)
+    return fail(u"language '%1' has no grammar"_s.arg(info.id));
+  const TSLanguage *grammar = info.grammar();
+  if (!grammar)
+    return fail(u"the grammar of '%1' returned null"_s.arg(info.id));
+  const uint32_t abi = ts_language_abi_version(grammar);
+  if (abi < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION || abi > TREE_SITTER_LANGUAGE_VERSION)
+    return fail(
+      u"the grammar of '%1' has ABI version %2, this build supports %3 to %4"_s.arg(info.id).arg(abi)
+        .arg(TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION).arg(TREE_SITTER_LANGUAGE_VERSION)
+    );
+  auto lower = [](QStringList &list) {
+    for (QString &entry : list)
+      entry = entry.trimmed().toLower();
+  };
+  lower(info.extensions);
+  lower(info.fileNames);
+  lower(info.interpreters);
+  lower(info.aliases);
+  for (QString &ext : info.extensions)
+    if (ext.startsWith(u'.'))
+      ext.remove(0, 1);
+
+  LanguageRegistry &registry = mutableInstance();
+  const QMutexLocker lock(&cacheMutex());
+  compiledCache().erase(info.id); // the next compiled() builds it from the new definition
+  for (LanguageInfo &existing : registry.m_languages) {
+    if (existing.id == info.id) {
+      existing = std::move(info);
+      return true;
+    }
+  }
+  registry.m_languages.push_front(std::move(info));
+  return true;
 }
 
 const LanguageInfo *LanguageRegistry::find(const QString &idOrAlias) const {
@@ -251,28 +318,28 @@ const LanguageInfo *LanguageRegistry::detect(const QString &fileName, const QStr
 }
 
 std::shared_ptr<const CompiledLanguage> LanguageRegistry::compiled(const QString &id) const {
-  static QMutex mutex;
-  static std::map<QString, std::shared_ptr<const CompiledLanguage>> cache;
   const LanguageInfo *info = find(id);
   if (!info)
     return nullptr;
-  QMutexLocker lock(&mutex);
+  auto &cache = compiledCache();
+  QMutexLocker lock(&cacheMutex());
   if (auto it = cache.find(info->id); it != cache.end())
     return it->second;
   auto result = std::make_shared<CompiledLanguage>();
   result->info = info;
   result->language = info->grammar();
-  auto build = [&](const QStringList &files) -> TSQuery * {
+  auto build = [&](const QStringList &files, const QString &inlineSource) -> TSQuery * {
     QString source;
     for (const QString &file : files) {
       source += readResource(file);
       source += u'\n';
     }
+    source += inlineSource;
     return source.trimmed().isEmpty() ? nullptr : compileQuery(result->language, source, &result->warnings);
   };
-  result->highlights = build(info->highlightQueries);
-  result->injections = build(info->injectionQueries);
-  result->folds = build(info->foldQueries);
+  result->highlights = build(info->highlightQueries, info->highlightSource);
+  result->injections = build(info->injectionQueries, info->injectionSource);
+  result->folds = build(info->foldQueries, info->foldSource);
   if (result->highlights)
     result->highlightInfo = QueryInfo::analyze(result->highlights);
   if (result->injections)

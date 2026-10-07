@@ -46,8 +46,9 @@ class Theme : public QObject {
   Q_PROPERTY(QColor searchMatch MEMBER m_searchMatch NOTIFY changed)
   Q_PROPERTY(QColor indentGuide MEMBER m_indentGuide NOTIFY changed)
   Q_PROPERTY(QColor indentGuideActive MEMBER m_indentGuideActive NOTIFY changed)
-  // Style name -> { color, bold, italic }; names are the TokenStyle names from core/highlighter.h
-  // in lower case ("keyword", "string", ...). Unlisted styles use the foreground color.
+  // Style name -> { color, background, bold, italic }; names are the TokenStyle names from core/highlighter.h
+  // in lower case ("keyword", "string", ...) or the names of styles a host registered (registerTokenStyle).
+  // Unlisted styles use the foreground color and no background. A background is drawn behind the text.
   Q_PROPERTY(QVariantMap tokenStyles READ tokenStyles WRITE setTokenStyles NOTIFY changed)
 public:
   explicit Theme(QObject *parent = nullptr);
@@ -94,6 +95,17 @@ public:
   QTextCharFormat charFormat(qce::TokenStyle style) const;
   // Layout format ranges for spans of one line; Default spans are skipped.
   QList<QTextLayout::FormatRange> formatRanges(const QList<qce::HighlightSpan> &spans) const;
+  // The background of a token style (invalid when it has none). hasStyleBackgrounds() is false when no
+  // style has one, so layouts can skip looking.
+  QColor styleBackground(qce::TokenStyle style) const;
+  bool hasStyleBackgrounds() const { return m_hasBackgrounds; }
+
+  // Defines (and registers, if new) a token style by name in one step; emits changed() once. An invalid
+  // `background` means none. Does nothing if the name cannot be registered (empty, or all slots taken).
+  Q_INVOKABLE void setTokenStyle(
+    const QString &name, const QColor &color, const QColor &background = QColor(), bool bold = false,
+    bool italic = false
+  );
 
   // Loads the built-in "dark" or "light" palette and token styles (one changed() signal).
   Q_INVOKABLE void applyPreset(const QString &name);
@@ -134,9 +146,15 @@ private:
   QColor m_indentGuide{0x3a, 0x3e, 0x44};
   QColor m_indentGuideActive{0x6a, 0x70, 0x7a};
   void rebuildFormats();
+  void buildFormat(size_t index, const QString &name) const;
 
   QVariantMap m_tokenStyles;
-  QTextCharFormat m_formats[size_t(qce::TokenStyle::Count)];
+  // Indexed by the style's value: built-ins first, host-registered ones from TokenStyle::FirstCustom.
+  // Styles registered after the last rebuild get theirs on first use.
+  mutable QTextCharFormat m_formats[256];
+  mutable QColor m_backgrounds[256];
+  mutable int m_customBuilt = 0; // how many registered custom styles m_formats covers
+  bool m_hasBackgrounds = false;
 };
 
 } // namespace qce

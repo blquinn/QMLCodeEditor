@@ -17,7 +17,7 @@
 namespace qce {
 
 // Maps a capture name (@keyword.function) to a token style by its longest dotted prefix
-// (SYNTAX-06). nullopt means "not a styling capture" (@spell, @injection.content, unknown names):
+// (SYNTAX-06), after the styles hosts registered (registerTokenStyle). nullopt means "not a styling capture" (@spell, @injection.content, unknown names):
 // the capture is ignored. TokenStyle::Default is an explicit reset (@none): it hides outer styles.
 std::optional<TokenStyle> styleForCapture(QStringView name);
 
