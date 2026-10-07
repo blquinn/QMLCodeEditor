@@ -165,6 +165,16 @@ ApplicationWindow {
             MenuItem { text: qsTr("&Paste"); onTriggered: editor.paste() }
             MenuSeparator {}
             MenuItem { text: qsTr("Select &All"); onTriggered: editor.selectAll() }
+            MenuSeparator {}
+            MenuItem {
+                text: qsTr("&Vim mode")
+                checkable: true
+                checked: editor.vimMode
+                onToggled: {
+                    editor.vimMode = checked
+                    editor.forceActiveFocus()
+                }
+            }
         }
         Menu {
             title: qsTr("&Selection")
@@ -449,6 +459,20 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
+                // Vim's mode, the keys typed so far, the ":" or search prompt, and macro recording.
+                Label {
+                    visible: editor.vimMode
+                    font.bold: true
+                    text: editor.vim.commandLine !== "" ? editor.vim.commandLine
+                          : "-- " + editor.vim.modeName + " --"
+                            + (editor.vim.recordingRegister !== "" ? "  recording @" + editor.vim.recordingRegister : "")
+                            + (editor.vim.pendingKeys !== "" ? "  " + editor.vim.pendingKeys : "")
+                }
+                Label {
+                    visible: editor.vimMode && editor.vim.message !== ""
+                    text: editor.vim.message
+                    color: "#e5a04c"
+                }
                 Label {
                     text: editor.loading ? qsTr("Loading… %1%").arg(Math.round(editor.loadProgress * 100))
                                          : editor.wrapping ? qsTr("Wrapping…") : statusText
@@ -573,6 +597,28 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.rightMargin: vbar.width
         anchors.bottomMargin: hbar.visible ? hbar.height : 0
+
+        // :w and :q from vim mode.
+        Connections {
+            target: editor.vim
+            function onWriteRequested(path) {
+                var file = window.currentFile
+                if (path !== "") {
+                    if (path.charAt(0) !== "/") {
+                        statusLabel.statusText = qsTr(":w needs an absolute path")
+                        return
+                    }
+                    file = Qt.url("file://" + path)
+                }
+                if (file.toString() === "") {
+                    statusLabel.statusText = qsTr("No file name")
+                    return
+                }
+                window.currentFile = file
+                editor.save(file)
+            }
+            function onQuitRequested(force) { Qt.quit() }
+        }
 
         onSaved: (path) => statusLabel.statusText = qsTr("Saved %1").arg(path)
         onSaveFailed: (error) => statusLabel.statusText = qsTr("Save failed: %1").arg(error)

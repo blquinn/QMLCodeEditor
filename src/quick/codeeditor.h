@@ -13,6 +13,7 @@
 #include "core/inputhandler.h"
 #include "core/selection.h"
 #include "core/selectionset.h"
+#include "core/vim/vimhandler.h"
 #include "core/textdocument.h"
 #include "quick/editorscene.h"
 #include "quick/gutter.h"
@@ -52,6 +53,13 @@ struct FoldProviderForeign {
   Q_GADGET
   QML_FOREIGN(qce::FoldProvider)
   QML_ANONYMOUS
+};
+// The vim handler's enums and properties for QML (CodeEditor::vim).
+struct VimForeign {
+  Q_GADGET
+  QML_FOREIGN(qce::VimInputHandler)
+  QML_NAMED_ELEMENT(VimHandler)
+  QML_UNCREATABLE("Use CodeEditor.vim")
 };
 } // namespace qce
 
@@ -99,6 +107,10 @@ public:
   )
   Q_PROPERTY(bool autoClose READ autoClose WRITE setAutoClose NOTIFY autoCloseChanged FINAL)
   Q_PROPERTY(QStringList autoClosePairs READ autoClosePairs WRITE setAutoClosePairs NOTIFY autoClosePairsChanged FINAL)
+  // Vim mode (M10): the editor's input handler is swapped for vim's and back. `vim` carries the mode,
+  // pending keys and prompt for a status bar, and signals for :w and :q.
+  Q_PROPERTY(bool vimMode READ vimMode WRITE setVimMode NOTIFY vimModeChanged FINAL)
+  Q_PROPERTY(qce::VimInputHandler *vim READ vim CONSTANT FINAL)
   Q_PROPERTY(bool matchBrackets READ matchBrackets WRITE setMatchBrackets NOTIFY matchBracketsChanged FINAL)
   Q_PROPERTY(bool showIndentGuides READ showIndentGuides WRITE setShowIndentGuides NOTIFY showIndentGuidesChanged FINAL)
   Q_PROPERTY(bool detectIndentation READ detectIndentation WRITE setDetectIndentation NOTIFY detectIndentationChanged FINAL)
@@ -397,6 +409,14 @@ public:
   // until the host sets another; passing nullptr restores it. The editor does not take ownership.
   qce::InputHandler *inputHandler() const { return m_handler; }
   void setInputHandler(qce::InputHandler *handler);
+  bool vimMode() const { return m_handler == m_vim; }
+  void setVimMode(bool enable);
+  qce::VimInputHandler *vim() const { return m_vim; }
+  // Runs keys in vim notation ("dd", "ihello<Esc>", ":s/a/b/<CR>") as if typed; false when vim mode is
+  // off or a key was not handled. For host key mappings, scripts and screenshots.
+  Q_INVOKABLE bool sendVimKeys(const QString &keys);
+  // Highlights every match of the pattern in view (what / does in vim); an empty pattern clears it.
+  void setSearchHighlight(const QRegularExpression &pattern);
 
   // Commands for hosts and menus. Each scrolls the cursor into view.
   Q_INVOKABLE void undo();
@@ -452,6 +472,7 @@ public:
   Q_INVOKABLE void save(const QUrl &file);
 
 signals:
+  void vimModeChanged();
   void lineCountChanged();
   void loadingChanged();
   void loadProgressChanged();
@@ -584,6 +605,7 @@ private:
   // Decoration plumbing: spans for the rows of the plan, and the virtual text at the end of a line.
   void buildDecorations();
   void buildBracketMatches();
+  void buildSearchMatches();
   void buildIndentGuides();
   qce::BracketPair bracketPairAt(qsizetype head);
   bool gotoDiagnostic(bool forward, int leastSevere);
@@ -692,6 +714,8 @@ private:
   std::unique_ptr<EditorLayout> m_cursorLayout;
   std::unique_ptr<EditorHost> m_host;
   qce::DefaultInputHandler m_defaultHandler;
+  qce::VimInputHandler *m_vim = nullptr;
+  QRegularExpression m_searchHighlight;
   qce::InputHandler *m_handler = &m_defaultHandler;
   bool m_readOnly = false;
   int m_undoLimit = 0;

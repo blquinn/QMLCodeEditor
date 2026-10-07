@@ -73,6 +73,25 @@ public:
   }
   void foldCommand(qce::FoldCommand command) override { m_editor->foldCommand(command); }
   void gotoDiagnostic(bool forward) override { m_editor->gotoDiagnostic(forward, qce::HintSeverity); }
+  VisibleRows visibleRows() const override {
+    const qreal lineHeight = m_editor->m_metrics.lineHeight();
+    const qsizetype rows = m_editor->m_map.rowCount();
+    if (rows <= 0 || lineHeight <= 0)
+      return {};
+    const qsizetype first = qBound<qsizetype>(0, qsizetype(std::floor(m_editor->m_contentY / lineHeight)), rows - 1);
+    const qsizetype last =
+      qBound<qsizetype>(first, qsizetype(std::floor((m_editor->m_contentY + m_editor->height() - 1) / lineHeight)), rows - 1);
+    return {first, last, true};
+  }
+  QString clipboardText(bool selection) override {
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    return clipboard->text(selection && clipboard->supportsSelection() ? QClipboard::Selection : QClipboard::Clipboard);
+  }
+  void setClipboardText(const QString &text, bool selection) override {
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    clipboard->setText(text, selection && clipboard->supportsSelection() ? QClipboard::Selection : QClipboard::Clipboard);
+  }
+  void setSearchHighlight(const QRegularExpression &pattern) override { m_editor->setSearchHighlight(pattern); }
 
 private:
   CodeEditor *m_editor;
@@ -99,6 +118,13 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
   connect(&m_autoScrollTimer, &QTimer::timeout, this, &CodeEditor::autoScrollDrag);
   m_cursorLayout = std::make_unique<EditorLayout>(this);
   m_host = std::make_unique<EditorHost>(this);
+  m_vim = new qce::VimInputHandler(this);
+  connect(m_vim, &qce::VimInputHandler::modeChanged, this, [this] {
+    if (m_handler == m_vim) {
+      QGuiApplication::inputMethod()->update(Qt::ImEnabled | Qt::ImQueryInput);
+      invalidatePlan(); // the cursor's shape and character change with the mode
+    }
+  });
   m_font = qce::TextMetrics::defaultMonospaceFont();
   m_metrics.setFont(m_font);
   updateWrapMeasure();
@@ -687,8 +713,39 @@ void CodeEditor::setInputHandler(qce::InputHandler *handler) {
     handler = &m_defaultHandler;
   if (handler == m_handler)
     return;
+  qce::EditContext ctx = editContext();
   m_handler->reset();
+  m_handler->deactivate(ctx, *m_host);
   m_handler = handler;
+  m_handler->activate(ctx, *m_host);
+  emit vimModeChanged();
+  QGuiApplication::inputMethod()->update(Qt::ImEnabled | Qt::ImQueryInput);
+  restartBlink();
+  invalidatePlan();
+  update();
+}
+
+bool CodeEditor::sendVimKeys(const QString &keys) {
+  if (!vimMode())
+    return false;
+  qce::EditContext ctx = editContext();
+  const bool handled = m_vim->feed(keys, ctx, *m_host);
+  afterCommand();
+  return handled;
+}
+
+void CodeEditor::setVimMode(bool enable) {
+  if (enable == vimMode())
+    return;
+  setInputHandler(enable ? static_cast<qce::InputHandler *>(m_vim) : nullptr);
+}
+
+void CodeEditor::setSearchHighlight(const QRegularExpression &pattern) {
+  if (pattern.pattern() == m_searchHighlight.pattern() && pattern.patternOptions() == m_searchHighlight.patternOptions())
+    return;
+  m_searchHighlight = pattern;
+  invalidatePlan();
+  update();
 }
 
 void CodeEditor::updateUndoState() {
@@ -1021,7 +1078,7 @@ void CodeEditor::clearPreedit() {
 }
 
 void CodeEditor::inputMethodEvent(QInputMethodEvent *event) {
-  if (m_readOnly || m_document.isLoading()) {
+  if (m_readOnly || m_document.isLoading() || !m_handler->acceptsTextInput()) {
     event->ignore();
     return;
   }
@@ -1039,7 +1096,7 @@ void CodeEditor::inputMethodEvent(QInputMethodEvent *event) {
     }
     qce::EditContext ctx = editContext();
     if (event->replacementLength() == 0 && event->replacementStart() == 0)
-      qce::commands::typeText(ctx, commit);
+      m_handler->commitText(commit, ctx, *m_host);
     else
       qce::commands::insertText(ctx, commit, qce::EditKind::Typing);
   }
@@ -1081,7 +1138,7 @@ QVariant CodeEditor::inputMethodQuery(Qt::InputMethodQuery query) const {
   auto lineText = [&] { return rope.toString(lineStart, rope.lineEnd(pos.line)); };
   switch (query) {
   case Qt::ImEnabled:
-    return !m_readOnly;
+    return !m_readOnly && m_handler->acceptsTextInput();
   case Qt::ImReadOnly:
     return m_readOnly;
   case Qt::ImHints:
@@ -1478,16 +1535,37 @@ void CodeEditor::buildOverlays() {
   const qsizetype highOffset = afterLine < rope.lineCount() ? rope.lineStart(afterLine) : rope.length();
   const qreal viewLeft = m_contentX - cell, viewRight = m_contentX + textViewportWidth() + cell;
   const int primary = m_selections.primaryIndex();
+  // The input handler picks the cursor's shape and the character it sits on (vim: a block).
+  const qce::CursorShape shape = m_handler->cursorShape();
+  const qce::EditContext handlerContext = editContext();
   for (int i = m_selections.lowerBound(lowOffset); i < m_selections.count(); ++i) {
     const qce::Selection sel = m_selections.at(i);
     if (sel.start() > highOffset)
       break;
     const qce::TextPosition head = m_map.visiblePosition(rope.positionAt(sel.head));
-    const qsizetype headRow = m_map.rowForPosition(head);
-    if (const qce::LineLayout *layout = planLayout(headRow)) {
-      const qreal x = i == primary && layout->preedit() ? preeditCursorX(*layout) : xForColumn(*layout, head.column);
-      if (x >= viewLeft && x <= viewRight)
-        m_cursorSpans.append({headRow, x, x + 2});
+    const qsizetype cursorAt = m_handler->cursorOffset(i, sel, handlerContext);
+    if (cursorAt >= 0) {
+      const qce::TextPosition at = cursorAt == sel.head ? head : m_map.visiblePosition(rope.positionAt(cursorAt));
+      const qsizetype cursorRow = m_map.rowForPosition(at);
+      if (const qce::LineLayout *layout = planLayout(cursorRow)) {
+        const qreal x = i == primary && layout->preedit() ? preeditCursorX(*layout) : xForColumn(*layout, at.column);
+        if (x >= viewLeft && x <= viewRight) {
+          if (shape == qce::CursorShape::Line) {
+            m_cursorSpans.append({cursorRow, x, x + 2});
+          } else {
+            // Over the character: its width, or one cell where there is none (an empty line).
+            qreal x1 = x + cell;
+            if (cursorAt < rope.lineEnd(at.line)) {
+              const qsizetype units = qce::TextBoundaries(rope).nextGrapheme(cursorAt) - cursorAt;
+              x1 = qMax(x1 - cell + 1, xForColumn(*layout, at.column + units));
+            }
+            if (shape == qce::CursorShape::Underline)
+              m_cursorSpans.append({cursorRow, x, x1, m_metrics.lineHeight() - 2, 2});
+            else
+              m_cursorSpans.append({cursorRow, x, x1});
+          }
+        }
+      }
     }
     if (i == primary && sel.isEmpty()) {
       // The highlight covers every row of the cursor's line.
@@ -2085,6 +2163,7 @@ void CodeEditor::buildDecorations() {
     }
   }
   buildBracketMatches();
+  buildSearchMatches();
   buildIndentGuides();
   const qsizetype drawn = m_decorations.count(DecorationKind::Underline) + m_decorations.count(DecorationKind::Squiggle) +
                           m_decorations.count(DecorationKind::Background);
@@ -2205,6 +2284,36 @@ void CodeEditor::buildBracketMatches() {
     if (pair.valid()) {
       mark(pair.open);
       mark(pair.close);
+    }
+  }
+}
+
+// Backgrounds for the matches of the search pattern in the rows being drawn. Each row is matched on
+// its own text, so a match that wraps across rows is not marked and the work is bounded by the rows
+// in the frame plan.
+void CodeEditor::buildSearchMatches() {
+  if (m_searchHighlight.pattern().isEmpty() || !m_searchHighlight.isValid())
+    return;
+  constexpr int kMaxMatches = 4000;
+  const qreal cell = m_metrics.cellAdvance();
+  const qreal viewLeft = m_contentX - cell, viewRight = m_contentX + textViewportWidth() + cell;
+  const QColor color = m_theme->searchMatch();
+  int count = 0;
+  for (qsizetype row = m_planFirst; row <= m_planLast && count < kMaxMatches; ++row) {
+    const qce::LineLayout *layout = m_plan[row - m_planFirst].layout.get();
+    if (!layout || layout->text.isEmpty())
+      continue;
+    QRegularExpressionMatchIterator it = m_searchHighlight.globalMatch(layout->text);
+    while (it.hasNext() && count < kMaxMatches) {
+      const QRegularExpressionMatch match = it.next();
+      if (match.capturedLength() == 0)
+        continue;
+      const qreal x0 = xForColumn(*layout, layout->startColumn + match.capturedStart());
+      const qreal x1 = xForColumn(*layout, layout->startColumn + match.capturedEnd());
+      if (x1 > x0 && x1 >= viewLeft && x0 <= viewRight) {
+        m_decoBackgroundSpans.append({row, x0, x1, 0, -1, color});
+        ++count;
+      }
     }
   }
 }
@@ -2745,6 +2854,8 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.currentLineColor = m_theme->currentLine();
   params.selectionColor = m_theme->selection();
   params.cursorColor = m_theme->cursor();
+  if (m_handler->cursorShape() == qce::CursorShape::Block)
+    params.cursorColor.setAlpha(150); // the character stays readable under the block
   params.currentLine = &m_currentLineSpans;
   params.selection = &m_selectionSpans;
   params.markColor = m_theme->whitespace();
