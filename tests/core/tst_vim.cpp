@@ -497,6 +497,14 @@ const Row k_misc[] = {
 };
 
 const Row k_extra[] = {
+  {"goal resets after horizontal move", "|abcdefgh\nabcdefgh\nabcdefgh", "jlllj", "abcdefgh\nabcdefgh\nabc|defgh"},
+  {"goal resets after word move", "|abcdefgh\nab cdefgh\nabcdefgh", "jwj", "abcdefgh\nab cdefgh\nabc|defgh"},
+  {"failed motion keeps the goal", "abc|defgh\nabcdefgh", "jjk", "abc|defgh\nabcdefgh"},
+  {"goal kept across short row", "abc|defgh\nab\nabcdefgh", "jj", "abcdefgh\nab\nabc|defgh"},
+  {"goal after visual move", "|abcdefgh\nabcdefgh\nabcdefgh", "vjlllj<Esc>", "abcdefgh\nabcdefgh\nabc|defgh"},
+  {"block j keeps column after l", "|abcdefgh\nabcdefgh\nabcdefgh", "<C-v>jlllj", "‹abcd›efgh\n‹abcd›efgh\n‹abcd›efgh"},
+  {"block j then l then j", "|abcdefgh\nabcdefgh\nabcdefgh", "<C-v>jlllj", "‹abcd›efgh\n‹abcd›efgh\n‹abcd›efgh"},
+  {"block j from zero column then l", "|abcdefgh\nabcdefgh\nabcdefgh\nabcdefgh", "<C-v>jllljj", "‹abcd›efgh\n‹abcd›efgh\n‹abcd›efgh\n‹abcd›efgh"},
   {"cw at word end", "fo|o bar", "cwX<Esc>", "fo|X bar"},
   {"cW", "|a.b c", "cWX<Esc>", "|X c"},
   {"2cc", "|a\nb\nc", "2ccX<Esc>", "|X\nc"},
