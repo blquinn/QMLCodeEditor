@@ -364,7 +364,7 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **API-09** Code actions and quick-fix hooks
 - [ ] **API-10** Bracket matching that skips strings and comments
   - Ask the tree-sitter tree for the bracket's partner (sibling bracket nodes under the same parent) instead of scanning, without moving the parse window; fall back to the raw scan outside the parsed range.
-- [~] **API-11** Indent guides
+- [x] **API-11** Indent guides — done 2026-10-06 (67ce533)
   - `showIndentGuides` property (default on); a faint vertical line at every indent step (`indentWidth` columns, `tabWidth` when indenting with tabs) inside a line's leading whitespace, theme colors `indentGuide` and `indentGuideActive`. Blank lines continue the guides of the lines around them; with soft wrap only the hanging indent shows them; folded lines take theirs with them.
   - The guide of the block around the primary cursor is drawn in the active color: the pair of the bracket next to the cursor (the one API-06 highlights), else the innermost enclosing pair (bounded raw scan, cached until the next edit).
   - Guides of neighbouring rows are merged into one rectangle per column to keep the node count down.
