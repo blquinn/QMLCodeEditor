@@ -32,4 +32,4 @@ python3 tools/benchtrack.py history 'insert' --suite bench_core   # a case's tre
 ```
 
 A case is marked `slower`/`faster` when it moved more than its tolerance (20% for times, 30% for the frame suites,
-10% for bytes) and, for times, by more than 2 us. Counts are never compared.
+10% for bytes) and, for times, by more than 2 us (bytes: 256 KiB). Counts are never compared.

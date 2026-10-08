@@ -50,10 +50,11 @@ def index_results(doc):
 def compare_suite(manifest, suite, before, after):
     """Rows for one suite: (name, unit, before, after, delta or None, verdict).
 
-    verdict is 'slower', 'faster', '' (within tolerance / not compared), 'new' or 'removed'. For 'ns' cases a change
-    smaller than the noise floor is never notable.
+    verdict is 'slower', 'faster', '' (within tolerance / not compared), 'new' or 'removed'. A 'ns' or
+    'bytes' change smaller than its noise floor is never notable.
     """
-    floor = float(manifest.get("defaults", {}).get("floor_ns", 2000))
+    defaults = manifest.get("defaults", {})
+    floors = {"ns": float(defaults.get("floor_ns", 2000)), "bytes": float(defaults.get("floor_bytes", 262144))}
     b, a = index_results(before), index_results(after)
     rows = []
     for name in sorted(set(b) | set(a)):
@@ -67,7 +68,7 @@ def compare_suite(manifest, suite, before, after):
         delta = (av - bv) / bv if bv else (0.0 if av == 0 else float("inf"))
         tol = tolerance_for(manifest, suite, unit)
         verdict = ""
-        if tol is not None and abs(delta) > tol and not (unit == "ns" and abs(av - bv) < floor):
+        if tol is not None and abs(delta) > tol and abs(av - bv) >= floors.get(unit, 0):
             verdict = "slower" if av > bv else "faster"
         rows.append((name, unit, bv, av, delta, verdict))
     return rows
