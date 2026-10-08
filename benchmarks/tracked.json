@@ -2,7 +2,8 @@
   "comment": "Benchmarks recorded by tools/benchtrack.py. 'binary' is relative to the build dir; 'tolerance' is the change (fraction) above which compare marks a case slower/faster. Counts are never compared.",
   "defaults": {
     "tolerance": { "ns": 0.20, "bytes": 0.10 },
-    "floor_ns": 2000
+    "floor_ns": 2000,
+    "floor_bytes": 262144
   },
   "suites": [
     { "name": "bench_core", "binary": "benchmarks/core/bench_core" },

@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import benchtrack as bt  # noqa: E402
 
 MANIFEST = {
-    "defaults": {"tolerance": {"ns": 0.20, "bytes": 0.10}, "floor_ns": 2000},
+    "defaults": {"tolerance": {"ns": 0.20, "bytes": 0.10}, "floor_ns": 2000, "floor_bytes": 65536},
     "suites": [{"name": "s", "binary": "x"}, {"name": "wide", "binary": "y", "tolerance": {"ns": 0.50}}],
 }
 
@@ -46,9 +46,11 @@ class CompareTest(unittest.TestCase):
         rows = bt.compare_suite(MANIFEST, "s", doc([("a", 100, "ns")]), doc([("a", 1000, "ns")]))
         self.assertEqual(verdicts(rows), {"a": ""})  # 10x, but under 2 us
 
-    def test_floor_does_not_apply_to_bytes(self):
-        rows = bt.compare_suite(MANIFEST, "s", doc([("m", 1000, "bytes")]), doc([("m", 1500, "bytes")]))
-        self.assertEqual(verdicts(rows), {"m": "slower"})
+    def test_bytes_floor(self):
+        small = bt.compare_suite(MANIFEST, "s", doc([("m", 1000, "bytes")]), doc([("m", 1500, "bytes")]))
+        self.assertEqual(verdicts(small), {"m": ""})
+        big = bt.compare_suite(MANIFEST, "s", doc([("m", 1e6, "bytes")]), doc([("m", 1.5e6, "bytes")]))
+        self.assertEqual(verdicts(big), {"m": "slower"})
 
     def test_counts_not_compared(self):
         rows = bt.compare_suite(MANIFEST, "s", doc([("n", 10, "count")]), doc([("n", 1000, "count")]))

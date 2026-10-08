@@ -1,0 +1,174 @@
+{
+  "meta": {
+    "args": [],
+    "compiler": "clang 22.1.8 (Fedora 22.1.8-4.fc44)",
+    "cores": 24,
+    "cpu": "AMD Ryzen 9 5900X 12-Core Processor",
+    "date": "2026-10-08T13:43:17Z",
+    "git": {
+      "branch": "main",
+      "commit": "281bb6e399",
+      "dirty": false
+    },
+    "optimized": true,
+    "os": "Fedora Linux 44 (KDE Plasma Desktop Edition)",
+    "qt": "6.11.2",
+    "suite": "bench_core"
+  },
+  "results": [
+    {
+      "items": 1,
+      "iterations": 10,
+      "mean_ns": 6542570.6,
+      "median_ns": 6329151.5,
+      "median_ns_per_item": 6329151.5,
+      "min_ns": 5407248,
+      "name": "load/first_snapshot_100MB",
+      "p95_ns": 8087776,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 3,
+      "mean_ns": 106752472,
+      "median_ns": 106819565,
+      "median_ns_per_item": 106819565,
+      "min_ns": 106455426,
+      "name": "load/full_100MB",
+      "p95_ns": 106982425,
+      "unit": "ns"
+    },
+    {
+      "items": 1000000,
+      "iterations": 3,
+      "mean_ns": 1467563317,
+      "median_ns": 1402957347,
+      "median_ns_per_item": 1402.957347,
+      "min_ns": 1401813908,
+      "name": "edit/random_1M",
+      "p95_ns": 1597918696,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 300,
+      "mean_ns": 552500.5166666667,
+      "median_ns": 552675,
+      "median_ns_per_item": 552.675,
+      "min_ns": 527539,
+      "name": "lookup/offset_to_pos",
+      "p95_ns": 564530,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 300,
+      "mean_ns": 501225.11,
+      "median_ns": 499085,
+      "median_ns_per_item": 499.085,
+      "min_ns": 474260,
+      "name": "lookup/pos_to_offset",
+      "p95_ns": 520360,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 300,
+      "mean_ns": 452217.49666666664,
+      "median_ns": 452099.5,
+      "median_ns_per_item": 452.0995,
+      "min_ns": 433870,
+      "name": "lookup/line_start",
+      "p95_ns": 465670,
+      "unit": "ns"
+    },
+    {
+      "items": 100000,
+      "iterations": 10,
+      "mean_ns": 295489.9,
+      "median_ns": 318225,
+      "median_ns_per_item": 3.18225,
+      "min_ns": 249960,
+      "name": "snapshot/copy",
+      "p95_ns": 319350,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 20,
+      "mean_ns": 2305161.25,
+      "median_ns": 2292609,
+      "median_ns_per_item": 2292.609,
+      "min_ns": 2276649,
+      "name": "anchors/edit_100k",
+      "p95_ns": 2370799,
+      "unit": "ns"
+    },
+    {
+      "items": 20000,
+      "iterations": 5,
+      "mean_ns": 52261847.2,
+      "median_ns": 52556313,
+      "median_ns_per_item": 2627.81565,
+      "min_ns": 51446283,
+      "name": "undo/roundtrip_10k_edits",
+      "p95_ns": 53068843,
+      "unit": "ns"
+    },
+    {
+      "items": 10000,
+      "iterations": 10,
+      "mean_ns": 7308527.2,
+      "median_ns": 7177046.5,
+      "median_ns_per_item": 717.70465,
+      "min_ns": 7083116,
+      "name": "selections/set_10k_same_size",
+      "p95_ns": 8293376,
+      "unit": "ns"
+    },
+    {
+      "items": 10000,
+      "iterations": 5,
+      "mean_ns": 48931942.2,
+      "median_ns": 48812744,
+      "median_ns_per_item": 4881.2744,
+      "min_ns": 48247714,
+      "name": "selections/type_at_10k_cursors",
+      "p95_ns": 49566414,
+      "unit": "ns"
+    },
+    {
+      "items": 100000,
+      "iterations": 3,
+      "mean_ns": 28856378.333333332,
+      "median_ns": 28854034,
+      "median_ns_per_item": 288.54034,
+      "min_ns": 28783266,
+      "name": "search/find_all_100MB",
+      "p95_ns": 28931835,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 3,
+      "mean_ns": 38908790,
+      "median_ns": 38912890,
+      "median_ns_per_item": 38912890,
+      "min_ns": 38688680,
+      "name": "search/scan_100MB_no_match",
+      "p95_ns": 39124800,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 3,
+      "mean_ns": 61866138,
+      "median_ns": 61750008,
+      "median_ns_per_item": 61750008,
+      "min_ns": 61420678,
+      "name": "save/100MB",
+      "p95_ns": 62427728,
+      "unit": "ns"
+    }
+  ]
+}

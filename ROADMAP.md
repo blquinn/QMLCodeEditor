@@ -411,7 +411,7 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **PERF-05** Benchmark regression thresholds
   - Fail CI when a tracked benchmark regresses beyond a set tolerance.
   - Builds on PERF-07: the gate is the recorded-history comparison plus a failing exit code, using the tolerances in `benchmarks/tracked.json`. Not enforced yet.
-- [~] **PERF-07** Benchmark tracking and history
+- [x] **PERF-07** Benchmark tracking and history — done 2026-10-08 (281bb6e)
   - `benchmarks/tracked.json` lists the tracked suites; `tools/benchtrack.py record` runs them and stores results under `benchmarks/history/<date>-<hash>/` with git metadata.
   - `benchtrack.py compare` / `history` / `list` show changes between recorded runs and per-case trends; informational only, never fails.
   - `bench_record` CMake target (not in `all`, not a test); `benchtrack_selftest` ctest covers the comparison logic. A first run is committed as the reference.
