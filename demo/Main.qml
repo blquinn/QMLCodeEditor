@@ -160,6 +160,9 @@ ApplicationWindow {
                 onTriggered: editor.redo()
             }
             MenuSeparator {}
+            MenuItem { text: qsTr("&Find…\tCtrl+F"); onTriggered: findBar.open(false) }
+            MenuItem { text: qsTr("&Replace…\tCtrl+H"); onTriggered: findBar.open(true) }
+            MenuSeparator {}
             MenuItem { text: qsTr("Cu&t"); onTriggered: editor.cut() }
             MenuItem { text: qsTr("&Copy"); onTriggered: editor.copy() }
             MenuItem { text: qsTr("&Paste"); onTriggered: editor.paste() }
@@ -531,6 +534,25 @@ ApplicationWindow {
     }
 
 
+    Shortcut {
+        sequences: [StandardKey.Find]
+        onActivated: findBar.open(false)
+    }
+    Shortcut {
+        sequences: [StandardKey.Replace]
+        onActivated: findBar.open(true)
+    }
+    Shortcut {
+        sequences: [StandardKey.FindNext]
+        enabled: editor.find.text !== ""
+        onActivated: editor.find.next()
+    }
+    Shortcut {
+        sequences: [StandardKey.FindPrevious]
+        enabled: editor.find.text !== ""
+        onActivated: editor.find.previous()
+    }
+
     CodeEditor {
         id: editor
         objectName: "editor"
@@ -632,6 +654,13 @@ ApplicationWindow {
                 }
             }
         }
+    }
+
+    // Ctrl+F / Ctrl+H; the bar is optional, the editor only offers editor.find.
+    FindBar {
+        id: findBar
+        editor: editor
+        anchors.rightMargin: vbar.width + 12
     }
 
     DemoScrollBar {

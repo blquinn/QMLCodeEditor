@@ -132,16 +132,7 @@ VimInputHandler::Target VimInputHandler::evalSearch(
     return t;
   qsizetype pos = off;
   for (int i = 0; i < qMax(1, count); ++i) {
-    std::optional<Selection> m;
-    if (forward && !m_search.compiled.literal.isEmpty()) {
-      // Plain text: the rope's chunked substring search, no per-line regex.
-      search::Options options;
-      options.caseSensitive = m_search.compiled.caseSensitive;
-      options.wholeWord = m_search.compiled.wholeWord;
-      m = search::findNext(r, m_search.compiled.literal, TextBoundaries(r).nextGrapheme(pos), options, true);
-    } else {
-      m = search::findRegex(r, m_search.compiled.regex, pos, forward, true);
-    }
+    const std::optional<Selection> m = search::find(r, m_search.compiled, pos, forward, true);
     if (!m) {
       setMessage(u"E486: Pattern not found: "_s + pattern);
       return t;
@@ -227,7 +218,7 @@ bool VimInputHandler::parseExRange(const QString &t, qsizetype *pos, ExRange *ra
         return std::nullopt;
       }
       const qsizetype startOffset = c == u'/' ? r.lineEnd(from) : r.lineStart(from);
-      const std::optional<Selection> m = search::findRegex(r, compiled.regex, startOffset, c == u'/', true);
+      const std::optional<Selection> m = search::find(r, compiled, startOffset, c == u'/', true);
       if (!m) {
         setMessage(u"E486: Pattern not found: "_s + pattern);
         error = true;
@@ -447,25 +438,19 @@ void VimInputHandler::exSubstitute(const ExRange &range, const QString &rest, bo
   }
   const Rope &r = rope();
   QList<Edit> edits;
-  qsizetype changedLines = 0;
-  for (qsizetype line = range.first; line <= range.last; ++line) {
-    const qsizetype base = r.lineStart(line);
-    const QString text = r.toString(base, r.lineEnd(line));
-    QRegularExpressionMatchIterator it = compiled.regex.globalMatch(text);
-    bool any = false;
-    while (it.hasNext()) {
-      const QRegularExpressionMatch m = it.next();
-      edits.append(
-        {base + m.capturedStart(), base + m.capturedEnd(), vim::expandReplacement(replacement, m)}
-      );
-      any = true;
-      if (!global)
-        break;
-    }
-    if (any) {
-      ++changedLines;
-    }
-  }
+  qsizetype changedLines = 0, lastBase = -1;
+  search::forEachLineMatch(
+    r, compiled.regex, range.first, range.last,
+    [&](qsizetype base, const QRegularExpressionMatch &m) {
+      edits.append({base + m.capturedStart(), base + m.capturedEnd(), vim::expandReplacement(replacement, m)});
+      if (base != lastBase) {
+        ++changedLines;
+        lastBase = base;
+      }
+      return true;
+    },
+    global
+  );
   if (edits.isEmpty()) {
     setMessage(u"E486: Pattern not found: "_s + pattern);
     m_failed = true;

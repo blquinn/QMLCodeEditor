@@ -125,6 +125,14 @@ CodeEditor::CodeEditor(QQuickItem *parent) : QQuickItem(parent) {
       invalidatePlan(); // the cursor's shape and character change with the mode
     }
   });
+  m_find = new qce::FindReplace(m_document, m_selections, [this] { return editContext(); }, this);
+  connect(m_find, &qce::FindReplace::highlightChanged, this, [this] {
+    m_findHighlight = m_find->highlightPattern();
+    invalidatePlan();
+    update();
+  });
+  connect(m_find, &qce::FindReplace::selectionMoved, this, &CodeEditor::updateUndoState);
+  connect(m_find, &qce::FindReplace::revealRequested, this, &CodeEditor::ensureCursorVisible);
   m_font = qce::TextMetrics::defaultMonospaceFont();
   m_metrics.setFont(m_font);
   updateWrapMeasure();
@@ -2343,31 +2351,34 @@ void CodeEditor::buildBracketMatches() {
   }
 }
 
-// Backgrounds for the matches of the search pattern in the rows being drawn. Each row is matched on
-// its own text, so a match that wraps across rows is not marked and the work is bounded by the rows
-// in the frame plan.
+// Backgrounds for the matches of the search patterns (vim's and find's) in the rows being drawn. Each
+// row is matched on its own text, so a match that wraps across rows is not marked and the work is
+// bounded by the rows in the frame plan.
 void CodeEditor::buildSearchMatches() {
-  if (m_searchHighlight.pattern().isEmpty() || !m_searchHighlight.isValid())
-    return;
+  const QRegularExpression *patterns[] = {&m_searchHighlight, &m_findHighlight};
   constexpr int kMaxMatches = 4000;
   const qreal cell = m_metrics.cellAdvance();
   const qreal viewLeft = m_contentX - cell, viewRight = m_contentX + textViewportWidth() + cell;
   const QColor color = m_theme->searchMatch();
-  int count = 0;
-  for (qsizetype row = m_planFirst; row <= m_planLast && count < kMaxMatches; ++row) {
-    const qce::LineLayout *layout = m_plan[row - m_planFirst].layout.get();
-    if (!layout || layout->text.isEmpty())
+  for (const QRegularExpression *pattern : patterns) {
+    if (pattern->pattern().isEmpty() || !pattern->isValid())
       continue;
-    QRegularExpressionMatchIterator it = m_searchHighlight.globalMatch(layout->text);
-    while (it.hasNext() && count < kMaxMatches) {
-      const QRegularExpressionMatch match = it.next();
-      if (match.capturedLength() == 0)
+    int count = 0;
+    for (qsizetype row = m_planFirst; row <= m_planLast && count < kMaxMatches; ++row) {
+      const qce::LineLayout *layout = m_plan[row - m_planFirst].layout.get();
+      if (!layout || layout->text.isEmpty())
         continue;
-      const qreal x0 = xForColumn(*layout, layout->startColumn + match.capturedStart());
-      const qreal x1 = xForColumn(*layout, layout->startColumn + match.capturedEnd());
-      if (x1 > x0 && x1 >= viewLeft && x0 <= viewRight) {
-        m_decoBackgroundSpans.append({row, x0, x1, 0, -1, color});
-        ++count;
+      QRegularExpressionMatchIterator it = pattern->globalMatch(layout->text);
+      while (it.hasNext() && count < kMaxMatches) {
+        const QRegularExpressionMatch match = it.next();
+        if (match.capturedLength() == 0)
+          continue;
+        const qreal x0 = xForColumn(*layout, layout->startColumn + match.capturedStart());
+        const qreal x1 = xForColumn(*layout, layout->startColumn + match.capturedEnd());
+        if (x1 > x0 && x1 >= viewLeft && x0 <= viewRight) {
+          m_decoBackgroundSpans.append({row, x0, x1, 0, -1, color});
+          ++count;
+        }
       }
     }
   }
