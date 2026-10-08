@@ -363,7 +363,7 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **API-02** Completion popup hooks
   - Host supplies items; editor owns placement, filtering UI and key handling.
 - [ ] **API-03** Hover and signature-help popup hooks
-- [x] **API-04** Find/replace — done 2026-10-07 (0000000)
+- [x] **API-04** Find/replace — done 2026-10-07 (f62b7d2)
   - Incremental search with regex, match highlighting, replace all as one transaction; runs on rope snapshots in a worker thread.
   - `editor.find` (`core/findreplace`): plain text or `QRegularExpression`, case, whole word; match count and `currentIndex` from a cancellable worker search on a snapshot (capped at 100k), binary-search `next()`/`previous()` with a live-rope fallback, `replace()`, `replaceAll()` (edits built on a snapshot, one undo step, `$1 $& $$ \n \t`), `selectAllMatches()`, `useSelection()`. Decided in ADR 0019.
   - Shares its engine with vim search: `search::Pattern`, `find`/`findAll`, `forEachLineMatch` in `core/textsearch` (vim's `/`, `*` and `:s` run on them; no change in `bench_vim`). Matches in view are marked by the same per-row loop as `hlsearch`.
