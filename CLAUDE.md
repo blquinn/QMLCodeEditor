@@ -28,4 +28,4 @@ A high-performance QML code editor widget (Qt 6, minimum 6.8, developed on 6.11)
 
 ## Performance
 
-Performance is the product. Changes touching rendering, the rope, the display map or highlighting need a benchmark result (or a note on why none applies). Targets are in `ROADMAP.md`.
+Performance is the product. Changes touching rendering, the rope, the display map or highlighting need a benchmark result (or a note on why none applies). Targets are in `ROADMAP.md`. Record runs with the `bench_record` target (release preset) and check `python3 tools/benchtrack.py compare`.

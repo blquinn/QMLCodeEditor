@@ -410,6 +410,11 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
   - Decision recorded as an ADR; only adopt if benchmarks justify the complexity ([ADR 0001](docs/adr/0001-scene-graph-rendering.md)).
 - [ ] **PERF-05** Benchmark regression thresholds
   - Fail CI when a tracked benchmark regresses beyond a set tolerance.
+  - Builds on PERF-07: the gate is the recorded-history comparison plus a failing exit code, using the tolerances in `benchmarks/tracked.json`. Not enforced yet.
+- [~] **PERF-07** Benchmark tracking and history
+  - `benchmarks/tracked.json` lists the tracked suites; `tools/benchtrack.py record` runs them and stores results under `benchmarks/history/<date>-<hash>/` with git metadata.
+  - `benchtrack.py compare` / `history` / `list` show changes between recorded runs and per-case trends; informational only, never fails.
+  - `bench_record` CMake target (not in `all`, not a test); `benchtrack_selftest` ctest covers the comparison logic. A first run is committed as the reference.
 - [ ] **PERF-06** Render-thread audit
   - Confirm no main-thread work leaks into `updatePaintNode`; check batching and overdraw with `QSG_VISUALIZE`.
 - [ ] **DIAG-07** Squiggle shader material (optional)

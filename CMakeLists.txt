@@ -33,6 +33,8 @@ find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
     add_test(NAME roadmap_check
         COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/roadmap.py --check)
+    add_test(NAME benchtrack_selftest
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/test_benchtrack.py)
 endif()
 
 add_subdirectory(src/core)
