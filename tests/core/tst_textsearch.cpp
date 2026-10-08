@@ -114,6 +114,90 @@ private slots:
       Q_UNUSED(all);
     }
   }
+
+  void compileQuery() {
+    using search::compileQuery;
+    QVERIFY(!compileQuery({}, {}).valid());
+    const search::Pattern plain = compileQuery(u"a.b"_s, {});
+    QVERIFY(plain.valid());
+    QCOMPARE(plain.literal, u"a.b"_s);
+    QVERIFY(!plain.regex.match(u"axb"_s).hasMatch()); // the dot is escaped
+    QVERIFY(plain.regex.match(u"A.B"_s).hasMatch());   // case-insensitive by default
+    const search::Pattern cs = compileQuery(u"a"_s, {false, true, false});
+    QVERIFY(cs.caseSensitive);
+    QVERIFY(!cs.regex.match(u"A"_s).hasMatch());
+    const search::Pattern word = compileQuery(u"foo"_s, {false, true, true});
+    QVERIFY(word.wholeWord);
+    QVERIFY(word.regex.match(u"a foo b"_s).hasMatch());
+    QVERIFY(!word.regex.match(u"afoo"_s).hasMatch());
+    QVERIFY(!word.regex.match(u"foo_"_s).hasMatch());
+    const search::Pattern re = compileQuery(u"f(o+)"_s, {true, true, false});
+    QVERIFY(re.valid());
+    QVERIFY(re.literal.isEmpty());
+    const search::Pattern bad = compileQuery(u"("_s, {true, true, false});
+    QVERIFY(!bad.valid());
+    QVERIFY(!bad.error.isEmpty());
+  }
+
+  void patternSearchPicksTheEngine() {
+    const QString text = u"Foo foo\nfoobar FOO"_s;
+    const Rope rope = Rope::fromString(text);
+    for (const bool regex : {false, true}) {
+      const search::Pattern p = search::compileQuery(regex ? u"foo\\b"_s : u"foo"_s, {regex, false, !regex});
+      const QList<Selection> all = search::findAll(rope, p, 0, rope.length(), 100);
+      QCOMPARE(all, (QList<Selection>{{0, 3}, {4, 7}, {15, 18}}));
+      QCOMPARE(search::find(rope, p, 0), (std::optional<Selection>(Selection{4, 7})));
+      QCOMPARE(search::find(rope, p, 0, true, true, true), (std::optional<Selection>(Selection{0, 3})));
+      QCOMPARE(search::find(rope, p, 15, true, true), (std::optional<Selection>(Selection{0, 3}))); // wraps
+      QVERIFY(!search::find(rope, p, 15, true, false));
+      QCOMPARE(search::find(rope, p, 4, false), (std::optional<Selection>(Selection{0, 3})));
+      bool capped = false;
+      QCOMPARE(search::findAll(rope, p, 0, rope.length(), 2, &capped).size(), 2);
+      QVERIFY(capped);
+    }
+    QVERIFY(!search::find(rope, search::Pattern(), 0));
+  }
+
+  void cancelStopsTheSearch() {
+    const Rope rope = Rope::fromString(u"foo\n"_s.repeated(1000));
+    std::atomic_bool cancel{true};
+    for (const bool regex : {false, true}) {
+      const search::Pattern p = search::compileQuery(u"foo"_s, {regex, true, false});
+      QVERIFY(search::findAll(rope, p, 0, rope.length(), 5000, nullptr, &cancel).size() < 1000);
+    }
+  }
+
+  void forEachLineMatchWalksLines() {
+    const Rope rope = Rope::fromString(u"a a\nb\na a a"_s);
+    const QRegularExpression re(u"a"_s);
+    QList<QPair<qsizetype, qsizetype>> seen;
+    search::forEachLineMatch(rope, re, 0, 2, [&](qsizetype base, const QRegularExpressionMatch &m) {
+      seen.append({base, m.capturedStart()});
+      return true;
+    });
+    QCOMPARE(seen.size(), 5);
+    QCOMPARE(seen.last(), (QPair<qsizetype, qsizetype>{6, 4}));
+    seen.clear();
+    search::forEachLineMatch(rope, re, 1, 2, [&](qsizetype base, const QRegularExpressionMatch &m) {
+      seen.append({base, m.capturedStart()});
+      return true;
+    }, false);
+    QCOMPARE(seen.size(), 1); // the first of each line that has one
+  }
+
+  void expandReplacementDollars() {
+    const QRegularExpression re(u"(\\w)(\\w)(x)?"_s);
+    const QRegularExpressionMatch m = re.match(u"ab"_s);
+    using search::expandReplacement;
+    QCOMPARE(expandReplacement(u"$2$1"_s, m), u"ba"_s);
+    QCOMPARE(expandReplacement(u"[$&]"_s, m), u"[ab]"_s);
+    QCOMPARE(expandReplacement(u"$$1"_s, m), u"$1"_s);
+    QCOMPARE(expandReplacement(u"$0"_s, m), u"ab"_s);
+    QCOMPARE(expandReplacement(u"$3|"_s, m), u"|"_s);      // a group that did not take part
+    QCOMPARE(expandReplacement(u"$4 $x $"_s, m), u"$4 $x $"_s); // no such group: as written
+    QCOMPARE(expandReplacement(u"$12"_s, m), u"a2"_s);        // no group 12: $1 and a 2
+    QCOMPARE(expandReplacement(u"a\\nb\\tc\\\\d\\q"_s, m), u"a\nb\tc\\d\\q"_s);
+  }
 };
 
 QTEST_APPLESS_MAIN(TstTextSearch)

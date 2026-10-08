@@ -4,6 +4,7 @@
 #include "core/bracketmatch.h"
 #include "core/decorationset.h"
 #include "core/diagnostics.h"
+#include "core/findreplace.h"
 #include "core/displaymap.h"
 #include "core/foldprovider.h"
 #include "core/highlighter.h"
@@ -53,6 +54,13 @@ struct FoldProviderForeign {
   Q_GADGET
   QML_FOREIGN(qce::FoldProvider)
   QML_ANONYMOUS
+};
+// Same for FindReplace (CodeEditor::find).
+struct FindReplaceForeign {
+  Q_GADGET
+  QML_FOREIGN(qce::FindReplace)
+  QML_NAMED_ELEMENT(FindReplace)
+  QML_UNCREATABLE("Use CodeEditor.find")
 };
 // The vim handler's enums and properties for QML (CodeEditor::vim).
 struct VimForeign {
@@ -111,6 +119,10 @@ public:
   // pending keys and prompt for a status bar, and signals for :w and :q.
   Q_PROPERTY(bool vimMode READ vimMode WRITE setVimMode NOTIFY vimModeChanged FINAL)
   Q_PROPERTY(qce::VimInputHandler *vim READ vim CONSTANT FINAL)
+  // Find and replace (API-04): set `find.text` and `find.active` and the matches in view are marked;
+  // next(), previous(), replace() and replaceAll() work on the document. The editor draws no find UI;
+  // FindBar.qml is one a host can include, or it can build its own on this object.
+  Q_PROPERTY(qce::FindReplace *find READ find CONSTANT FINAL)
   Q_PROPERTY(bool matchBrackets READ matchBrackets WRITE setMatchBrackets NOTIFY matchBracketsChanged FINAL)
   Q_PROPERTY(bool showIndentGuides READ showIndentGuides WRITE setShowIndentGuides NOTIFY showIndentGuidesChanged FINAL)
   Q_PROPERTY(bool detectIndentation READ detectIndentation WRITE setDetectIndentation NOTIFY detectIndentationChanged FINAL)
@@ -424,6 +436,7 @@ public:
   bool vimMode() const { return m_handler == m_vim; }
   void setVimMode(bool enable);
   qce::VimInputHandler *vim() const { return m_vim; }
+  qce::FindReplace *find() const { return m_find; }
   // Runs keys in vim notation ("dd", "ihello<Esc>", ":s/a/b/<CR>") as if typed; false when vim mode is
   // off or a key was not handled. For host key mappings, scripts and screenshots.
   Q_INVOKABLE bool sendVimKeys(const QString &keys);
@@ -729,6 +742,8 @@ private:
   qce::DefaultInputHandler m_defaultHandler;
   qce::VimInputHandler *m_vim = nullptr;
   QRegularExpression m_searchHighlight;
+  qce::FindReplace *m_find = nullptr;
+  QRegularExpression m_findHighlight;
   qce::InputHandler *m_handler = &m_defaultHandler;
   bool m_readOnly = false;
   int m_undoLimit = 0;

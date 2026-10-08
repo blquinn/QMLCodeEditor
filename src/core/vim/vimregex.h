@@ -1,6 +1,8 @@
 #ifndef QCE_VIM_VIMREGEX_H
 #define QCE_VIM_VIMREGEX_H
 
+#include "core/textsearch.h"
+
 #include <QtCore/QRegularExpression>
 #include <QtCore/QString>
 
@@ -11,16 +13,9 @@ struct PatternOptions {
   bool smartCase = false; // with ignoreCase: a pattern with an uppercase letter is case sensitive
 };
 
-struct CompiledPattern {
-  QRegularExpression regex;
-  // Set when the pattern is plain text, optionally between \< and \>: a search can then use the
-  // rope's chunked substring search instead of matching every line with the regex.
-  QString literal;
-  bool wholeWord = false;
-  bool caseSensitive = true;
-  QString error; // empty when the pattern compiled
-  bool valid() const { return error.isEmpty() && !regex.pattern().isEmpty() && regex.isValid(); }
-};
+// Vim patterns compile to the pattern type find/replace shares (core/textsearch.h): a regular
+// expression, plus the plain text when there is nothing special in it.
+using CompiledPattern = search::Pattern;
 
 // Translates a vim pattern to a regular expression. Understands the default "magic" syntax and \v
 // (very magic), \m, \M and \V, the multis * \+ \? \= \{n,m} (and the lazy \{-n,m}), groups \( \) \%(,

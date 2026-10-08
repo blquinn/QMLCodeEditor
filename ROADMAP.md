@@ -363,8 +363,12 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **API-02** Completion popup hooks
   - Host supplies items; editor owns placement, filtering UI and key handling.
 - [ ] **API-03** Hover and signature-help popup hooks
-- [ ] **API-04** Find/replace
+- [x] **API-04** Find/replace — done 2026-10-07 (0000000)
   - Incremental search with regex, match highlighting, replace all as one transaction; runs on rope snapshots in a worker thread.
+  - `editor.find` (`core/findreplace`): plain text or `QRegularExpression`, case, whole word; match count and `currentIndex` from a cancellable worker search on a snapshot (capped at 100k), binary-search `next()`/`previous()` with a live-rope fallback, `replace()`, `replaceAll()` (edits built on a snapshot, one undo step, `$1 $& $$ \n \t`), `selectAllMatches()`, `useSelection()`. Decided in ADR 0019.
+  - Shares its engine with vim search: `search::Pattern`, `find`/`findAll`, `forEachLineMatch` in `core/textsearch` (vim's `/`, `*` and `:s` run on them; no change in `bench_vim`). Matches in view are marked by the same per-row loop as `hlsearch`.
+  - `FindBar.qml` is an opt-in default UI (Ctrl+F / Ctrl+H in the demo); the editor draws none and hosts can build their own on `editor.find`.
+  - Benchmark: `bench_find` on 90 MB / 2M lines: literal count 37 ms, regex 0.97 s (worker thread), 2000-edit replace-all 43 ms on the GUI thread, 10 us to compile a query.
 - [ ] **API-05** Go-to-definition and find-references request signals
 - [x] **API-06** Matching bracket highlight (auto-pairing is INPUT-13) — done 2026-10-06 (8f0656d)
   - `matchBrackets` property (default on); the bracket next to each visible cursor and its partner get a background (`bracketMatch` theme color), with soft wrap and folds.

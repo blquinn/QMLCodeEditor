@@ -7,7 +7,7 @@ qt_add_qml_module(QMLCodeEditor
     gutter.cpp gutter.h linenumbercolumn.cpp linenumbercolumn.h markercolumn.cpp markercolumn.h
     changecolumn.cpp changecolumn.h delegatecolumn.cpp delegatecolumn.h foldcolumn.cpp foldcolumn.h
     decorationcolumn.cpp decorationcolumn.h popupplacement.cpp popupplacement.h
-    QML_FILES DiagnosticPopup.qml
+    QML_FILES DiagnosticPopup.qml FindBar.qml
 )
 
 target_compile_definitions(QMLCodeEditor

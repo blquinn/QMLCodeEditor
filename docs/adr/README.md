@@ -22,6 +22,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0016](0016-decorations-and-diagnostics.md) | Decorations and diagnostics: one anchored set, spans in the frame plan | Proposed |
 | [0017](0017-vim-input-handler.md) | Vim as an input handler over the command layer | Accepted |
 | [0018](0018-host-extensions.md) | Host extensions: registered languages, token styles and highlight overlays | Accepted |
+| [0019](0019-find-and-replace.md) | Find and replace: one search layer, worker threads on snapshots, an opt-in find bar | Accepted |
 
 ## Adding one
 
