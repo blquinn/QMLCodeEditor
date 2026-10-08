@@ -20,6 +20,9 @@ ctest --preset debug
 
 Other presets: `release`, `asan-ubsan`, `tsan`. Tests run with `QT_QPA_PLATFORM=offscreen`.
 
+Benchmarks are recorded and compared over time with `cmake --build --preset release --target bench_record`; see
+[`benchmarks/history/README.md`](benchmarks/history/README.md).
+
 The presets build with clang (`clang++` must be on `PATH`), which also provides the sanitizer runtimes. To use
 another compiler, override it at configure time: `cmake --preset debug -DCMAKE_CXX_COMPILER=g++`.
 

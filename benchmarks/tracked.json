@@ -1,0 +1,37 @@
+{
+  "comment": "Benchmarks recorded by tools/benchtrack.py. 'binary' is relative to the build dir; 'tolerance' is the change (fraction) above which compare marks a case slower/faster. Counts are never compared.",
+  "defaults": {
+    "tolerance": { "ns": 0.20, "bytes": 0.10 },
+    "floor_ns": 2000
+  },
+  "suites": [
+    { "name": "bench_core", "binary": "benchmarks/core/bench_core" },
+    { "name": "bench_find", "binary": "benchmarks/core/bench_find" },
+    { "name": "bench_fold", "binary": "benchmarks/core/bench_fold" },
+    { "name": "bench_decorations", "binary": "benchmarks/core/bench_decorations" },
+    { "name": "bench_brackets", "binary": "benchmarks/core/bench_brackets" },
+    { "name": "bench_vim", "binary": "benchmarks/core/bench_vim" },
+    { "name": "bench_syntax", "binary": "benchmarks/syntax/bench_syntax", "optional": true },
+    {
+      "name": "bench_scroll",
+      "binary": "benchmarks/quick/bench_scroll",
+      "args": ["--quick"],
+      "env": { "QT_QPA_PLATFORM": "offscreen", "QT_QUICK_BACKEND": "software" },
+      "tolerance": { "ns": 0.30 }
+    },
+    {
+      "name": "bench_typing",
+      "binary": "benchmarks/quick/bench_typing",
+      "args": ["--quick"],
+      "env": { "QT_QPA_PLATFORM": "offscreen", "QT_QUICK_BACKEND": "software" },
+      "tolerance": { "ns": 0.30 }
+    },
+    {
+      "name": "bench_wrap",
+      "binary": "benchmarks/quick/bench_wrap",
+      "args": ["--quick"],
+      "env": { "QT_QPA_PLATFORM": "offscreen", "QT_QUICK_BACKEND": "software" },
+      "tolerance": { "ns": 0.30 }
+    }
+  ]
+}
