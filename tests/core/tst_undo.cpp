@@ -30,9 +30,38 @@ private slots:
     s.pushEdit(typed(2, u"c"_s), EditKind::Typing, sel(2, 2), sel(3, 3));
     QCOMPARE(s.undoSteps(), 1);
     const Transaction t = s.undo();
-    QCOMPARE(t.edits.size(), 3);
+    // A run of typing is one record: memory per keystroke is the text itself (PERF-03).
+    QCOMPARE(t.edits.size(), 1);
+    QCOMPARE(t.edits.first().start, 0);
+    QCOMPARE(t.edits.first().inserted.toString(), u"abc"_s);
+    QVERIFY(t.edits.first().removed.isEmpty());
     QCOMPARE(t.selectionsBefore, sel(0, 0));
     QCOMPARE(t.selectionsAfter, sel(3, 3));
+  }
+
+  void deletingRunsMergeIntoOneRecord() {
+    qint64 now = 0;
+    UndoStack back([&] { return now; });
+    auto removed = [](qsizetype at, const QString &text) { return EditRecord{at, Rope::fromString(text), Rope()}; };
+    // Backspacing "cde" from the end of "abcde": the deleted text is "cde", starting at 2.
+    back.pushEdit(removed(4, u"e"_s), EditKind::DeleteBackward, sel(5, 5), sel(4, 4));
+    back.pushEdit(removed(3, u"d"_s), EditKind::DeleteBackward, sel(4, 4), sel(3, 3));
+    back.pushEdit(removed(2, u"c"_s), EditKind::DeleteBackward, sel(3, 3), sel(2, 2));
+    QCOMPARE(back.undoSteps(), 1);
+    Transaction t = back.undo();
+    QCOMPARE(t.edits.size(), 1);
+    QCOMPARE(t.edits.first().start, 2);
+    QCOMPARE(t.edits.first().removed.toString(), u"cde"_s);
+    // Delete key: each key removes the next character at the same place.
+    UndoStack forward([&] { return now; });
+    forward.pushEdit(removed(2, u"c"_s), EditKind::DeleteForward, sel(2, 2), sel(2, 2));
+    forward.pushEdit(removed(2, u"d"_s), EditKind::DeleteForward, sel(2, 2), sel(2, 2));
+    forward.pushEdit(removed(2, u"e"_s), EditKind::DeleteForward, sel(2, 2), sel(2, 2));
+    QCOMPARE(forward.undoSteps(), 1);
+    t = forward.undo();
+    QCOMPARE(t.edits.size(), 1);
+    QCOMPARE(t.edits.first().start, 2);
+    QCOMPARE(t.edits.first().removed.toString(), u"cde"_s);
   }
 
   void typingSplitsOnTimeout() {
