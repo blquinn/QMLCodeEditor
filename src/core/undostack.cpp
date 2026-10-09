@@ -38,6 +38,34 @@ bool continues(const EditRecord &prev, const EditRecord &next, EditKind kind) {
   return false;
 }
 
+// Folds `next`, which continues `prev` (see continues()), into one record: the run is undone and redone in one
+// replacement, and a thousand keystrokes hold one record instead of a thousand.
+void mergeRecords(EditRecord &prev, const EditRecord &next, EditKind kind) {
+  switch (kind) {
+  case EditKind::Typing:
+    prev.inserted = prev.inserted.concat(next.inserted);
+    break;
+  case EditKind::DeleteBackward:
+    prev.removed = next.removed.concat(prev.removed);
+    prev.start = next.start;
+    break;
+  case EditKind::DeleteForward:
+    prev.removed = prev.removed.concat(next.removed);
+    break;
+  case EditKind::Other:
+    break;
+  }
+}
+
+// Adds a continuing edit (or group of edits) to the top step. A single edit that continues the step's last
+// one is merged into it; several edits (one per cursor) are kept as they are.
+void extend(Transaction &top, const QList<EditRecord> &edits, EditKind kind) {
+  if (edits.size() == 1 && !top.edits.isEmpty() && continues(top.edits.last(), edits.first(), kind))
+    mergeRecords(top.edits.last(), edits.first(), kind);
+  else
+    top.edits.append(edits);
+}
+
 } // namespace
 
 UndoStack::UndoStack(Clock clock) : m_clock(std::move(clock)) {}
@@ -71,7 +99,7 @@ void UndoStack::pushEdit(
       !top.sealed && top.kind == kind && t - top.timeMs <= m_timeoutMs &&
       continues(top.edits.last(), edit, kind)
     ) {
-      top.edits.append(edit);
+      extend(top, {edit}, kind);
       top.selectionsAfter = after;
       top.timeMs = t;
       m_redo.clear();
@@ -114,7 +142,7 @@ void UndoStack::endGroup(const SelectionList &after, EditKind kind) {
   if (mergeable && !m_undo.isEmpty()) {
     Transaction &top = m_undo.last();
     if (!top.sealed && top.kind == kind && t - top.timeMs <= m_timeoutMs && top.selectionsAfter == m_group.selectionsBefore) {
-      top.edits.append(m_group.edits);
+      extend(top, m_group.edits, kind);
       top.selectionsAfter = after;
       top.timeMs = t;
       m_redo.clear();
