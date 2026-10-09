@@ -1,0 +1,26 @@
+# 0020. Very long lines: lay out a window, answer the rest from an index
+
+- Status: Accepted
+- Date: 2026-10-09
+
+## Context
+
+[ADR 0009](0009-rendering-pipeline.md) laid out every buffer line as one `QTextLayout`, however long, and left horizontal windowing to PERF-01. With soft wrap on, [ADR 0011](0011-soft-wrap.md) already lays out one row at a time, so a 5 MB line costs what its rows in view cost. With wrap off the whole line is copied, styled, shaped and turned into glyph nodes, and every keystroke on it does all of that again. Measured on a 5 MB single line with wrap off (`bench_wrap --filter giant_nowrap`, `benchmarks/results/2026-10-09-long-lines-before.json`): 7.1 s to the first frame, and about 4 s per typed character.
+
+Nothing else may lay out the whole line either, but a layout is also what the editor asks where a column is (cursor, selection, hit testing, decorations, scrolling into view) and which column is at an x (clicks, vertical movement). Those questions cannot be answered from a layout that holds only part of the line.
+
+## Decision
+
+- **A line over `kLongLineUnits` (8192 units) with wrap off is laid out as a window.** The window is whole index chunks (below) covering the viewport plus one viewport on each side, so scrolling inside it only moves the scroll transform. The window is part of the layout cache key (`LineLayoutCache` rows ≥ 1 for windows, 0 for real rows), so scrolling across a window edge lays out the next one and scrolling back finds the old one. Everything that built a row from `DisplayRow` start/end columns for soft wrap (text slice, highlight spans, injections, whitespace marks) works on the window unchanged.
+- **`LongLineIndex` (core) answers column ↔ x for the rest.** It cuts the line into chunks of about 1024 units and keeps each chunk's start column and x, measured with the host's `WrapMeasure` (one code point at a time, tabs to the next tab stop). `xForColumn` and `columnForX` binary-search the chunks and scan one. Indexes are immutable and shared with the layouts that use them; an edit inside the line produces the next index in O(chunks) (`afterEdit`), re-measuring only the chunks the edit touches and chunks with tabs after it when the shift is not a whole number of tab stops. Chunks are kept between half and one and a half chunks long so typing in one place does not leave a trail of small ones. The editor keeps at most 16 indexes, renumbered on edits that change the line count and dropped when a line is joined or split.
+- **A window layout stands in for its whole line.** `indentX` includes the window's x, and `width`/`fullWidth` run to the end of the whole line, so the existing code that takes `indentX + width` for "where the line ends" (content width, a selection that continues past the row, the diagnostic hover test) needs no case. `CodeEditor::xForColumn` and `columnForX` use the layout inside the window and the index outside it. Tab stops inside a window are given as an explicit tab array, because the window starts at an arbitrary x.
+- **Highlighters are asked for the window only.** `Highlighter::highlightRange(text, line, startColumn, endColumn)` returns the spans of a stretch, relative to its start; the default slices `highlightLines()`. `TreeSitterHighlighter` queries the tree for just that stretch (no 64-line block of spans for a 5 MB line) and centres its windowed parse on the stretch rather than on the start of the line.
+- **The scene works relative to an origin x.** A float cannot place a glyph or a selection edge to the pixel at 40 million px. `EditorScene` keeps a horizontal origin (like the origin row for y) that follows the view in steps of 256 Ki px; the scroll transform, glyph positions and every overlay rectangle are made relative to it before they become floats. Squiggle phase stays on absolute x so waves do not jump when the origin moves.
+- **Not windowed:** lines with inline virtual text (hints shift columns by widths the index does not know) and lines with wrap on (already per row).
+
+## Consequences
+
+- Same benchmark after (`benchmarks/results/2026-10-09-long-lines.json`): first frame 41 ms, a typed character costs 0.13 ms of sync and 0.17 ms of render, sideways scrolling and jumping to the end stay under 0.5 ms of polish. A 5 MB document of ordinary short lines is unchanged.
+- The index is built on the GUI thread the first time a long line is laid out: about 30 ms for 5 MB, so seconds for a gigabyte line. Building it in steps or on a worker is the next step if that matters (it belongs with PERF-02).
+- Widths are sums of per-code-point advances, as for soft wrap: exact for a monospace font, approximate where shaping changes them (ligatures are off, kerning is off, but complex scripts, and emoji sequences, can differ by a cell). A window edge can split a grapheme cluster; edges are at least one viewport away from the visible text.
+- The Software scene-graph backend repaints a new rectangle node (a selection that first appears) using its unscrolled position, so in a horizontally scrolled view it stays unpainted until something else moves. It is not new and does not apply to GPU backends; the far-right selection test works around it by nudging `contentX`.

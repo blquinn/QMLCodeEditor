@@ -1,0 +1,201 @@
+{
+    "meta": {
+        "compiler": "clang 22.1.8 (Fedora 22.1.8-4.fc44)",
+        "cores": 24,
+        "cpu": "AMD Ryzen 9 5900X 12-Core Processor",
+        "date": "2026-10-09T14:43:21Z",
+        "optimized": true,
+        "os": "Fedora Linux 44 (KDE Plasma Desktop Edition)",
+        "qt": "6.11.2",
+        "suite": "bench_wrap"
+    },
+    "results": [
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 41007550,
+            "median_ns": 41007550,
+            "median_ns_per_item": 41007550,
+            "min_ns": 41007550,
+            "name": "giant_line_nowrap/open/first_frame",
+            "p95_ns": 41007550,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 37296581,
+            "median_ns": 37296581,
+            "median_ns_per_item": 37296581,
+            "min_ns": 37296581,
+            "name": "giant_line_nowrap/open/load_complete",
+            "p95_ns": 37296581,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 41013070,
+            "median_ns": 41013070,
+            "median_ns_per_item": 41013070,
+            "min_ns": 41013070,
+            "name": "giant_line_nowrap/open/wrap_complete",
+            "p95_ns": 41013070,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 1,
+            "median_ns": 1,
+            "median_ns_per_item": 1,
+            "min_ns": 1,
+            "name": "giant_line_nowrap/open/rows",
+            "p95_ns": 1,
+            "unit": "count"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 48573679,
+            "median_ns": 48573679,
+            "median_ns_per_item": 48573679,
+            "min_ns": 48573679,
+            "name": "nowrap/giant_line/jump_to_end/first_frame",
+            "p95_ns": 48573679,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 193130,
+            "median_ns": 193130,
+            "median_ns_per_item": 193130,
+            "min_ns": 193130,
+            "name": "nowrap/giant_line/jump_to_end/polish_max",
+            "p95_ns": 193130,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 193130,
+            "median_ns": 193130,
+            "median_ns_per_item": 193130,
+            "min_ns": 193130,
+            "name": "nowrap/giant_line/jump_to_end/polish_mean",
+            "p95_ns": 193130,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 120,
+            "mean_ns": 60556.15833333333,
+            "median_ns": 81065,
+            "median_ns_per_item": 81065,
+            "min_ns": 3580,
+            "name": "nowrap/giant_line/sideways/frame/sync",
+            "p95_ns": 137490,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 120,
+            "mean_ns": 134853.075,
+            "median_ns": 85435,
+            "median_ns_per_item": 85435,
+            "min_ns": 13090,
+            "name": "nowrap/giant_line/sideways/frame/render",
+            "p95_ns": 173440,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 119,
+            "mean_ns": 6893534.596638655,
+            "median_ns": 7182299,
+            "median_ns_per_item": 7182299,
+            "min_ns": 1174610,
+            "name": "nowrap/giant_line/sideways/frame/interval",
+            "p95_ns": 8039027,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 457310,
+            "median_ns": 457310,
+            "median_ns_per_item": 457310,
+            "min_ns": 457310,
+            "name": "nowrap/giant_line/sideways/polish_max",
+            "p95_ns": 457310,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 175661.63333333333,
+            "median_ns": 175661.63333333333,
+            "median_ns_per_item": 175661.63333333333,
+            "min_ns": 175661.63333333333,
+            "name": "nowrap/giant_line/sideways/polish_mean",
+            "p95_ns": 175661.63333333333,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 120,
+            "mean_ns": 128608.04166666667,
+            "median_ns": 127565,
+            "median_ns_per_item": 127565,
+            "min_ns": 5410,
+            "name": "nowrap/giant_line/typing/frame/sync",
+            "p95_ns": 142840,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 120,
+            "mean_ns": 166175.69166666668,
+            "median_ns": 164530,
+            "median_ns_per_item": 164530,
+            "min_ns": 22690,
+            "name": "nowrap/giant_line/typing/frame/render",
+            "p95_ns": 199250,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 119,
+            "mean_ns": 6864944.8487394955,
+            "median_ns": 6943199,
+            "median_ns_per_item": 6943199,
+            "min_ns": 2300929,
+            "name": "nowrap/giant_line/typing/frame/interval",
+            "p95_ns": 7869938,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 46160,
+            "median_ns": 46160,
+            "median_ns_per_item": 46160,
+            "min_ns": 46160,
+            "name": "nowrap/giant_line/typing/polish_max",
+            "p95_ns": 46160,
+            "unit": "ns"
+        },
+        {
+            "items": 1,
+            "iterations": 1,
+            "mean_ns": 28737.983193277312,
+            "median_ns": 28737.983193277312,
+            "median_ns_per_item": 28737.983193277312,
+            "min_ns": 28737.983193277312,
+            "name": "nowrap/giant_line/typing/polish_mean",
+            "p95_ns": 28737.983193277312,
+            "unit": "ns"
+        }
+    ]
+}

@@ -2807,15 +2807,26 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
   }
   layout->setTextOption(option);
   layout->setCacheEnabled(true);
-  auto spans = m_highlighter->highlightLines(snapshot, row.line, row.line);
-  if (spans.isEmpty())
-    spans.append(QList<qce::HighlightSpan>());
-  for (qce::Highlighter *overlay : std::as_const(m_overlays)) {
-    const auto over = overlay->highlightLines(snapshot, row.line, row.line);
-    if (!over.isEmpty() && !over.first().isEmpty())
-      spans.first() = qce::overlaySpans(spans.first(), over.first());
+  QList<qce::HighlightSpan> rowSpans;
+  if (longIndex) {
+    // Only the window's stretch of the line is styled, never the whole line.
+    rowSpans = m_highlighter->highlightRange(snapshot, row.line, row.startColumn, row.endColumn);
+    for (qce::Highlighter *overlay : std::as_const(m_overlays)) {
+      const auto over = overlay->highlightRange(snapshot, row.line, row.startColumn, row.endColumn);
+      if (!over.isEmpty())
+        rowSpans = qce::overlaySpans(rowSpans, over);
+    }
+  } else {
+    auto spans = m_highlighter->highlightLines(snapshot, row.line, row.line);
+    if (spans.isEmpty())
+      spans.append(QList<qce::HighlightSpan>());
+    for (qce::Highlighter *overlay : std::as_const(m_overlays)) {
+      const auto over = overlay->highlightLines(snapshot, row.line, row.line);
+      if (!over.isEmpty() && !over.first().isEmpty())
+        spans.first() = qce::overlaySpans(spans.first(), over.first());
+    }
+    rowSpans = sliceSpans(spans.first(), row.startColumn, row.endColumn);
   }
-  const QList<qce::HighlightSpan> rowSpans = sliceSpans(spans.first(), row.startColumn, row.endColumn);
   QList<QTextLayout::FormatRange> formats = m_theme->formatRanges(rowSpans);
   // Token styles with a background (API-13): the backdrop draws them, once the layout says where.
   QList<qce::StyleBackground> styleBackgrounds;

@@ -324,6 +324,7 @@ void TreeSitterHighlighter::resetState() {
   const bool hadTree = m_tree != nullptr;
   dropTrees();
   m_center = 0;
+  m_centerUnit = 0;
   redetectLanguage();
   if (m_doc && (hadTree || m_lang))
     emit invalidated(AllLines, AllLines);
@@ -420,8 +421,8 @@ void TreeSitterHighlighter::startJob() {
   const Rope &rope = request->snapshot.rope();
   const qsizetype length = rope.length();
   const qsizetype lines = rope.lineCount();
-  const qsizetype center = qBound<qsizetype>(0, m_center, lines - 1);
-  const qsizetype centerUnit = rope.lineStart(center);
+  const qsizetype centerUnit = qBound<qsizetype>(0, m_centerUnit, length);
+  const qsizetype center = rope.lineAt(centerUnit);
 
   bool scopeChanged = !m_tree;
   request->windowed = planWindowed();
@@ -698,6 +699,7 @@ TreeSitterHighlighter::highlightLines(const TextSnapshot &text, qsizetype firstL
   const Rope &rope = text.rope();
 
   m_center = lastLine;
+  m_centerUnit = rope.lineStart(lastLine);
   const bool inWindow = covered(rope.lineStart(firstLine));
   const bool injected = !m_lang->injections || !m_injValid || m_doc->length() <= InjectionWholeDocument ||
                         (rope.lineStart(firstLine) >= m_injStart && rope.lineStart(firstLine) < m_injEnd) ||
@@ -722,6 +724,60 @@ TreeSitterHighlighter::highlightLines(const TextSnapshot &text, qsizetype firstL
     result[line - firstLine] = b->lines.value(line % BlockLines);
   }
   return result;
+}
+
+QList<HighlightSpan>
+TreeSitterHighlighter::highlightRange(const TextSnapshot &text, qsizetype line, qsizetype startColumn, qsizetype endColumn) {
+  QList<HighlightSpan> out;
+  if (!m_doc || !m_lang || line < 0 || line >= text.lineCount() || endColumn <= startColumn)
+    return out;
+  const Rope &rope = text.rope();
+  const qsizetype lineStart = rope.lineStart(line);
+  const qsizetype from = lineStart + startColumn, to = qMin(lineStart + endColumn, rope.length());
+  if (to <= from)
+    return out;
+
+  // The window of a windowed parse follows the stretch being drawn, not the start of its line.
+  m_center = line;
+  m_centerUnit = from + (to - from) / 2;
+  const bool inWindow = covered(from) || covered(to - 1);
+  const bool injected = !m_lang->injections || !m_injValid || m_doc->length() <= InjectionWholeDocument ||
+                        (from >= m_injStart && from < m_injEnd) || m_injEnd >= m_doc->length();
+  if (!m_tree || !inWindow || !injected) {
+    if (!inWindow || !injected) {
+      m_needWindow = !inWindow;
+      m_dirty = true;
+    }
+    scheduleParse();
+    if (!m_tree)
+      return out;
+  }
+  if (!m_cursor)
+    m_cursor = ts_query_cursor_new();
+
+  auto toSpans = [&](const std::vector<Segment> &segments) {
+    QList<HighlightSpan> spans;
+    spans.reserve(qsizetype(segments.size()));
+    for (const Segment &seg : segments) {
+      const qsizetype a = qMax(seg.from, from), b = qMin(seg.to, to);
+      if (b > a)
+        spans.append({a - from, b - a, seg.style});
+    }
+    return spans;
+  };
+  // Only what the tree covers: outside a windowed parse there is nothing to query.
+  if (inWindow) {
+    const qsizetype lo = m_treeWindowed ? qMax(from, m_winStart) : from;
+    const qsizetype hi = m_treeWindowed && m_winEnd < m_doc->length() ? qMin(to, m_winEnd) : to;
+    if (hi > lo)
+      out = toSpans(paintTree(m_cursor, ts_tree_root_node(m_tree.get()), *m_lang, lo, hi, rope));
+  }
+  for (const InjectedLayer &layer : std::as_const(m_layers)) {
+    if (layer.end <= from || layer.start >= to)
+      continue;
+    out = overlay(out, toSpans(paintTree(m_cursor, ts_tree_root_node(layer.tree.get()), *layer.language, from, to, rope)));
+  }
+  return out;
 }
 
 // ---- Folds (FOLD-02) -------------------------------------------------------------------------

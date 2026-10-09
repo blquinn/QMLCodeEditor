@@ -19,6 +19,8 @@ namespace {
 // Rows further than this from the origin are re-based; at 20 px per row the largest offset stays
 // near 40k px, well inside float precision.
 constexpr qsizetype kRebaseDistance = 2048;
+// Horizontal counterpart: the origin x follows the view in jumps of this size (a float keeps a pixel fraction up to here).
+constexpr qreal kRebaseDistanceX = 262144;
 // Spare node pairs kept for rows scrolling in; more than a fast flick needs.
 constexpr qsizetype kMaxFree = 128;
 } // namespace
@@ -105,11 +107,11 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_labelPool.parent = m_gutterLabels;
 }
 
-void EditorScene::ColorBatch::update(const QList<GutterRect> &rects, qreal lh, qsizetype originRow) {
+void EditorScene::ColorBatch::update(const QList<GutterRect> &rects, qreal lh, qsizetype originRow, qreal originX) {
   QList<QRectF> geometry;
   geometry.reserve(rects.size());
   for (const GutterRect &r : rects)
-    geometry.append(QRectF(r.x0, double(r.row - originRow) * lh + r.y, r.x1 - r.x0, r.height < 0 ? lh : r.height));
+    geometry.append(QRectF(r.x0 - originX, double(r.row - originRow) * lh + r.y, r.x1 - r.x0, r.height < 0 ? lh : r.height));
   while (m_nodes.size() > rects.size())
     delete m_nodes.takeLast();
   while (m_nodes.size() < rects.size()) {
@@ -161,7 +163,9 @@ QSGTexture *EditorScene::SquiggleBatch::textureFor(QRgb color, qreal ratio) {
   return m_textures.emplace(color, texture).first->second;
 }
 
-void EditorScene::SquiggleBatch::update(const QList<ColoredSpan> &spans, qreal lh, qsizetype originRow, qreal ratio) {
+void EditorScene::SquiggleBatch::update(
+  const QList<ColoredSpan> &spans, qreal lh, qsizetype originRow, qreal ratio, qreal originX
+) {
   if (ratio != m_ratio) { // the textures were drawn for another density
     m_ratio = ratio;
     for (QSGImageNode *node : std::as_const(m_nodes))
@@ -183,7 +187,7 @@ void EditorScene::SquiggleBatch::update(const QList<ColoredSpan> &spans, qreal l
     while (x < end) {
       const qreal width = qMin(end - x, maxPiece);
       const qreal phase = std::fmod(x, kPeriod) < 0 ? std::fmod(x, kPeriod) + kPeriod : std::fmod(x, kPeriod);
-      pieces.append({QRectF(x, y, width, height), QRectF(phase * ratio, 0, width * ratio, kHeight * ratio), span.color.rgba()});
+      pieces.append({QRectF(x - originX, y, width, height), QRectF(phase * ratio, 0, width * ratio, kHeight * ratio), span.color.rgba()});
       x += width;
     }
   }
@@ -317,7 +321,7 @@ void EditorScene::syncOverlays(const FrameParams &p) {
   const qreal lh = p.lineHeight;
   auto rectFor = [&](const RowSpan &span) {
     return QRectF(
-      span.x0, double(span.row - m_originRow) * lh + span.y, span.x1 - span.x0,
+      span.x0 - m_originX, double(span.row - m_originRow) * lh + span.y, span.x1 - span.x0,
       span.height < 0 ? lh : span.height
     );
   };
@@ -339,9 +343,9 @@ void EditorScene::syncOverlays(const FrameParams &p) {
   if (changed)
     ++m_stats.overlayUpdates;
   static const QList<ColoredSpan> none;
-  m_decoBackgrounds->update(p.decorationBackgrounds ? *p.decorationBackgrounds : none, lh, m_originRow);
-  m_decoUnderlines->update(p.decorationUnderlines ? *p.decorationUnderlines : none, lh, m_originRow);
-  m_squiggles->update(p.squiggles ? *p.squiggles : none, lh, m_originRow, p.devicePixelRatio);
+  m_decoBackgrounds->update(p.decorationBackgrounds ? *p.decorationBackgrounds : none, lh, m_originRow, m_originX);
+  m_decoUnderlines->update(p.decorationUnderlines ? *p.decorationUnderlines : none, lh, m_originRow, m_originX);
+  m_squiggles->update(p.squiggles ? *p.squiggles : none, lh, m_originRow, p.devicePixelRatio, m_originX);
   m_cursorFade->setOpacity(p.cursorVisible ? 1.0 : 0.0);
 }
 
@@ -427,6 +431,12 @@ void EditorScene::sync(const FrameParams &p) {
   textViewport.setLeft(p.viewport.left() + p.gutterWidth);
   setClipRect(m_clip, textViewport);
 
+  // Horizontal origin: only a line millions of pixels wide ever moves it (PERF-01).
+  if (!m_haveOriginX || qAbs(p.contentX - m_originX) > kRebaseDistanceX) {
+    m_originX = std::floor(p.contentX / 1024) * 1024;
+    m_haveOriginX = true;
+  }
+
   const QList<FramePlanRow> &rows = *p.rows;
   if (rows.isEmpty()) {
     for (auto &[row, item] : m_textPool.active)
@@ -446,7 +456,7 @@ void EditorScene::sync(const FrameParams &p) {
 
   // The scroll transform is the only thing that moves while scrolling.
   QMatrix4x4 scroll;
-  scroll.translate(float(p.gutterWidth - p.contentX), float(double(m_originRow) * p.lineHeight - p.contentY));
+  scroll.translate(float(p.gutterWidth - (p.contentX - m_originX)), float(double(m_originRow) * p.lineHeight - p.contentY));
   m_scroll->setMatrix(scroll);
 
   // Rows that left the plan hand their nodes back to the pool before new rows ask for them.
@@ -474,11 +484,12 @@ void EditorScene::sync(const FrameParams &p) {
     }
     positionItem(item, planRow.row, p);
 
-    if (item->layoutId != planRow.layout->id || colorChanged) {
+    if (item->layoutId != planRow.layout->id || colorChanged || item->originX != m_originX) {
       item->text->clear();
       item->text->setColor(p.foreground);
-      item->text->addTextLayout(QPointF(planRow.layout->indentX, 0), planRow.layout->layout.get());
+      item->text->addTextLayout(QPointF(planRow.layout->indentX - m_originX, 0), planRow.layout->layout.get());
       item->layoutId = planRow.layout->id;
+      item->originX = m_originX;
       ++m_stats.linesFilled;
     }
   }

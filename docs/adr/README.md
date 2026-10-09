@@ -23,6 +23,7 @@ Short records of decisions that are expensive to reverse. Roadmap items link to 
 | [0017](0017-vim-input-handler.md) | Vim as an input handler over the command layer | Accepted |
 | [0018](0018-host-extensions.md) | Host extensions: registered languages, token styles and highlight overlays | Accepted |
 | [0019](0019-find-and-replace.md) | Find and replace: one search layer, worker threads on snapshots, an opt-in find bar | Accepted |
+| [0020](0020-long-line-windowing.md) | Very long lines: lay out a window, answer the rest from an index | Accepted |
 
 ## Adding one
 
