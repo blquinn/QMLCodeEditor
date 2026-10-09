@@ -9,6 +9,7 @@
 #include "core/foldprovider.h"
 #include "core/highlighter.h"
 #include "core/inlayhints.h"
+#include "core/longlineindex.h"
 #include "core/commands.h"
 #include "core/cursorlayout.h"
 #include "core/inputhandler.h"
@@ -622,6 +623,18 @@ private:
   // The row of the display map that shows `position`.
   qce::DisplayRow rowOfPosition(qce::TextPosition position) const;
   void invalidateLayouts();
+
+  // Very long lines without wrap are laid out one window at a time (PERF-01, ADR 0020). The index of
+  // such a line says where its columns are; it follows edits instead of being rebuilt.
+  static constexpr qsizetype kLongLineUnits = 8192;
+  struct LongLine {
+    qsizetype line = 0;
+    std::shared_ptr<const qce::LongLineIndex> index;
+    quint64 version = 0; // of the document the index describes
+  };
+  std::shared_ptr<const qce::LongLineIndex> longLineIndex(qsizetype line, const qce::TextSnapshot &snapshot);
+  void updateLongLines(const qce::TextChange &change);
+  QList<LongLine> m_longLines; // most recently used first
 
   qce::TextDocument m_document;
   qce::DisplayMap m_map{&m_document};

@@ -1498,6 +1498,127 @@ private slots:
     QVERIFY(last.isLast());
     QCOMPARE(last.endColumn, editor->document()->length());
   }
+
+  // Cells (tabs to the next tab stop) before each column of a line, for checking x positions.
+  static QList<qsizetype> cellsBefore(const QString &text, int tabWidth) {
+    QList<qsizetype> cells(text.size() + 1, 0);
+    qsizetype cell = 0;
+    for (qsizetype i = 0; i < text.size(); ++i) {
+      cell += text[i] == u'\t' ? tabWidth - cell % tabWidth : 1;
+      cells[i + 1] = cell;
+    }
+    return cells;
+  }
+
+  void aFiveMegabyteLineScrollsSidewaysWithoutStalling() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    if (!editor->metrics().isMonospace())
+      QSKIP("needs a monospace font");
+    QString text;
+    text.reserve(5 * 1024 * 1024);
+    while (text.size() < 5 * 1024 * 1024)
+      text += QStringLiteral("some words of varying lengths,\tpunctuation; and numbers 12345 ");
+    editor->setText(text);
+    QCOMPARE(editor->lineCount(), 1);
+    QTRY_COMPARE(editor->document()->length(), text.size());
+    QTRY_VERIFY(editor->contentWidth() > 1000);
+    // Only a window of the line is laid out, so showing it costs measuring the line once (a debug build
+    // takes a while over 5 MB) and nothing like shaping it.
+    QVERIFY2(editor->renderStats().polishMaxNs < 1'000'000'000ull, qPrintable(QString::number(editor->renderStats().polishMaxNs)));
+    editor->resetPolishStats();
+    const qreal cell = editor->metrics().cellAdvance();
+    const QList<qsizetype> cells = cellsBefore(text, editor->metrics().tabWidth());
+    QVERIFY2(editor->contentWidth() > cells.last() * cell * 0.99, qPrintable(QStringLiteral("%1 vs %2").arg(editor->contentWidth()).arg(cells.last() * cell)));
+
+    // End goes to the far end and brings it into view, wherever the window was.
+    QTest::keyClick(view.get(), Qt::Key_End);
+    QCOMPARE(editor->cursorPosition(), text.size());
+    QVERIFY(editor->contentX() > cells.last() * cell - editor->width() * 2);
+    QTRY_VERIFY(editor->renderStats().polishCalls > 0);
+    QVERIFY2(editor->renderStats().polishMaxNs < 100'000'000ull, qPrintable(QString::number(editor->renderStats().polishMaxNs)));
+    const QRectF atEnd = editor->rectForPosition(text.size());
+    QVERIFY(atEnd.left() >= 0 && atEnd.right() <= editor->width() + 1);
+    QCOMPARE(editor->positionAt(atEnd.left() + 1, atEnd.top() + 1), text.size());
+    // Positions near the cursor round-trip through the pointer.
+    for (qsizetype col : {text.size() - 1, text.size() - 7, text.size() - 40}) {
+      const QRectF r = editor->rectForPosition(col);
+      QCOMPARE(editor->positionAt(r.left() + 1, r.top() + 1), col);
+    }
+
+    // x is the same wherever the window is: laid out in the window or answered from the index.
+    const qreal x0 = [&] {
+      editor->setContentX(0);
+      return editor->rectForPosition(0).left();
+    }();
+    for (qreal scroll : {0.0, 1000.0, 1'000'000.0, 20'000'000.0}) {
+      editor->setContentX(scroll);
+      QTest::qWait(30);
+      const qreal shown = editor->contentX();
+      for (qsizetype col : {qsizetype(0), qsizetype(37), qsizetype(2999), qsizetype(1'000'000), qsizetype(2'500'001), text.size()}) {
+        const qreal expected = x0 + cells[col] * cell - shown;
+        QVERIFY2(
+          qAbs(editor->rectForPosition(col).left() - expected) < 0.01,
+          qPrintable(QStringLiteral("column %1 with contentX %2").arg(col).arg(shown))
+        );
+      }
+    }
+
+    // Typing in the middle of the line stays cheap, and the index follows the edit.
+    editor->setCursorPosition(2'500'000);
+    editor->ensureCursorVisible();
+    editor->resetPolishStats();
+    for (int i = 0; i < 5; ++i)
+      QTest::keyClick(view.get(), Qt::Key_X);
+    QTRY_VERIFY(editor->renderStats().polishCalls > 0);
+    QCOMPARE(editor->document()->length(), text.size() + 5);
+    QVERIFY2(editor->renderStats().polishMaxNs < 100'000'000ull, qPrintable(QString::number(editor->renderStats().polishMaxNs)));
+    text.insert(2'500'000, QStringLiteral("xxxxx"));
+    const QList<qsizetype> after = cellsBefore(text, editor->metrics().tabWidth());
+    editor->setContentX(0);
+    QTest::qWait(30);
+    const qreal base = editor->rectForPosition(0).left();
+    for (qsizetype col : {qsizetype(2'500'005), qsizetype(3'000'000), text.size()}) {
+      QVERIFY2(
+        qAbs(editor->rectForPosition(col).left() - (base + after[col] * cell - editor->contentX())) < 0.01,
+        qPrintable(QStringLiteral("after typing, column %1").arg(col))
+      );
+    }
+  }
+
+  void aLongLineWithTabsMeasuresTheSameInsideAndOutsideTheWindow() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    if (!editor->metrics().isMonospace())
+      QSKIP("needs a monospace font");
+    QString text;
+    for (int i = 0; text.size() < 200'000; ++i)
+      text += i % 5 == 0 ? QStringLiteral("\t") : QStringLiteral("ab%1 ").arg(i % 97);
+    editor->setText(text);
+    const qreal cell = editor->metrics().cellAdvance();
+    const QList<qsizetype> cells = cellsBefore(text, editor->metrics().tabWidth());
+    editor->setContentX(0);
+    QTest::qWait(30);
+    const qreal base = editor->rectForPosition(0).left();
+    // Windows start at arbitrary columns, so tab stops would drift if they were measured from the window.
+    for (qreal scroll = 0; scroll < cells.last() * cell; scroll += 4321.7) {
+      editor->setContentX(scroll);
+      QTest::qWait(10);
+      const qreal shown = editor->contentX();
+      for (qsizetype col = qsizetype(shown / cell) - 40; col < qsizetype(shown / cell) + 400; col += 7) {
+        if (col < 0 || col > text.size())
+          continue;
+        QVERIFY2(
+          qAbs(editor->rectForPosition(col).left() - (base + cells[col] * cell - shown)) < 0.01,
+          qPrintable(QStringLiteral("column %1 with contentX %2: got %3 want %4").arg(col).arg(shown).arg(editor->rectForPosition(col).left()).arg(base + cells[col] * cell - shown))
+        );
+        // And the pointer lands back on the column.
+        const QRectF r = editor->rectForPosition(col);
+        if (r.left() + 1 < editor->width() && r.left() >= 0)
+          QCOMPARE(editor->positionAt(r.left() + 1, r.top() + 1), col);
+      }
+    }
+  }
 };
 
 QTEST_MAIN(TstCodeEditor)
