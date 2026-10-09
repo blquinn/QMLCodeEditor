@@ -7,6 +7,19 @@ void LineLayoutCache::setCapacity(qsizetype capacity) {
   evictToCapacity();
 }
 
+void LineLayoutCache::setByteCapacity(qsizetype bytes) {
+  m_byteCapacity = qMax<qsizetype>(1, bytes);
+  evictToCapacity();
+}
+
+void LineLayoutCache::chargeNewest(qsizetype bytes) {
+  if (m_entries.empty())
+    return;
+  m_bytes += bytes - m_entries.front().bytes;
+  m_entries.front().bytes = bytes;
+  evictToCapacity();
+}
+
 std::shared_ptr<LineLayout> LineLayoutCache::find(qsizetype line, qsizetype rowInLine) {
   const auto it = m_index.find({line, rowInLine});
   if (it == m_index.end())
@@ -22,6 +35,7 @@ LineLayoutCache::insert(
 ) {
   const Key key{line, rowInLine};
   if (const auto it = m_index.find(key); it != m_index.end()) {
+    m_bytes -= it->second->bytes;
     m_entries.erase(it->second);
     m_index.erase(it);
   }
@@ -39,8 +53,9 @@ LineLayoutCache::insert(
 }
 
 void LineLayoutCache::evictToCapacity() {
-  while (qsizetype(m_entries.size()) > m_capacity) {
+  while (qsizetype(m_entries.size()) > m_capacity || (m_bytes > m_byteCapacity && m_entries.size() > 1)) {
     m_index.erase(m_entries.back().key);
+    m_bytes -= m_entries.back().bytes;
     m_entries.pop_back();
     ++m_stats.evicted;
   }
@@ -52,6 +67,7 @@ void LineLayoutCache::invalidate(qsizetype firstLine, qsizetype oldCount, qsizet
   m_index.clear();
   for (auto it = m_entries.begin(); it != m_entries.end();) {
     if (it->key.first >= firstLine && it->key.first < oldEnd) {
+      m_bytes -= it->bytes;
       it = m_entries.erase(it);
       continue;
     }
@@ -66,11 +82,13 @@ void LineLayoutCache::clear(qsizetype firstLine) {
   if (firstLine <= 0) {
     m_entries.clear();
     m_index.clear();
+    m_bytes = 0;
     return;
   }
   for (auto it = m_entries.begin(); it != m_entries.end();) {
     if (it->key.first >= firstLine) {
       m_index.erase(it->key);
+      m_bytes -= it->bytes;
       it = m_entries.erase(it);
     } else {
       ++it;

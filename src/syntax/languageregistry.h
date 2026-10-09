@@ -34,6 +34,9 @@ struct LanguageInfo {
   QString injectionSource;
   QString foldSource;
   bool selectable = true; // false for languages only reached through injection
+  // Heap bytes a parse tree holds per UTF-16 unit of source, for `TreeSitterHighlighter::parseMemoryBudget`
+  // (PERF-03). 0 means unknown; a host's language then gets a conservative default.
+  int treeBytesPerUnit = 0;
 };
 
 // A language with its queries compiled. Immutable and shared: TSQuery may be used from any thread

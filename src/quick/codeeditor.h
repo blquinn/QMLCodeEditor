@@ -483,6 +483,7 @@ public:
     quint64 polishNs = 0;    // total time spent in updatePolish()
     quint64 polishMaxNs = 0; // slowest single run
     qce::SceneStats scene;    // scene-graph node pool activity, as of the last synced frame
+    qsizetype layoutBytes = 0; // estimated memory held by the layout cache
   };
   RenderStats renderStats() const;
   // Forgets the polish timings so a benchmark scenario reads its own slowest run.

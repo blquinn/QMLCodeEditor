@@ -232,6 +232,25 @@ void TreeSitterHighlighter::setFullParseLimit(qsizetype units) {
     scheduleParse(); // a window tree may now be due a full parse (or the other way round)
 }
 
+void TreeSitterHighlighter::setParseMemoryBudget(qint64 bytes) {
+  bytes = qMax<qint64>(bytes, 0);
+  if (bytes == m_parseBudget)
+    return;
+  m_parseBudget = bytes;
+  emit parseMemoryBudgetChanged();
+  if (m_doc && m_lang)
+    scheduleParse();
+}
+
+qsizetype TreeSitterHighlighter::effectiveFullParseLimit() const {
+  if (m_parseBudget <= 0)
+    return m_fullLimit;
+  constexpr int kUnknownBytesPerUnit = 64; // above every measured built-in except Markdown
+  const int perUnit = m_lang && m_lang->info && m_lang->info->treeBytesPerUnit > 0 ? m_lang->info->treeBytesPerUnit
+                                                                                   : kUnknownBytesPerUnit;
+  return qMin<qsizetype>(m_fullLimit, qsizetype(m_parseBudget / perUnit));
+}
+
 void TreeSitterHighlighter::setWindowSize(qsizetype units) {
   m_windowCap = qMax<qsizetype>(units, 64);
   if (m_doc && m_lang)
@@ -392,7 +411,7 @@ bool TreeSitterHighlighter::planWindowed() const {
     return false;
   if (m_needWindow || m_doc->isLoading())
     return true;
-  if (length <= m_fullLimit)
+  if (length <= effectiveFullParseLimit())
     return m_tree == nullptr; // a window first so the viewport shows something soon, then the whole text
   return true;
 }

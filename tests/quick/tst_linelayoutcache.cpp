@@ -53,6 +53,46 @@ private slots:
     QCOMPARE(cache.size(), 1);
   }
 
+  void theByteCapEvictsOldLayoutsButKeepsTheNewest() {
+    LineLayoutCache cache(100);
+    cache.setByteCapacity(1000);
+    for (int line = 0; line < 5; ++line) {
+      add(cache, line);
+      cache.chargeNewest(400);
+    }
+    // 400 each against 1000: only the two newest fit.
+    QCOMPARE(cache.size(), 2);
+    QCOMPARE(cache.bytes(), 800);
+    QVERIFY(cache.find(4) && cache.find(3) && !cache.find(2));
+    // One entry larger than the cap is still kept: it is what is being drawn.
+    add(cache, 9);
+    cache.chargeNewest(5000);
+    QCOMPARE(cache.size(), 1);
+    QCOMPARE(cache.bytes(), 5000);
+    QVERIFY(cache.find(9));
+  }
+
+  void invalidatingAndClearingReleaseBytes() {
+    LineLayoutCache cache(100);
+    for (int line = 0; line < 4; ++line) {
+      add(cache, line);
+      cache.chargeNewest(100);
+    }
+    QCOMPARE(cache.bytes(), 400);
+    cache.invalidate(1, 2, 2); // lines 1 and 2 replaced
+    QCOMPARE(cache.bytes(), 200);
+    cache.clear(3);
+    QCOMPARE(cache.bytes(), 100);
+    cache.clear();
+    QCOMPARE(cache.bytes(), 0);
+    // Replacing an entry of the same key does not count it twice.
+    add(cache, 7);
+    cache.chargeNewest(300);
+    add(cache, 7);
+    cache.chargeNewest(300);
+    QCOMPARE(cache.bytes(), 300);
+  }
+
   void evictedLayoutStaysAliveForHolders() {
     LineLayoutCache cache(1);
     const auto a = add(cache, 1);

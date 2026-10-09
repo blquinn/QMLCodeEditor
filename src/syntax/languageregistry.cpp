@@ -1,5 +1,7 @@
 #include "syntax/languageregistry.h"
 
+#include <QtCore/QHash>
+
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -191,6 +193,10 @@ LanguageRegistry::LanguageRegistry() {
     &tree_sitter_markdown_inline, {u"markdown_inline/highlights.scm"_s}, {u"markdown_inline/injections.scm"_s}, {}};
   inlineMd.selectable = false;
   add(std::move(inlineMd));
+  // Measured by bench_syntax (memory/<language>, bytes of heap per million units of source).
+  const QHash<QString, int> bytesPerUnit{{u"json"_s, 44}, {u"javascript"_s, 50}, {u"html"_s, 33}, {u"xml"_s, 54}, {u"markdown"_s, 146}};
+  for (LanguageInfo &language : m_languages)
+    language.treeBytesPerUnit = bytesPerUnit.value(language.id, language.treeBytesPerUnit);
 }
 
 namespace {
