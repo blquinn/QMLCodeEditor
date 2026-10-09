@@ -24,6 +24,18 @@ if(QCE_LTO)
     endif()
 endif()
 
+# Cap Ninja build parallelism (default max(2, cores - 4)) so compiles leave cores free. Override with
+# -DQCE_BUILD_JOBS=N. Only affects Ninja; applies even when `cmake --build` is run without -j.
+cmake_host_system_information(RESULT QCE_NUM_CORES QUERY NUMBER_OF_LOGICAL_CORES)
+math(EXPR QCE_DEFAULT_JOBS "${QCE_NUM_CORES} - 4")
+if(QCE_DEFAULT_JOBS LESS 2)
+    set(QCE_DEFAULT_JOBS 2)
+endif()
+set(QCE_BUILD_JOBS ${QCE_DEFAULT_JOBS} CACHE STRING "Max parallel compile/link jobs (Ninja)")
+set_property(GLOBAL APPEND PROPERTY JOB_POOLS qce_jobs=${QCE_BUILD_JOBS})
+set(CMAKE_JOB_POOL_COMPILE qce_jobs)
+set(CMAKE_JOB_POOL_LINK qce_jobs)
+
 enable_testing()
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
