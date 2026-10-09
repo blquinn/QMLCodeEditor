@@ -2809,8 +2809,14 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
   layout->setTextOption(option);
   layout->setCacheEnabled(true);
   QList<qce::HighlightSpan> rowSpans;
-  if (longIndex) {
-    // Only the window's stretch of the line is styled, never the whole line.
+  // A row that shows a small part of a long line (a window, or a wrapped row) asks for the spans of that part
+  // only: styling the whole line again after every keystroke is what makes editing a minified file slow.
+  constexpr qsizetype kStyleWholeLineUnits = 2048;
+  const bool partOfLongLine =
+    longIndex || (row.endColumn - row.startColumn < rope.lineLength(row.line) &&
+                  rope.lineLength(row.line) > kStyleWholeLineUnits);
+  if (partOfLongLine) {
+    // Only the row's stretch of the line is styled, never the whole line.
     rowSpans = m_highlighter->highlightRange(snapshot, row.line, row.startColumn, row.endColumn);
     for (qce::Highlighter *overlay : std::as_const(m_overlays)) {
       const auto over = overlay->highlightRange(snapshot, row.line, row.startColumn, row.endColumn);
