@@ -1,0 +1,174 @@
+{
+  "meta": {
+    "args": [],
+    "compiler": "clang 22.1.8 (Fedora 22.1.8-4.fc44)",
+    "cores": 24,
+    "cpu": "AMD Ryzen 9 5900X 12-Core Processor",
+    "date": "2026-10-09T14:53:09Z",
+    "git": {
+      "branch": "main",
+      "commit": "7d4becaefa",
+      "dirty": true
+    },
+    "optimized": true,
+    "os": "Fedora Linux 44 (KDE Plasma Desktop Edition)",
+    "qt": "6.11.2",
+    "suite": "bench_find"
+  },
+  "results": [
+    {
+      "items": 1000,
+      "iterations": 10,
+      "mean_ns": 10515607.8,
+      "median_ns": 10511082.5,
+      "median_ns_per_item": 10511.0825,
+      "min_ns": 10464107,
+      "name": "compile/literal",
+      "p95_ns": 10598207,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 10,
+      "mean_ns": 22886415.1,
+      "median_ns": 22885883,
+      "median_ns_per_item": 22885.883,
+      "min_ns": 22804883,
+      "name": "compile/regex_wholeword",
+      "p95_ns": 23008753,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 5,
+      "mean_ns": 37013573,
+      "median_ns": 36975659,
+      "median_ns_per_item": 0.5071905791389065,
+      "min_ns": 36915259,
+      "name": "worker/literal_2000_matches",
+      "p95_ns": 37258009,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 5,
+      "mean_ns": 113679958,
+      "median_ns": 113664976,
+      "median_ns_per_item": 1.5591285338619636,
+      "min_ns": 113519766,
+      "name": "worker/literal_icase",
+      "p95_ns": 113854176,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 5,
+      "mean_ns": 36852362.8,
+      "median_ns": 36823399,
+      "median_ns_per_item": 0.5051020473948289,
+      "min_ns": 36697899,
+      "name": "worker/literal_wholeword",
+      "p95_ns": 37008329,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 5,
+      "mean_ns": 33128906.2,
+      "median_ns": 33138040,
+      "median_ns_per_item": 0.4545504300309631,
+      "min_ns": 33068590,
+      "name": "worker/literal_no_match",
+      "p95_ns": 33194620,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 5,
+      "mean_ns": 2669443.2,
+      "median_ns": 2552460,
+      "median_ns_per_item": 0.03501178074010509,
+      "min_ns": 2516079,
+      "name": "worker/literal_100k_cap",
+      "p95_ns": 3159030,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 3,
+      "mean_ns": 1041603503.3333334,
+      "median_ns": 1040835596,
+      "median_ns_per_item": 14.277014203414982,
+      "min_ns": 1038713898,
+      "name": "worker/regex_2000_matches",
+      "p95_ns": 1045261016,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 3,
+      "mean_ns": 1026835491,
+      "median_ns": 1026272221,
+      "median_ns_per_item": 14.077250174855894,
+      "min_ns": 1026147001,
+      "name": "worker/regex_no_match",
+      "p95_ns": 1028087251,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 5,
+      "mean_ns": 36792719,
+      "median_ns": 36823509,
+      "median_ns_per_item": 0.5051035562513365,
+      "min_ns": 36660469,
+      "name": "replace/build_literal_edits",
+      "p95_ns": 36877789,
+      "unit": "ns"
+    },
+    {
+      "items": 72902890,
+      "iterations": 3,
+      "mean_ns": 1027066904.3333334,
+      "median_ns": 1026878572,
+      "median_ns_per_item": 14.085567417149033,
+      "min_ns": 1025352871,
+      "name": "replace/build_regex_edits",
+      "p95_ns": 1028969270,
+      "unit": "ns"
+    },
+    {
+      "items": 2000,
+      "iterations": 5,
+      "mean_ns": 42331633.4,
+      "median_ns": 42415068,
+      "median_ns_per_item": 21207.534,
+      "min_ns": 41950118,
+      "name": "replace/apply_2000_edits_one_undo_step",
+      "p95_ns": 42528617,
+      "unit": "ns"
+    },
+    {
+      "items": 100000,
+      "iterations": 10,
+      "mean_ns": 806041.8,
+      "median_ns": 805534.5,
+      "median_ns_per_item": 8.055345,
+      "min_ns": 801400,
+      "name": "navigate/next_in_2000_matches",
+      "p95_ns": 812960,
+      "unit": "ns"
+    },
+    {
+      "items": 100,
+      "iterations": 5,
+      "mean_ns": 1613483.6,
+      "median_ns": 1613789,
+      "median_ns_per_item": 16137.89,
+      "min_ns": 1572089,
+      "name": "navigate/sync_find_next_literal",
+      "p95_ns": 1658060,
+      "unit": "ns"
+    }
+  ]
+}

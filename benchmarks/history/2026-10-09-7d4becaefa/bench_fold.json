@@ -1,0 +1,174 @@
+{
+  "meta": {
+    "args": [],
+    "compiler": "clang 22.1.8 (Fedora 22.1.8-4.fc44)",
+    "cores": 24,
+    "cpu": "AMD Ryzen 9 5900X 12-Core Processor",
+    "date": "2026-10-09T14:53:17Z",
+    "git": {
+      "branch": "main",
+      "commit": "7d4becaefa",
+      "dirty": true
+    },
+    "optimized": true,
+    "os": "Fedora Linux 44 (KDE Plasma Desktop Edition)",
+    "qt": "6.11.2",
+    "suite": "bench_fold"
+  },
+  "results": [
+    {
+      "items": 2000005,
+      "iterations": 5,
+      "mean_ns": 25630156.4,
+      "median_ns": 24753932,
+      "median_ns_per_item": 12.376935057662356,
+      "min_ns": 24583392,
+      "name": "ranges/indent_all_2M_lines",
+      "p95_ns": 29133182,
+      "unit": "ns"
+    },
+    {
+      "items": 100,
+      "iterations": 10,
+      "mean_ns": 536974.8,
+      "median_ns": 535924.5,
+      "median_ns_per_item": 5359.245,
+      "min_ns": 529980,
+      "name": "ranges/indent_viewport_cold",
+      "p95_ns": 550990,
+      "unit": "ns"
+    },
+    {
+      "items": 666668,
+      "iterations": 5,
+      "mean_ns": 138518260.4,
+      "median_ns": 138276489,
+      "median_ns_per_item": 207.41431867136265,
+      "min_ns": 137871208,
+      "name": "fold/all_666k",
+      "p95_ns": 139433218,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 5,
+      "mean_ns": 98795558,
+      "median_ns": 98764990,
+      "median_ns_per_item": 98764990,
+      "min_ns": 98474030,
+      "name": "fold/unfold_all_666k",
+      "p95_ns": 99406770,
+      "unit": "ns"
+    },
+    {
+      "items": 200,
+      "iterations": 5,
+      "mean_ns": 23177217.2,
+      "median_ns": 23158413,
+      "median_ns_per_item": 115792.065,
+      "min_ns": 23083394,
+      "name": "fold/toggle_one_of_100k",
+      "p95_ns": 23281343,
+      "unit": "ns"
+    },
+    {
+      "items": 200,
+      "iterations": 5,
+      "mean_ns": 449697.8,
+      "median_ns": 442249,
+      "median_ns_per_item": 2211.245,
+      "min_ns": 431620,
+      "name": "fold/keystroke_with_100k_folds",
+      "p95_ns": 469340,
+      "unit": "ns"
+    },
+    {
+      "items": 50,
+      "iterations": 5,
+      "mean_ns": 9464911,
+      "median_ns": 9460438,
+      "median_ns_per_item": 189208.76,
+      "min_ns": 9433637,
+      "name": "fold/enter_with_100k_folds",
+      "p95_ns": 9498807,
+      "unit": "ns"
+    },
+    {
+      "items": 3000,
+      "iterations": 10,
+      "mean_ns": 1134097.5,
+      "median_ns": 1149854,
+      "median_ns_per_item": 383.2846666666667,
+      "min_ns": 1059660,
+      "name": "fold/row_queries_100k_folds",
+      "p95_ns": 1191389,
+      "unit": "ns"
+    },
+    {
+      "items": 666668,
+      "iterations": 5,
+      "mean_ns": 148675841.2,
+      "median_ns": 148651865,
+      "median_ns_per_item": 222.9773515452969,
+      "min_ns": 148349685,
+      "name": "fold/all_666k_wrap",
+      "p95_ns": 148989816,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 5,
+      "mean_ns": 101611713.6,
+      "median_ns": 101549050,
+      "median_ns_per_item": 101549050,
+      "min_ns": 101432480,
+      "name": "fold/unfold_all_666k_wrap",
+      "p95_ns": 101968560,
+      "unit": "ns"
+    },
+    {
+      "items": 200,
+      "iterations": 5,
+      "mean_ns": 24680256.4,
+      "median_ns": 24664163,
+      "median_ns_per_item": 123320.815,
+      "min_ns": 24527982,
+      "name": "fold/toggle_one_of_100k_wrap",
+      "p95_ns": 24911202,
+      "unit": "ns"
+    },
+    {
+      "items": 200,
+      "iterations": 5,
+      "mean_ns": 4177327,
+      "median_ns": 4156508,
+      "median_ns_per_item": 20782.54,
+      "min_ns": 4124399,
+      "name": "fold/keystroke_with_100k_folds_wrap",
+      "p95_ns": 4265660,
+      "unit": "ns"
+    },
+    {
+      "items": 50,
+      "iterations": 5,
+      "mean_ns": 10961724.8,
+      "median_ns": 10957317,
+      "median_ns_per_item": 219146.34,
+      "min_ns": 10918856,
+      "name": "fold/enter_with_100k_folds_wrap",
+      "p95_ns": 10995987,
+      "unit": "ns"
+    },
+    {
+      "items": 3000,
+      "iterations": 10,
+      "mean_ns": 5215008.4,
+      "median_ns": 5206498.5,
+      "median_ns_per_item": 1735.4995,
+      "min_ns": 5121079,
+      "name": "fold/row_queries_100k_folds_wrap",
+      "p95_ns": 5314548,
+      "unit": "ns"
+    }
+  ]
+}
