@@ -68,19 +68,6 @@ QString inputFile(const QString &name, Shape shape, qint64 bytes) {
   return path;
 }
 
-qint64 residentBytes() {
-  QFile f(QStringLiteral("/proc/self/status"));
-  if (!f.open(QIODevice::ReadOnly))
-    return 0;
-  // procfs reports size 0, so atEnd()/readLine() loops don't work; read it whole.
-  const QList<QByteArray> lines = f.readAll().split('\n');
-  for (const QByteArray &line : lines) {
-    if (line.startsWith("VmRSS:"))
-      return line.mid(6).trimmed().split(' ').first().toLongLong() * 1024;
-  }
-  return 0;
-}
-
 enum class Mode {
   Smooth, // 2.5 rows per frame, like a fast trackpad scroll
   Fling,  // 12 rows per frame, like a scrollbar drag or a page-down repeat
@@ -165,6 +152,7 @@ public:
 
     const auto before = m_editor.renderStats();
     const qint64 rssBefore = residentBytes();
+    const qint64 heapBefore = heapBytes();
     m_timer.reset();
     m_frameNo = 0;
     m_phase = Phase::Scrolling;
@@ -235,6 +223,11 @@ public:
     );
     out << valueResult(
       label + QStringLiteral("/memory/rss_growth_scroll"), double(residentBytes() - rssBefore),
+      QStringLiteral("bytes")
+    );
+    // Heap held by the editor's caches after the run (layout cache, frame plan, highlight blocks).
+    out << valueResult(
+      label + QStringLiteral("/memory/heap_growth_scroll"), double(heapBytes() - heapBefore),
       QStringLiteral("bytes")
     );
     return out;

@@ -16,6 +16,10 @@
 #include <cmath>
 #include <cstdio>
 
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
+
 namespace qce::bench {
 
 void Context::begin()
@@ -68,7 +72,12 @@ Result summarize(const QString &name, QList<qint64> samplesNs, qint64 items)
 
 void Runner::add(QString name, Fn fn, int iterations, int warmup)
 {
-    m_cases.append({std::move(name), std::move(fn), iterations, warmup});
+    m_cases.append({std::move(name), std::move(fn), iterations, warmup, {}, {}});
+}
+
+void Runner::addValue(QString name, std::function<double()> fn, QString unit)
+{
+    m_cases.append({std::move(name), {}, 1, 0, std::move(fn), std::move(unit)});
 }
 
 QList<Result> Runner::run(const QString &filter, int iterationsOverride) const
@@ -78,6 +87,10 @@ QList<Result> Runner::run(const QString &filter, int iterationsOverride) const
     for (const Case &c : m_cases) {
         if (!filter.isEmpty() && !re.match(c.name).hasMatch())
             continue;
+        if (c.value) {
+            results.append(valueResult(c.name, c.value(), c.unit));
+            continue;
+        }
         const int iterations = iterationsOverride > 0 ? iterationsOverride : c.iterations;
         Context ctx;
         for (int i = 0; i < c.warmup; ++i) {
@@ -147,6 +160,29 @@ static bool optimizedBuild()
 #else
     return false;
 #endif
+}
+
+qint64 heapBytes()
+{
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || __GLIBC_MINOR__ >= 33)
+    const struct mallinfo2 info = mallinfo2();
+    return qint64(info.uordblks) + qint64(info.hblkhd);
+#else
+    return -1;
+#endif
+}
+
+qint64 residentBytes()
+{
+    QFile f(QStringLiteral("/proc/self/status"));
+    if (!f.open(QIODevice::ReadOnly))
+        return -1;
+    // procfs reports size 0, so atEnd()/readLine() loops don't work; read it whole.
+    for (const QByteArray &line : f.readAll().split('\n')) {
+        if (line.startsWith("VmRSS:"))
+            return line.mid(6).trimmed().split(' ').first().toLongLong() * 1024;
+    }
+    return -1;
 }
 
 Result valueResult(const QString &name, double value, const QString &unit)
@@ -228,6 +264,10 @@ int Runner::exec(const QStringList &args)
     std::printf("%-*s  %5s  %12s  %12s  %12s  %12s  %12s\n", width, "case", "iters", "min", "median", "p95",
                 "mean", "median/item");
     for (const Result &r : results) {
+        if (r.unit != QStringLiteral("ns")) {
+            std::printf("%-*s  %5d  %12.0f %s\n", width, qPrintable(r.name), r.iterations, r.medianNs, qPrintable(r.unit));
+            continue;
+        }
         std::printf("%-*s  %5d  %12s  %12s  %12s  %12s  %12s\n", width, qPrintable(r.name), r.iterations,
                     qPrintable(formatDuration(r.minNs)), qPrintable(formatDuration(r.medianNs)),
                     qPrintable(formatDuration(r.p95Ns)), qPrintable(formatDuration(r.meanNs)),

@@ -22,7 +22,6 @@
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSaveFile>
 
-#include <malloc.h>
 
 #include <atomic>
 #include <cstdio>
@@ -33,13 +32,6 @@ using namespace qce::bench;
 using namespace Qt::StringLiterals;
 
 namespace {
-
-// Bytes malloc currently hands out (arena plus mmapped blocks), for the memory cases. The parse runs
-// on the calling thread, so its allocations are in this thread's arena.
-qint64 heapBytes() {
-  const struct mallinfo2 info = mallinfo2();
-  return qint64(info.uordblks) + qint64(info.hblkhd);
-}
 
 // --- inputs ---------------------------------------------------------------------------------------------------
 
