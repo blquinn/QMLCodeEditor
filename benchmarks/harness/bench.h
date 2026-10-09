@@ -64,6 +64,11 @@ struct Result
 // A single measured quantity that is not a duration (memory, counters): every statistic is `value`.
 Result valueResult(const QString &name, double value, const QString &unit);
 
+// Bytes the C allocator currently hands out (arena plus mmapped blocks) and the process's resident set, for
+// memory cases; take a difference around the work. Both are -1 where the platform has no way to ask.
+qint64 heapBytes();
+qint64 residentBytes();
+
 // Statistics over raw per-iteration times (nanoseconds). Exposed for tests.
 Result summarize(const QString &name, QList<qint64> samplesNs, qint64 items);
 
@@ -73,6 +78,8 @@ public:
     using Fn = std::function<void(Context &)>;
 
     void add(QString name, Fn fn, int iterations = 5, int warmup = 1);
+    // A case that measures one quantity that is not a duration (bytes, a count): `fn` runs once and returns it.
+    void addValue(QString name, std::function<double()> fn, QString unit);
 
     // Parses --filter/--json/--iterations/--list from `args` (args[0] is the program), runs, prints a table.
     // Returns the process exit code.
@@ -88,6 +95,8 @@ private:
         Fn fn;
         int iterations;
         int warmup;
+        std::function<double()> value; // set for addValue cases
+        QString unit;
     };
     QList<Case> m_cases;
 };

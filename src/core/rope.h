@@ -34,6 +34,9 @@ public:
     qsizetype leaves = 0;
     qsizetype branches = 0;
     qsizetype underfullLeaves = 0; // leaves below the minimum fill; fragmentation indicator
+    // Bytes the nodes hold, counting this tree as if unshared: node objects, leaf string buffers (capacity,
+    // not length) and child arrays. Allocator overhead is not included. PERF-03.
+    qsizetype memoryBytes = 0;
   };
 
   Rope();

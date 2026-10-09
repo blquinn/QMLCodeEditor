@@ -400,11 +400,11 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 
 **Exit criteria:** all performance targets above are met and enforced by benchmark thresholds in CI; a measured decision on the glyph-atlas renderer is recorded in an ADR.
 
-- [ ] **PERF-01** Very long lines
+- [~] **PERF-01** Very long lines
   - Shape and render only the visible horizontal window of lines longer than a threshold.
 - [ ] **PERF-02** Multi-GB files
   - Lazy chunk loading; memory-mapped backing for untouched regions.
-- [ ] **PERF-03** Memory profiling and trimming
+- [~] **PERF-03** Memory profiling and trimming
   - Rope overhead, layout cache sizing, tree-sitter tree memory.
 - [ ] **PERF-04** Evaluate a custom glyph-atlas monospace renderer vs. `QSGTextNode`
   - Decision recorded as an ADR; only adopt if benchmarks justify the complexity ([ADR 0001](docs/adr/0001-scene-graph-rendering.md)).

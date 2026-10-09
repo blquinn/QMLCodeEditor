@@ -6,6 +6,7 @@
 #include "bench.h"
 #include "core/anchorset.h"
 #include "core/commands.h"
+#include "core/selectionset.h"
 #include "core/textsearch.h"
 #include "core/fileloader.h"
 #include "core/filesaver.h"
@@ -316,6 +317,57 @@ int main(int argc, char **argv) {
       ctx.setItems(1);
     },
     3, 1
+  );
+
+  // Memory (PERF-03). Heap deltas come from the allocator, so they include malloc's own overhead; the rope's
+  // node accounting (Rope::stats) is reported next to it to tell the two apart.
+  runner.addValue(
+    "memory/rope/heap_bytes_per_M_units",
+    [] {
+      const qint64 before = heapBytes();
+      const LoadResult r = loadFile(inputPath());
+      const qint64 held = heapBytes() - before;
+      doNotOptimize(r.text.length());
+      return double(held) / (double(r.text.length()) / 1e6);
+    },
+    u"bytes"_s
+  );
+  runner.addValue(
+    "memory/rope/node_bytes_per_M_units",
+    [] { return double(baseRope().stats().memoryBytes) / (double(baseRope().length()) / 1e6); }, u"bytes"_s
+  );
+  // Ten thousand typed characters coalesce into one undo step; what each keystroke costs the history and
+  // the document, with the text itself (2 bytes a character) taken out.
+  runner.addValue(
+    "memory/undo/bytes_per_keystroke",
+    [] {
+      constexpr int kKeys = 10'000;
+      TextDocument doc;
+      SelectionSet sel(&doc);
+      EditContext edit{doc, sel, {}};
+      const qint64 before = heapBytes();
+      for (int i = 0; i < kKeys; ++i)
+        commands::insertText(edit, u"x");
+      const qint64 held = heapBytes() - before;
+      doNotOptimize(doc.length());
+      return double(held - 2 * kKeys) / kKeys;
+    },
+    u"bytes"_s
+  );
+  // The undo record of a big delete shares the removed leaves, so deleting half of a document the history
+  // owns frees nothing. Reports heap after minus heap before the delete: near zero means retained.
+  runner.addValue(
+    "memory/undo/heap_change_delete_half_20M",
+    [] {
+      TextDocument doc;
+      doc.reset(Rope::fromString(QString(20'000'000, QLatin1Char('a'))));
+      const qint64 before = heapBytes();
+      doc.remove(5'000'000, 15'000'000);
+      const qint64 after = heapBytes();
+      doNotOptimize(doc.length());
+      return double(after - before);
+    },
+    u"bytes"_s
   );
 
   return runner.exec(app.arguments());

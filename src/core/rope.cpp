@@ -619,6 +619,8 @@ Rope::Stats Rope::stats() const {
   s.height = m_root->height;
   struct Rec {
     static void run(const Node *n, Stats *s) {
+      s->memoryBytes += qsizetype(sizeof(Node)) + qsizetype(n->text.capacity() * sizeof(QChar)) +
+                        qsizetype(n->kids.capacity() * sizeof(Child));
       if (n->isLeaf()) {
         ++s->leaves;
         if (n->text.size() < kMinLeaf)
