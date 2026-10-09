@@ -406,7 +406,7 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
   - 5 MB single line, wrap off: first frame 7.1 s → 41 ms, a typed character 4.1 s → 7 ms frame interval (0.13 ms sync, 0.17 ms render). `bench_wrap --filter giant_nowrap`, `benchmarks/results/2026-10-09-long-lines{-before,}.json`; `bench_syntax` `longline/*`.
 - [ ] **PERF-02** Multi-GB files
   - Lazy chunk loading; memory-mapped backing for untouched regions.
-- [x] **PERF-03** Memory profiling and trimming — done 2026-10-09
+- [x] **PERF-03** Memory profiling and trimming — done 2026-10-09 (af9e6a3)
   - Rope overhead, layout cache sizing, tree-sitter tree memory.
   - Measured (`bench_core` / `bench_syntax` / `bench_scroll` `memory/*`, now in the tracked history): rope 8% over the text, parse trees 33–146 bytes per unit (far the largest), undo 165 bytes per keystroke, layouts about 4 KB each. Trimmed: `parseMemoryBudget` (default 512 MiB) limits whole-document parses by a per-language bytes-per-unit estimate; typing and deleting runs merge into one undo record (165 → 6 bytes per keystroke); the layout cache has a 32 MB cap beside its count. Rope node trimming measured at 1.2% and dropped. Decided in ADR 0021.
 - [ ] **PERF-04** Evaluate a custom glyph-atlas monospace renderer vs. `QSGTextNode`
