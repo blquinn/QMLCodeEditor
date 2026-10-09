@@ -89,6 +89,12 @@ public:
   virtual QList<QList<HighlightSpan>>
   highlightLines(const TextSnapshot &text, qsizetype firstLine, qsizetype lastLine) = 0;
 
+  // The spans of columns [startColumn, endColumn) of one line, relative to startColumn and clipped to the
+  // range (PERF-01). The editor asks for this instead of highlightLines() when it lays out only a window of a
+  // very long line, so an implementation can avoid styling the whole line. The default slices highlightLines().
+  virtual QList<HighlightSpan>
+  highlightRange(const TextSnapshot &text, qsizetype line, qsizetype startColumn, qsizetype endColumn);
+
 signals:
   // Spans of these lines (all lines when firstLine == AllLines) may have changed; the editor drops
   // its cached layouts for them.

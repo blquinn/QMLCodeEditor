@@ -108,6 +108,10 @@ public:
 
   QList<QList<HighlightSpan>>
   highlightLines(const TextSnapshot &text, qsizetype firstLine, qsizetype lastLine) override;
+  // Queries the tree for just this stretch of the line, so a few-megabyte line costs what the stretch does. The
+  // parse window follows the stretch.
+  QList<HighlightSpan>
+  highlightRange(const TextSnapshot &text, qsizetype line, qsizetype startColumn, qsizetype endColumn) override;
 
 signals:
   void languageChanged();
@@ -178,6 +182,7 @@ private:
   bool m_jobScopeChanged = false;
   bool m_needWindow = false;
   qsizetype m_center = 0; // last line asked for: where windows and injection regions are centred
+  qsizetype m_centerUnit = 0; // the unit they are centred on: that line's start, or the middle of a stretch of a long line
   std::shared_ptr<std::atomic_bool> m_cancel;
   std::shared_ptr<HighlightMailbox> m_mailbox;
 

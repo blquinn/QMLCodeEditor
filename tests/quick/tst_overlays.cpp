@@ -268,6 +268,48 @@ private slots:
     QVERIFY(!hasInk(view->grabWindow(), rowRect(editor, 1), kRed));
     editor->removeOverlay(&overlay);
   }
+
+  // A line millions of pixels wide: the selection far to the right must start and end on the pixels of
+  // its columns (PERF-01; a float scene would be off by whole pixels out there).
+  void aSelectionFarToTheRightIsDrawnOnItsColumns() {
+    auto [view, editor] = showEditor();
+    QVERIFY(editor);
+    if (!editor->metrics().isMonospace())
+      QSKIP("needs a monospace font");
+    editor->forceActiveFocus();
+    constexpr qsizetype n = 6'000'000;
+    editor->setText(QString(n, u'x'));
+    QTRY_COMPARE(editor->document()->length(), n);
+    QTRY_VERIFY(editor->contentWidth() > 1'000'000);
+    const qreal cell = editor->metrics().cellAdvance();
+    editor->setContentX((n - 120) * cell - 100);
+    QTRY_VERIFY(editor->renderStats().polishCalls > 0);
+    QTest::qWait(100);
+    editor->select(n - 120, n - 100);
+    // The software renderer works out what to repaint for a new node before the scroll transform is
+    // applied, so a selection that first appears in a scrolled view stays unpainted until something moves.
+    QTest::qWait(100);
+    editor->setContentX(editor->contentX() + 1);
+    const QColor selection = editor->theme()->selection();
+    QRectF from, to;
+    QImage image;
+    QTRY_VERIFY2_WITH_TIMEOUT(
+      [&] {
+        from = editor->rectForPosition(n - 120);
+        to = editor->rectForPosition(n - 100);
+        image = view->grabWindow();
+        return from.left() > 0 && to.left() < image.width() && image.pixelColor(int(from.left()) + 3, 3) == selection;
+      }(),
+      qPrintable(QStringLiteral("selection not on screen: from %1 to %2 contentX %3").arg(from.left()).arg(to.left()).arg(editor->contentX())),
+      5000
+    );
+    const int y = 3;
+    // Inside the selection and just outside it, at the pixel.
+    QCOMPARE(image.pixelColor(int(from.left()), y), selection);
+    QCOMPARE(image.pixelColor(int(to.left()) - 1, y), selection);
+    QVERIFY(image.pixelColor(int(from.left()) - 1, y) != selection);
+    QVERIFY(image.pixelColor(int(to.left()), y) != selection);
+  }
 };
 
 QTEST_MAIN(TstOverlays)

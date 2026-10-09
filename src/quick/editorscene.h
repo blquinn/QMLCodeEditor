@@ -145,6 +145,10 @@ struct SceneStats {
 //                                               |- labels: row transform -- text node (pooled)
 //                                               '- images
 //
+// Horizontally the same holds for very long lines (PERF-01): everything under the scroll transform is
+// placed relative to an origin x near the view, since a float cannot hold tens of millions of pixels
+// to the pixel.
+//
 // Scrolling only rewrites the scroll transform. A row that stays on screen keeps its nodes; rows
 // that scroll out donate theirs to rows that scroll in. Row transforms are relative to an origin
 // row so float matrices stay precise in documents millions of pixels tall.
@@ -166,6 +170,7 @@ private:
     qsizetype row = -1;
     quint64 layoutId = 0;
     qsizetype originRow = 0; // origin the transform was computed against
+    qreal originX = 0;       // horizontal origin the glyphs were placed against (text rows)
     qreal lineHeight = 0;    // row height the transform was computed with
     qreal x = 0;             // where the layout was added (gutter labels)
     QColor color;            // the color it was added with
@@ -203,7 +208,7 @@ private:
   public:
     explicit ColorBatch(QQuickWindow *window) : m_window(window), m_group(new QSGNode) {}
     QSGNode *node() const { return m_group; }
-    void update(const QList<GutterRect> &rects, qreal lineHeight, qsizetype originRow);
+    void update(const QList<GutterRect> &rects, qreal lineHeight, qsizetype originRow, qreal originX = 0);
 
   private:
     QQuickWindow *m_window;
@@ -240,7 +245,7 @@ private:
     SquiggleBatch(QQuickWindow *window, SceneStats *stats) : m_window(window), m_stats(stats), m_group(new QSGNode) {}
     ~SquiggleBatch();
     QSGNode *node() const { return m_group; }
-    void update(const QList<ColoredSpan> &spans, qreal lineHeight, qsizetype originRow, qreal ratio);
+    void update(const QList<ColoredSpan> &spans, qreal lineHeight, qsizetype originRow, qreal ratio, qreal originX = 0);
 
     static constexpr int kPeriod = 4;      // logical pixels per wave
     static constexpr int kHeight = 3;      // logical pixels
@@ -289,6 +294,8 @@ private:
   std::unique_ptr<RectBatch> m_currentLineBatch, m_guideBatch, m_activeGuideBatch, m_selectionBatch, m_markBatch, m_chipBatch, m_chipDotBatch, m_cursorBatch;
   qsizetype m_originRow = 0;
   bool m_haveOrigin = false;
+  qreal m_originX = 0; // content x that scene coordinates are relative to
+  bool m_haveOriginX = false;
   QColor m_textColor;
   QSGTextNode::RenderType m_renderType = QSGTextNode::QtRendering;
   SceneStats m_stats;

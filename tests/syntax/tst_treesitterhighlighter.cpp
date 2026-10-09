@@ -44,6 +44,57 @@ class TstTreeSitterHighlighter : public QObject {
   }
 
 private slots:
+  // PERF-01: a stretch of a very long line is styled without styling the line.
+  void aStretchOfALongLineMatchesTheWholeLine() {
+    QString text = u"["_s;
+    for (int i = 0; text.size() < 300'000; ++i)
+      text += u"{\"id\":%1,\"name\":\"item %1\",\"ok\":true},"_s.arg(i);
+    text += u"null]"_s;
+    TextDocument doc;
+    doc.setText(text);
+    TreeSitterHighlighter h;
+    h.setFileName(u"a.json"_s);
+    h.attach(&doc);
+    settle(h);
+    QCOMPARE(doc.rope().lineCount(), 1);
+    const auto whole = h.highlightLines(doc.snapshot(), 0, 0).first();
+    QVERIFY(whole.size() > 10000);
+    for (const auto &[start, end] : {std::pair<qsizetype, qsizetype>{0, 500}, {123'457, 124'999}, {299'000, text.size()}}) {
+      QList<HighlightSpan> expected;
+      for (HighlightSpan span : whole) {
+        const qsizetype from = qMax(span.start, start), to = qMin(span.start + span.length, end);
+        if (to > from)
+          expected.append({from - start, to - from, span.style});
+      }
+      const QList<HighlightSpan> range = h.highlightRange(doc.snapshot(), 0, start, end);
+      QCOMPARE(range, expected);
+    }
+  }
+
+  void aWindowedParseFollowsTheStretchOfALongLine() {
+    QString text = u"["_s;
+    for (int i = 0; text.size() < 2'600'000; ++i)
+      text += u"{\"id\":%1,\"ok\":true},"_s.arg(i);
+    text += u"null]"_s;
+    TextDocument doc;
+    doc.setText(text);
+    TreeSitterHighlighter h;
+    h.setFileName(u"a.json"_s);
+    h.setFullParseLimit(1'000'000); // so the tree stays a window around what was asked for
+    h.attach(&doc);
+    settle(h);
+    QVERIFY(!h.hasFullTree());
+    // The far end of the line is outside the first window: nothing yet, then a parse moves there.
+    const qsizetype from = text.size() - 300, to = text.size();
+    QTRY_VERIFY_WITH_TIMEOUT(!h.highlightRange(doc.snapshot(), 0, from, to).isEmpty(), 20000);
+    const QList<HighlightSpan> spans = h.highlightRange(doc.snapshot(), 0, from, to);
+    bool sawNumber = false;
+    for (const HighlightSpan &span : spans)
+      sawNumber |= span.style == TokenStyle::Number;
+    QVERIFY(sawNumber);
+    QVERIFY(spans.last().start + spans.last().length <= to - from);
+  }
+
   void json() {
     TextDocument doc;
     doc.setText(u"{\"name\": \"x\", \"n\": 12, \"ok\": true}\n"_s);

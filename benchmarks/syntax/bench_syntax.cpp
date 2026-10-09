@@ -8,6 +8,8 @@
 // edit/gui_thread/<lang>      what the GUI thread pays for one keystroke: the edit, and spans for 60 lines
 // edit/to_highlight/<lang>    keystroke until the reparsed spans are available (worker included)
 // block/fill/<lang>           filling one 64-line block of spans from the tree
+// longline/range/json         spans for one screenful of a one-line (minified) document, steady state (PERF-01)
+// longline/edit_to_range/json keystroke in the middle of that line until the spans there are available
 // memory/<lang>               heap bytes held by the tree (glibc mallinfo2), per million units of source
 #include "bench.h"
 #include "core/textdocument.h"
@@ -307,6 +309,58 @@ int main(int argc, char **argv) {
         doc.insert(0, u"\n"_s);
         waitIdle(h);
         ctx.startTimer();
+      },
+      quick ? 2 : 5, 1
+    );
+  }
+
+  // One minified line (PERF-01): the editor styles only the stretch it draws.
+  {
+    const qint64 docChars = quick ? 200'000 : 2'000'000;
+    auto setup = [=](TextDocument &doc, TreeSitterHighlighter &h) {
+      QString text = sampleFor(u"json"_s, docChars);
+      text.remove(u'\n');
+      doc.setText(text);
+      h.setFileName(u"a.json"_s);
+      h.attach(&doc);
+      waitForNext(h, 0);
+    };
+    runner.add(
+      u"longline/range/json"_s,
+      [=](Context &ctx) {
+        static std::shared_ptr<std::pair<TextDocument, TreeSitterHighlighter>> held;
+        if (!held) {
+          held = std::make_shared<std::pair<TextDocument, TreeSitterHighlighter>>();
+          setup(held->first, held->second);
+        }
+        const qsizetype middle = held->first.length() / 2;
+        const int calls = 50;
+        for (int i = 0; i < calls; ++i)
+          doNotOptimize(held->second.highlightRange(held->first.snapshot(), 0, middle + i * 7, middle + i * 7 + 3000));
+        ctx.setItems(calls);
+      },
+      quick ? 2 : 5, 1
+    );
+    runner.add(
+      u"longline/edit_to_range/json"_s,
+      [=](Context &ctx) {
+        static std::shared_ptr<std::pair<TextDocument, TreeSitterHighlighter>> held;
+        if (!held) {
+          held = std::make_shared<std::pair<TextDocument, TreeSitterHighlighter>>();
+          setup(held->first, held->second);
+        }
+        TextDocument &doc = held->first;
+        TreeSitterHighlighter &h = held->second;
+        const qsizetype at = doc.length() / 2;
+        const int keystrokes = 20;
+        for (int i = 0; i < keystrokes; ++i) {
+          waitIdle(h);
+          const quint64 landed = h.stats().landed;
+          doc.insert(at, u"7"_s);
+          waitForNext(h, landed);
+          doNotOptimize(h.highlightRange(doc.snapshot(), 0, at - 1500, at + 1500));
+        }
+        ctx.setItems(keystrokes);
       },
       quick ? 2 : 5, 1
     );

@@ -117,6 +117,23 @@ QStringList customTokenStyleNames() {
   return out;
 }
 
+QList<HighlightSpan>
+Highlighter::highlightRange(const TextSnapshot &text, qsizetype line, qsizetype startColumn, qsizetype endColumn) {
+  QList<HighlightSpan> out;
+  const QList<QList<HighlightSpan>> lines = highlightLines(text, line, line);
+  if (lines.isEmpty())
+    return out;
+  for (HighlightSpan span : lines.first()) {
+    const qsizetype from = qMax(span.start, startColumn), to = qMin(span.start + span.length, endColumn);
+    if (to <= from)
+      continue;
+    span.start = from - startColumn;
+    span.length = to - from;
+    out.append(span);
+  }
+  return out;
+}
+
 QList<HighlightSpan> overlaySpans(const QList<HighlightSpan> &base, const QList<HighlightSpan> &overlay) {
   if (overlay.isEmpty())
     return base;

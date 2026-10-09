@@ -400,8 +400,10 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 
 **Exit criteria:** all performance targets above are met and enforced by benchmark thresholds in CI; a measured decision on the glyph-atlas renderer is recorded in an ADR.
 
-- [~] **PERF-01** Very long lines
+- [x] **PERF-01** Very long lines — done 2026-10-09
   - Shape and render only the visible horizontal window of lines longer than a threshold.
+  - Lines over 8192 units with wrap off are laid out as a window of whole index chunks (viewport plus one on each side); `core/LongLineIndex` answers column ↔ x for everything outside it and follows edits in O(chunks); `Highlighter::highlightRange` styles only the window (tree-sitter queries just that stretch and centres its windowed parse on it); the scene works relative to an origin x so far-right glyphs, selections and squiggles stay pixel-exact. Decided in ADR 0020.
+  - 5 MB single line, wrap off: first frame 7.1 s → 41 ms, a typed character 4.1 s → 7 ms frame interval (0.13 ms sync, 0.17 ms render). `bench_wrap --filter giant_nowrap`, `benchmarks/results/2026-10-09-long-lines{-before,}.json`; `bench_syntax` `longline/*`.
 - [ ] **PERF-02** Multi-GB files
   - Lazy chunk loading; memory-mapped backing for untouched regions.
 - [~] **PERF-03** Memory profiling and trimming
