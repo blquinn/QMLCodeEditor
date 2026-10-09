@@ -116,6 +116,15 @@ public:
   qsizetype capacity() const { return m_capacity; }
   // Evicts least recently used entries down to the new capacity.
   void setCapacity(qsizetype capacity);
+  // The cache also holds at most about this many bytes (PERF-03): windows of very long lines are thousands of
+  // units each, so a count alone would let a few hundred of them take hundreds of megabytes. The newest entry
+  // always stays.
+  qsizetype byteCapacity() const { return m_byteCapacity; }
+  void setByteCapacity(qsizetype bytes);
+  qsizetype bytes() const { return m_bytes; }
+  // Records the size of the entry just inserted, once the caller has filled it in, and evicts from the old
+  // end while the cache is over its byte capacity.
+  void chargeNewest(qsizetype bytes);
   qsizetype size() const { return qsizetype(m_entries.size()); }
   const Stats &stats() const { return m_stats; }
 
@@ -141,12 +150,15 @@ private:
   struct Entry {
     Key key;
     std::shared_ptr<LineLayout> value;
+    qsizetype bytes = 0;
   };
   using List = std::list<Entry>; // front = most recently used
 
   void evictToCapacity();
 
   qsizetype m_capacity;
+  qsizetype m_byteCapacity = 32 * 1024 * 1024;
+  qsizetype m_bytes = 0;
   List m_entries;
   std::unordered_map<Key, List::iterator, KeyHash> m_index;
   quint64 m_nextId = 1;

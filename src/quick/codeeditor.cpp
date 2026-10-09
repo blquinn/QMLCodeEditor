@@ -2521,7 +2521,8 @@ void CodeEditor::buildIndentGuides() {
 
 CodeEditor::RenderStats CodeEditor::renderStats() const {
   return {m_layouts.stats().created, m_layouts.stats().hits, m_layouts.size(), m_plan.size(),
-          m_polishCalls,             m_polishNs,                m_polishMaxNs,   m_sceneStats};
+          m_polishCalls,             m_polishNs,                m_polishMaxNs,   m_sceneStats,
+          m_layouts.bytes()};
 }
 
 void CodeEditor::onThemeChanged() { invalidateLayouts(); }
@@ -2984,6 +2985,14 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
   }
   result->injections = std::move(injections);
   result->styleBackgrounds = std::move(styleBackgrounds);
+  // What the layout holds: its text twice (the row and the laid-out copy) and shaping state of about 48 bytes a
+  // unit, calibrated against the heap growth of a scroll through a 2 MB file (bench_scroll memory/*).
+  const qsizetype units = result->layout->text().size();
+  m_layouts.chargeNewest(
+    qsizetype(sizeof(qce::LineLayout)) + 600 + 2 * result->text.size() + 48 * units +
+    qsizetype(result->injections.size() * sizeof(qce::Injection)) +
+    qsizetype(result->styleBackgrounds.size() * sizeof(qce::StyleBackground))
+  );
   return result;
 }
 

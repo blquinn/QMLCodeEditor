@@ -225,6 +225,10 @@ public:
       label + QStringLiteral("/memory/rss_growth_scroll"), double(residentBytes() - rssBefore),
       QStringLiteral("bytes")
     );
+    out << valueResult(
+      label + QStringLiteral("/memory/layout_cache_bytes"), double(m_editor.renderStats().layoutBytes),
+      QStringLiteral("bytes")
+    );
     // Heap held by the editor's caches after the run (layout cache, frame plan, highlight blocks).
     out << valueResult(
       label + QStringLiteral("/memory/heap_growth_scroll"), double(heapBytes() - heapBefore),

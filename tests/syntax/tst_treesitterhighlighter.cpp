@@ -71,6 +71,38 @@ private slots:
     }
   }
 
+  // PERF-03: a memory budget keeps big documents of costly languages from being parsed whole.
+  void theMemoryBudgetLimitsWholeDocumentParses() {
+    TreeSitterHighlighter h;
+    h.setLanguage(u"markdown"_s);
+    TextDocument doc;
+    h.attach(&doc);
+    QCOMPARE(h.effectiveFullParseLimit(), 512 * 1024 * 1024 / 146); // Markdown trees are big
+    h.setLanguage(u"json"_s);
+    QCOMPARE(h.effectiveFullParseLimit(), 512 * 1024 * 1024 / 44);
+    h.setParseMemoryBudget(44 * 1000);
+    QCOMPARE(h.effectiveFullParseLimit(), 1000);
+    h.setFullParseLimit(500); // whichever is smaller
+    QCOMPARE(h.effectiveFullParseLimit(), 500);
+    h.setFullParseLimit(16 * 1024 * 1024);
+    h.setParseMemoryBudget(0);
+    QCOMPARE(h.effectiveFullParseLimit(), 16 * 1024 * 1024); // no budget: the plain limit
+
+    // And a document above it keeps only a window's tree.
+    QString text = u"["_s;
+    for (int i = 0; text.size() < 400'000; ++i)
+      text += u"{\"id\":%1,\"ok\":true},\n"_s.arg(i);
+    text += u"null]"_s;
+    doc.setText(text);
+    h.setWindowSize(50'000);
+    h.setParseMemoryBudget(44 * 100'000); // 100k units fit, the document is 4 times that
+    settle(h);
+    QVERIFY(!h.hasFullTree());
+    QVERIFY(h.parsedRange().second - h.parsedRange().first < text.size());
+    h.setParseMemoryBudget(44 * 1'000'000);
+    QTRY_VERIFY_WITH_TIMEOUT(h.hasFullTree(), 20000);
+  }
+
   void aWindowedParseFollowsTheStretchOfALongLine() {
     QString text = u"["_s;
     for (int i = 0; text.size() < 2'600'000; ++i)

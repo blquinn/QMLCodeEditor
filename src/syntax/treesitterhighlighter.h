@@ -57,6 +57,10 @@ class TreeSitterHighlighter : public Highlighter {
   Q_PROPERTY(QString detectedLanguage READ detectedLanguage NOTIFY detectedLanguageChanged)
   // Documents longer than this many UTF-16 units are only ever parsed one window at a time.
   Q_PROPERTY(qsizetype fullParseLimit READ fullParseLimit WRITE setFullParseLimit NOTIFY fullParseLimitChanged)
+  // Roughly how much memory the parse tree of a whole document may hold, in bytes (0: no budget). A document is
+  // parsed whole only if its size times the language's bytes per unit fits, whatever `fullParseLimit` says
+  // (PERF-03: a 16M-unit Markdown file would otherwise hold over 2 GB of tree).
+  Q_PROPERTY(qint64 parseMemoryBudget READ parseMemoryBudget WRITE setParseMemoryBudget NOTIFY parseMemoryBudgetChanged)
   Q_PROPERTY(bool parsing READ parsing NOTIFY parsingChanged)
   // Where folds come from for CodeEditor.foldProvider.
   Q_PROPERTY(qce::FoldProvider *folds READ folds CONSTANT)
@@ -88,6 +92,11 @@ public:
   Q_INVOKABLE static QString languageName(const QString &id);
 
   qsizetype fullParseLimit() const { return m_fullLimit; }
+  qint64 parseMemoryBudget() const { return m_parseBudget; }
+  void setParseMemoryBudget(qint64 bytes);
+  // The size above which the document is only parsed a window at a time with the current language: the smaller
+  // of `fullParseLimit` and what the memory budget allows.
+  qsizetype effectiveFullParseLimit() const;
   void setFullParseLimit(qsizetype units);
   // Documents up to this size are parsed whole on the first parse; larger ones start with a window
   // of about this many units around the viewport. Mainly for tests and benchmarks.
@@ -118,6 +127,7 @@ signals:
   void fileNameChanged();
   void detectedLanguageChanged();
   void fullParseLimitChanged();
+  void parseMemoryBudgetChanged();
   void parsingChanged();
   // A parse result was installed (for the document version it was made from).
   void parseFinished(quint64 version);
@@ -187,6 +197,7 @@ private:
   std::shared_ptr<HighlightMailbox> m_mailbox;
 
   qsizetype m_fullLimit = 16 * 1024 * 1024;
+  qint64 m_parseBudget = 512 * 1024 * 1024;
   qsizetype m_windowCap = 2'000'000;
 
   QCache<qsizetype, Block> m_blocks{512};
