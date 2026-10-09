@@ -17,7 +17,7 @@ qt_add_library(qce_core STATIC
     linemarkerset.h linemarkerset.cpp decorationset.h decorationset.cpp diagnostics.h diagnostics.cpp inlayhints.h inlayhints.cpp
     vim/vimkeys.h vim/vimkeys.cpp vim/vimmotions.h vim/vimmotions.cpp vim/vimregex.h vim/vimregex.cpp
     vim/vimtextobjects.h vim/vimtextobjects.cpp vim/vimhandler.h vim/vimhandler.cpp vim/vimoperators.cpp vim/vimex.cpp
-    foldmap.h foldmap.cpp foldprovider.h foldprovider.cpp folding.h folding.cpp wrapmeasure.h wrapmeasure.cpp wrapbreaks.h wrapbreaks.cpp wrapmap.h wrapmap.cpp
+    longlineindex.h longlineindex.cpp foldmap.h foldmap.cpp foldprovider.h foldprovider.cpp folding.h folding.cpp wrapmeasure.h wrapmeasure.cpp wrapbreaks.h wrapbreaks.cpp wrapmap.h wrapmap.cpp
 )
 add_library(QMLCodeEditor::Core ALIAS qce_core)
 

@@ -24,3 +24,4 @@ qce_add_test(tst_findreplace SOURCES tst_findreplace.cpp LIBS QMLCodeEditor::Cor
 qce_add_test(tst_bracketmatch SOURCES tst_bracketmatch.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_indentguides SOURCES tst_indentguides.cpp testutil.h LIBS QMLCodeEditor::Core)
 qce_add_test(tst_vim SOURCES tst_vim.cpp LIBS QMLCodeEditor::Core)
+qce_add_test(tst_longlineindex SOURCES tst_longlineindex.cpp LIBS QMLCodeEditor::Core)

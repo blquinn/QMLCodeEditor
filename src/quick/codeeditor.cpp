@@ -398,6 +398,7 @@ void CodeEditor::resetRenderType() {
 
 void CodeEditor::updateWrapMeasure() {
   m_wrapMeasure = std::make_shared<qce::FontWrapMeasure>(m_metrics.layoutFont(), m_metrics.tabWidth(), m_metrics.cellAdvance());
+  m_longLines.clear();
   invalidateWrap();
 }
 
@@ -1523,6 +1524,13 @@ void CodeEditor::wheelEvent(QWheelEvent *event) {
 // relative to the row first; a row showing an input-method composition has the preedit text laid
 // out inside it, so columns at or after it shift right.
 qreal CodeEditor::xForColumn(const qce::LineLayout &layout, qsizetype column) const {
+  if (layout.isWindow()) {
+    // The laid-out stretch of a very long line answers for itself; any other column comes from the index.
+    if (column < layout.startColumn || column > layout.startColumn + layout.text.size())
+      return layout.indentX - layout.windowX +
+             layout.longIndex->xForColumn(layout.rope, layout.lineStart, column, *m_wrapMeasure);
+    return layout.indentX + layout.layout->lineAt(0).cursorToX(layout.layoutIndex(int(column - layout.startColumn)));
+  }
   column = qBound<qsizetype>(0, column - layout.startColumn, layout.text.size());
   if (layout.injections.isEmpty() && m_metrics.isSimple(layout.text))
     return layout.indentX + m_metrics.xForColumn(layout.text, column);
@@ -1541,7 +1549,7 @@ void CodeEditor::buildTabMarks() {
       continue;
     if (!layout.injections.isEmpty())
       continue; // tab marks are placed by column; injected text shifts them
-    const bool simple = m_metrics.isSimple(text);
+    const bool simple = !layout.isWindow() && m_metrics.isSimple(text);
     qsizetype cell = 0;
     for (qsizetype i = 0; i < text.size(); ++i) {
       const bool tab = text[i] == u'\t';
@@ -1647,7 +1655,13 @@ void CodeEditor::buildOverlays() {
 
 // The column of the buffer line nearest to x, for the row laid out in `layout`.
 qsizetype CodeEditor::columnForX(const qce::LineLayout &layout, qreal x) const {
+  if (layout.isWindow() && (x < layout.indentX || x > layout.indentX + layout.windowWidth))
+    return layout.longIndex->columnForX(layout.rope, layout.lineStart, x - (layout.indentX - layout.windowX), *m_wrapMeasure);
   x -= layout.indentX;
+  if (layout.isWindow()) {
+    const int index = layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
+    return layout.startColumn + qMin<qsizetype>(layout.columnForLayoutIndex(index), layout.text.size());
+  }
   if (layout.injections.isEmpty() && m_metrics.isSimple(layout.text))
     return layout.startColumn + m_metrics.columnForX(layout.text, x);
   const int index = layout.layout->lineAt(0).xToCursor(x, QTextLine::CursorBetweenCharacters);
@@ -2550,6 +2564,7 @@ void CodeEditor::onDocumentReset() {
   updateUndoState();
   m_lastLineCount = lineCount();
   m_layouts.clear();
+  m_longLines.clear();
   m_bracketCache.clear();
   m_activeBlockCache.reset();
   m_maxLineWidth = 0;
@@ -2565,6 +2580,7 @@ void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
   m_activeBlockCache.reset();
   const qsizetype first = change.startPos.line;
   m_layouts.invalidate(first, change.oldEndPos.line - first + 1, change.newEndPos.line - first + 1);
+  updateLongLines(change);
   if (const qsizetype count = lineCount(); count != m_lastLineCount) {
     m_lastLineCount = count;
     emit lineCountChanged();
@@ -2673,13 +2689,102 @@ QList<qce::HighlightSpan> sliceSpans(const QList<qce::HighlightSpan> &spans, qsi
 
 } // namespace
 
-std::shared_ptr<qce::LineLayout>
-CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &snapshot) {
-  if (auto cached = m_layouts.find(row.line, row.rowInLine))
-    return cached;
-
+std::shared_ptr<const qce::LongLineIndex> CodeEditor::longLineIndex(qsizetype line, const qce::TextSnapshot &snapshot) {
+  for (qsizetype i = 0; i < m_longLines.size(); ++i) {
+    if (m_longLines[i].line != line)
+      continue;
+    if (m_longLines[i].version == snapshot.version()) {
+      auto index = m_longLines[i].index;
+      if (i > 0)
+        m_longLines.move(i, 0);
+      return index;
+    }
+    m_longLines.removeAt(i); // describes another version of the document
+    break;
+  }
   const qce::Rope &rope = snapshot.rope();
-  const qsizetype lineStart = rope.lineStart(row.line);
+  const qsizetype start = rope.lineStart(line);
+  auto index = qce::LongLineIndex::build(rope, start, rope.lineEnd(line) - start, *m_wrapMeasure);
+  m_longLines.prepend({line, index, snapshot.version()});
+  constexpr qsizetype kMaxLongLines = 16;
+  if (m_longLines.size() > kMaxLongLines)
+    m_longLines.removeLast();
+  return index;
+}
+
+// Keeps the indexes of long lines in step with an edit: one inside a line updates that line's index, one that
+// changes the line count renumbers the lines after it, and one that joins or splits a long line drops it.
+void CodeEditor::updateLongLines(const qce::TextChange &change) {
+  if (m_longLines.isEmpty())
+    return;
+  const qce::Rope &rope = m_document.rope();
+  const bool current = m_document.version() == change.versionAfter;
+  const bool sameLine = change.startPos.line == change.oldEndPos.line && change.startPos.line == change.newEndPos.line;
+  const qsizetype lineDelta = change.newEndPos.line - change.oldEndPos.line;
+  for (qsizetype i = m_longLines.size() - 1; i >= 0; --i) {
+    LongLine &entry = m_longLines[i];
+    const bool touched = entry.line >= change.startPos.line && entry.line <= change.oldEndPos.line;
+    if (!current || (touched && !sameLine)) {
+      m_longLines.removeAt(i);
+      continue;
+    }
+    if (entry.line > change.oldEndPos.line)
+      entry.line += lineDelta;
+    else if (entry.line == change.startPos.line) {
+      const qsizetype start = rope.lineStart(entry.line);
+      auto index = entry.index->afterEdit(
+        rope, start, change.startPos.column, change.removedLength(), change.insertedLength(), *m_wrapMeasure
+      );
+      // A '\r' that joined or left a line break changes the line's length in a way the edit does not say.
+      if (index->length() != rope.lineEnd(entry.line) - start) {
+        m_longLines.removeAt(i);
+        continue;
+      }
+      entry.index = std::move(index);
+    }
+    entry.version = change.versionAfter;
+  }
+}
+
+std::shared_ptr<qce::LineLayout>
+CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot &snapshot) {
+  const qce::Rope &rope = snapshot.rope();
+  const qsizetype lineStart = rope.lineStart(fullRow.line);
+
+  // A very long line without wrap: lay out the stretch around the view only, in windows of three
+  // viewports so that scrolling inside one costs nothing. `row` is the part of the line being laid out.
+  qce::DisplayRow row = fullRow;
+  std::shared_ptr<const qce::LongLineIndex> longIndex;
+  qsizetype windowKey = 0; // the cache key's row: windows are 1, 2, ... (a real row of a no-wrap line is 0)
+  qreal windowX = 0;
+  if (!m_map.wrapEnabled() && fullRow.endColumn - fullRow.startColumn > kLongLineUnits && m_wrapMeasure) {
+    // Inline hints shift columns by their width, which the index knows nothing about; such a line is laid out whole.
+    const bool hasHints =
+      m_decorations.count(qce::DecorationKind::InlineText) > 0 &&
+      !m_decorations
+         .query(
+           lineStart + fullRow.startColumn, lineStart + fullRow.endColumn,
+           qce::decorationKindBit(qce::DecorationKind::InlineText)
+         )
+         .isEmpty();
+    if (!hasHints)
+      longIndex = longLineIndex(fullRow.line, snapshot);
+  }
+  if (longIndex) {
+    const qreal viewport = qMax(textViewportWidth(), 16 * m_metrics.cellAdvance());
+    const qreal x = qBound<qreal>(0, m_contentX, qMax<qreal>(0, longIndex->width() - viewport));
+    const qsizetype k = qsizetype(std::floor(x / viewport));
+    const qsizetype first = longIndex->chunkForX(qMax<qreal>(0, (k - 1) * viewport));
+    const qsizetype last = longIndex->chunkForX((k + 2) * viewport);
+    // Windows are whole chunks, so scrolling inside the same chunks asks for the same window.
+    windowKey = 1 + first + (last << 32);
+    row.startColumn = longIndex->chunkStart(first);
+    row.endColumn = longIndex->chunkEnd(last);
+    windowX = longIndex->chunkX(first);
+  }
+  if (auto cached = m_layouts.find(fullRow.line, windowKey ? windowKey : fullRow.rowInLine))
+    return cached;
+  const bool windowAtEnd = row.endColumn >= fullRow.endColumn;
   const QString text = rope.toString(lineStart + row.startColumn, lineStart + row.endColumn);
   // Visible spaces are drawn as middle dots: the text node doesn't render QTextOption's own marks.
   // Dot and space share a column in a monospace font, so offsets and positions stay the same.
@@ -2689,7 +2794,17 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
   auto layout = std::make_unique<QTextLayout>(display, m_metrics.layoutFont());
   QTextOption option;
   option.setWrapMode(QTextOption::NoWrap);
-  option.setTabStopDistance(m_metrics.tabWidth() * m_metrics.cellAdvance());
+  const qreal tabDistance = m_metrics.tabWidth() * m_metrics.cellAdvance();
+  option.setTabStopDistance(tabDistance);
+  if (longIndex) {
+    // Tab stops are multiples of the tab distance from the start of the line, not of the window.
+    QList<qreal> stops;
+    const qreal windowRight = longIndex->chunkEndX(longIndex->chunkForColumn(row.endColumn - 1));
+    for (qreal stop = (std::floor((windowX + 1e-5) / tabDistance) + 1) * tabDistance; stop <= windowRight;
+         stop += tabDistance)
+      stops.append(stop - windowX);
+    option.setTabArray(stops);
+  }
   layout->setTextOption(option);
   layout->setCacheEnabled(true);
   auto spans = m_highlighter->highlightLines(snapshot, row.line, row.line);
@@ -2795,8 +2910,10 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
   // hit-testing and selections stop where the text does.
   QString trailing;
   QColor trailingColor;
-  if (row.isLast() && m_decorations.count(qce::DecorationKind::EndOfLineText) > 0)
+  if (row.isLast() && windowAtEnd && m_decorations.count(qce::DecorationKind::EndOfLineText) > 0)
     trailing = endOfLineText(row.line, &trailingColor);
+  else if (row.isLast() && longIndex && m_decorations.count(qce::DecorationKind::EndOfLineText) > 0)
+    trailing = endOfLineText(row.line, &trailingColor); // measured by estimate below, not laid out
   constexpr int kTrailingGap = 2;
   const QString baseText = layout->text();
   const int baseLength = int(baseText.size());
@@ -2820,7 +2937,7 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
     layout->endLayout();
     return std::pair(extra.isEmpty() ? full : layout->lineAt(0).cursorToX(baseLength), full);
   };
-  auto [width, fullWidth] = layOut(trailing);
+  auto [width, fullWidth] = layOut(windowAtEnd ? trailing : QString());
   if (!trailing.isEmpty() && m_map.wrapEnabled()) {
     // A wrapped row has nowhere to put text that does not fit: cut it short instead of letting it
     // run under the edge.
@@ -2834,11 +2951,26 @@ CodeEditor::layoutForRow(const qce::DisplayRow &row, const qce::TextSnapshot &sn
       std::tie(width, fullWidth) = layOut(trailing);
     }
   }
-  auto result = m_layouts.insert(row.line, std::move(layout), width, text, row.rowInLine);
+  auto result = m_layouts.insert(row.line, std::move(layout), width, text, windowKey ? windowKey : row.rowInLine);
   result->fullWidth = fullWidth;
   result->startColumn = row.startColumn;
   result->indentX = row.indent;
   result->endsLine = row.isLast();
+  if (longIndex) {
+    result->longIndex = longIndex;
+    result->rope = rope;
+    result->lineStart = lineStart;
+    result->windowX = windowX;
+    result->windowWidth = width;
+    result->indentX = row.indent + windowX;
+    // `indentX + width` is where the whole line ends, so what measures the extent of a row (the content
+    // width, the end of a selection that runs past it) needs no special case.
+    const qreal extra = windowAtEnd ? fullWidth - width
+                        : trailing.isEmpty() ? 0
+                                             : (kTrailingGap + trailing.size()) * m_metrics.cellAdvance();
+    result->width = longIndex->width() - windowX;
+    result->fullWidth = result->width + extra;
+  }
   result->injections = std::move(injections);
   result->styleBackgrounds = std::move(styleBackgrounds);
   return result;

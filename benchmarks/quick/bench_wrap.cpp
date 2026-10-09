@@ -86,8 +86,10 @@ public:
     const qint64 loaded = m_clock.nsecsElapsed();
     QElapsedTimer wait;
     wait.start();
-    while (m_firstFrameNs < 0 && wait.elapsed() < 10000)
+    while (m_firstFrameNs < 0 && wait.elapsed() < 10000) {
+      m_editor.update(); // a document that finished loading before its first frame needs frames asked for
       QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
     out << valueResult(
       label + QStringLiteral("/open/first_frame"), double(m_firstFrameNs), QStringLiteral("ns")
     );
@@ -200,8 +202,66 @@ public:
     return out;
   }
 
+  // Moves the cursor to the end of the (single, unwrapped) line and reports the time until the view shows it.
+  QList<Result> jumpToEnd(const QString &label) {
+    progress(label);
+    QList<Result> out;
+    settle();
+    m_editor.setContentX(0);
+    m_editor.setCursorPosition(0);
+    settle();
+    m_timer.reset();
+    m_editor.resetPolishStats();
+    m_firstFrameNs = -1;
+    m_framesSeen = 0;
+    m_phase = Phase::Jumping;
+    m_clock.start();
+    m_editor.setCursorPosition(m_editor.document()->length());
+    m_editor.ensureCursorVisible();
+    QEventLoop loop;
+    m_loop = &loop;
+    QTimer kick;
+    kick.setInterval(50);
+    QObject::connect(&kick, &QTimer::timeout, &loop, [&] { m_editor.update(); });
+    kick.start();
+    QTimer::singleShot(20000, &loop, &QEventLoop::quit);
+    loop.exec();
+    m_loop = nullptr;
+    out << valueResult(label + QStringLiteral("/first_frame"), double(m_firstFrameNs), QStringLiteral("ns"));
+    out << pollResults(label);
+    return out;
+  }
+
+  // Scrolls sideways by `step` pixels every frame, starting in the middle of the line.
+  QList<Result> sideways(const QString &label, int frames, qreal step) {
+    progress(label);
+    QList<Result> out;
+    settle();
+    m_editor.setContentX(m_editor.contentWidth() / 2);
+    settle();
+    m_timer.reset();
+    m_editor.resetPolishStats();
+    m_phase = Phase::Sideways;
+    m_frameNo = 0;
+    m_resizeFrames = frames;
+    m_step = step;
+    m_clock.start();
+    m_editor.setContentX(m_editor.contentX() + m_step);
+    QEventLoop loop;
+    m_loop = &loop;
+    QTimer kick;
+    kick.setInterval(100);
+    QObject::connect(&kick, &QTimer::timeout, &loop, [&] { m_editor.update(); });
+    kick.start();
+    loop.exec();
+    m_loop = nullptr;
+    out += m_timer.results(label + QStringLiteral("/frame"));
+    out << pollResults(label);
+    return out;
+  }
+
 private:
-  enum class Phase { Idle, Loading, Toggling, Resizing, Typing };
+  enum class Phase { Idle, Loading, Toggling, Resizing, Typing, Jumping, Sideways };
 
   QList<Result> pollResults(const QString &label) {
     const auto stats = m_editor.renderStats();
@@ -276,6 +336,23 @@ private:
         return;
       }
       m_editor.insert(QStringLiteral("x"));
+      return;
+    case Phase::Jumping:
+      if (++m_framesSeen == 2) { // the first frame may have been in flight before the change
+        m_firstFrameNs = m_clock.nsecsElapsed();
+        m_phase = Phase::Idle;
+        if (m_loop)
+          m_loop->quit();
+      }
+      return;
+    case Phase::Sideways:
+      if (++m_frameNo >= m_resizeFrames) {
+        m_phase = Phase::Idle;
+        if (m_loop)
+          m_loop->quit();
+        return;
+      }
+      m_editor.setContentX(m_editor.contentX() + m_step);
       return;
     case Phase::Idle:
       return;
@@ -381,6 +458,16 @@ int main(int argc, char **argv) {
     results << bench.open(QStringLiteral("giant_line"), giant, CodeEditor::WrapAtViewport, 80);
     results << bench.typing(QStringLiteral("wrap/giant_line/typing"), frames);
     results << bench.resize(QStringLiteral("wrap/giant_line/resize_sweep"), frames);
+  }
+
+  // The same line without wrap (PERF-01): only the visible stretch of it may be shaped.
+  if (wanted(QStringLiteral("giant_nowrap"))) {
+    const qint64 bytes = quick ? 1024 * 1024 : 5 * 1024 * 1024;
+    const QString giant = inputFile(QStringLiteral("qce_wrap_giant.txt"), Shape::OneGiantLine, bytes);
+    results << bench.open(QStringLiteral("giant_line_nowrap"), giant, CodeEditor::NoWrap, 80);
+    results << bench.jumpToEnd(QStringLiteral("nowrap/giant_line/jump_to_end"));
+    results << bench.sideways(QStringLiteral("nowrap/giant_line/sideways"), frames, 2000);
+    results << bench.typing(QStringLiteral("nowrap/giant_line/typing"), frames);
   }
 
   int width = 4;

@@ -1,6 +1,9 @@
 #ifndef QCE_LINELAYOUTCACHE_H
 #define QCE_LINELAYOUTCACHE_H
 
+#include "core/longlineindex.h"
+#include "core/rope.h"
+
 #include <QtCore/QtGlobal>
 #include <QtGui/QColor>
 #include <QtGui/QTextLayout>
@@ -51,6 +54,17 @@ struct LineLayout {
   // converted with layoutIndex() and columnForLayoutIndex().
   QList<Injection> injections;
   QList<StyleBackground> styleBackgrounds; // drawn behind the text; empty unless the theme has any
+
+  // A window of a very long line (PERF-01, ADR 0020): only the stretch [startColumn, startColumn +
+  // text.size()) is laid out. `indentX` then includes `windowX`, the x of the window's first unit, and
+  // `width`/`fullWidth` are measured to the end of the whole line, so `indentX + width` is where the line
+  // ends. Columns outside the window are answered from `longIndex`.
+  std::shared_ptr<const LongLineIndex> longIndex;
+  Rope rope;               // the document `longIndex` describes
+  qsizetype lineStart = 0; // offset of the buffer line in `rope`
+  qreal windowX = 0;
+  qreal windowWidth = 0; // natural width of the laid-out window itself
+  bool isWindow() const { return bool(longIndex); }
 
   // Index in the laid-out text of the cursor at `column` (relative to the row): injected text at
   // earlier columns goes before it, and at this column so far as it leans on the text before.
