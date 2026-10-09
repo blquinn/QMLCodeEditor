@@ -682,12 +682,34 @@ QList<QList<HighlightSpan>> TreeSitterHighlighter::computeBlock(qsizetype firstL
     return perLine;
   };
 
+  // Runs of lines short enough to style as a block. A very long line (minified code) is left out: styling it
+  // here would redo all of it after every edit anywhere in the block; highlightLines() styles it by range.
+  std::vector<std::pair<qsizetype, qsizetype>> runs; // [from, to) in units
+  for (qsizetype i = 0; i < n;) {
+    if (ends[i] - starts[i] > kBlockLineUnits) {
+      ++i;
+      continue;
+    }
+    qsizetype j = i;
+    while (j < n && ends[j] - starts[j] <= kBlockLineUnits)
+      ++j;
+    runs.emplace_back(starts[i], starts[j]);
+    i = j;
+  }
+  auto paintRuns = [&](const TSNode &root, const CompiledLanguage &language) {
+    std::vector<Segment> segments;
+    for (const auto &[from, to] : runs) {
+      std::vector<Segment> part = paintTree(m_cursor, root, language, from, to, rope);
+      segments.insert(segments.end(), part.begin(), part.end());
+    }
+    return spread(segments);
+  };
   if (covered(blockStart) || covered(blockEnd - 1))
-    lines = spread(paintTree(m_cursor, ts_tree_root_node(m_tree.get()), *m_lang, blockStart, blockEnd, rope));
+    lines = paintRuns(ts_tree_root_node(m_tree.get()), *m_lang);
   for (const InjectedLayer &layer : std::as_const(m_layers)) {
     if (layer.end <= blockStart || layer.start >= blockEnd)
       continue;
-    const auto top = spread(paintTree(m_cursor, ts_tree_root_node(layer.tree.get()), *layer.language, blockStart, blockEnd, rope));
+    const auto top = paintRuns(ts_tree_root_node(layer.tree.get()), *layer.language);
     for (qsizetype i = 0; i < n; ++i)
       lines[i] = overlay(lines[i], top[i]);
   }
@@ -739,6 +761,10 @@ TreeSitterHighlighter::highlightLines(const TextSnapshot &text, qsizetype firstL
   }
 
   for (qsizetype line = firstLine; line <= lastLine; ++line) {
+    if (const qsizetype length = rope.lineLength(line); length > kBlockLineUnits) {
+      result[line - firstLine] = highlightRange(text, line, 0, length);
+      continue;
+    }
     const Block *b = block(line / BlockLines, rope);
     result[line - firstLine] = b->lines.value(line % BlockLines);
   }
