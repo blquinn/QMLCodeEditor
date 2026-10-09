@@ -149,6 +149,7 @@ private:
     QList<QList<HighlightSpan>> lines;
   };
   static constexpr qsizetype BlockLines = 64;
+  static constexpr qsizetype kBlockLineUnits = 8192; // longer lines are styled by range, not in blocks
 
   void onDocumentChanged(const TextChange &change);
   void onDocumentReset();
