@@ -820,11 +820,14 @@ void collectFolds(
   const qsizetype from = rope.lineStart(firstLine);
   const qsizetype to = lastLine + 1 < rope.lineCount() ? rope.lineStart(lastLine + 1) : rope.length();
   ts_query_cursor_set_byte_range(cursor, toByte(from), toByte(to));
-  ts_query_cursor_exec(cursor, lang.folds, root);
-  TSQueryMatch match;
-  while (ts_query_cursor_next_match(cursor, &match)) {
+  // A fold hides lines, so only a node that spans several of them can be one, and so can only the patterns
+  // rooted at such nodes (their ancestors span several lines too). Minified code is thousands of nodes on a
+  // line; the walk below skips every single-line subtree instead of matching the query against all of it, which
+  // cost about 20 ms per 40 KB on every keystroke.
+  ts_query_cursor_set_max_start_depth(cursor, 0);
+  auto collect = [&](const TSQueryMatch &match) {
     if (!predicatesHold(lang.foldInfo, match, rope))
-      continue;
+      return;
     for (uint16_t i = 0; i < match.capture_count; ++i) {
       uint32_t nameLength = 0;
       const char *name = ts_query_capture_name_for_id(lang.folds, match.captures[i].index, &nameLength);
@@ -847,7 +850,29 @@ void collectFolds(
       if (!added && it->second < endLine)
         it->second = endLine;
     }
+  };
+  TSTreeCursor walker = ts_tree_cursor_new(root);
+  bool done = false;
+  while (!done) {
+    const TSNode node = ts_tree_cursor_current_node(&walker);
+    const bool reaches = toUnit(ts_node_end_byte(node)) > from && toUnit(ts_node_start_byte(node)) < to;
+    if (reaches && ts_node_start_point(node).row != ts_node_end_point(node).row) {
+      ts_query_cursor_exec(cursor, lang.folds, node);
+      TSQueryMatch match;
+      while (ts_query_cursor_next_match(cursor, &match))
+        collect(match);
+      if (ts_tree_cursor_goto_first_child(&walker))
+        continue;
+    }
+    while (!ts_tree_cursor_goto_next_sibling(&walker)) {
+      if (!ts_tree_cursor_goto_parent(&walker)) {
+        done = true;
+        break;
+      }
+    }
   }
+  ts_tree_cursor_delete(&walker);
+  ts_query_cursor_set_max_start_depth(cursor, std::numeric_limits<uint32_t>::max());
 }
 
 } // namespace
