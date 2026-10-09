@@ -1,0 +1,218 @@
+{
+  "meta": {
+    "args": [],
+    "compiler": "clang 22.1.8 (Fedora 22.1.8-4.fc44)",
+    "cores": 24,
+    "cpu": "AMD Ryzen 9 5900X 12-Core Processor",
+    "date": "2026-10-09T14:01:04Z",
+    "git": {
+      "branch": "main",
+      "commit": "ae4a0d74a3",
+      "dirty": true
+    },
+    "optimized": true,
+    "os": "Fedora Linux 44 (KDE Plasma Desktop Edition)",
+    "qt": "6.11.2",
+    "suite": "bench_core"
+  },
+  "results": [
+    {
+      "items": 1,
+      "iterations": 10,
+      "mean_ns": 6521209.6,
+      "median_ns": 6532085,
+      "median_ns_per_item": 6532085,
+      "min_ns": 5590439,
+      "name": "load/first_snapshot_100MB",
+      "p95_ns": 7440001,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 3,
+      "mean_ns": 112714286.66666667,
+      "median_ns": 112160826,
+      "median_ns_per_item": 112160826,
+      "min_ns": 111205240,
+      "name": "load/full_100MB",
+      "p95_ns": 114776794,
+      "unit": "ns"
+    },
+    {
+      "items": 1000000,
+      "iterations": 3,
+      "mean_ns": 1560018153.6666667,
+      "median_ns": 1543572515,
+      "median_ns_per_item": 1543.572515,
+      "min_ns": 1469605569,
+      "name": "edit/random_1M",
+      "p95_ns": 1666876377,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 300,
+      "mean_ns": 561731.6733333333,
+      "median_ns": 560319,
+      "median_ns_per_item": 560.319,
+      "min_ns": 535514,
+      "name": "lookup/offset_to_pos",
+      "p95_ns": 576674,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 300,
+      "mean_ns": 512905.17,
+      "median_ns": 511363.5,
+      "median_ns_per_item": 511.3635,
+      "min_ns": 486074,
+      "name": "lookup/pos_to_offset",
+      "p95_ns": 529654,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 300,
+      "mean_ns": 468080.03,
+      "median_ns": 466863,
+      "median_ns_per_item": 466.863,
+      "min_ns": 443873,
+      "name": "lookup/line_start",
+      "p95_ns": 486713,
+      "unit": "ns"
+    },
+    {
+      "items": 100000,
+      "iterations": 10,
+      "mean_ns": 328000.2,
+      "median_ns": 330172,
+      "median_ns_per_item": 3.30172,
+      "min_ns": 302922,
+      "name": "snapshot/copy",
+      "p95_ns": 340213,
+      "unit": "ns"
+    },
+    {
+      "items": 1000,
+      "iterations": 20,
+      "mean_ns": 2297694.15,
+      "median_ns": 2293820.5,
+      "median_ns_per_item": 2293.8205,
+      "min_ns": 2271026,
+      "name": "anchors/edit_100k",
+      "p95_ns": 2331356,
+      "unit": "ns"
+    },
+    {
+      "items": 20000,
+      "iterations": 5,
+      "mean_ns": 52899797.4,
+      "median_ns": 52612319,
+      "median_ns_per_item": 2630.61595,
+      "min_ns": 52533069,
+      "name": "undo/roundtrip_10k_edits",
+      "p95_ns": 53655896,
+      "unit": "ns"
+    },
+    {
+      "items": 10000,
+      "iterations": 10,
+      "mean_ns": 7409228.6,
+      "median_ns": 7367245,
+      "median_ns_per_item": 736.7245,
+      "min_ns": 7148479,
+      "name": "selections/set_10k_same_size",
+      "p95_ns": 7942664,
+      "unit": "ns"
+    },
+    {
+      "items": 10000,
+      "iterations": 5,
+      "mean_ns": 49385039.4,
+      "median_ns": 49074015,
+      "median_ns_per_item": 4907.4015,
+      "min_ns": 48309950,
+      "name": "selections/type_at_10k_cursors",
+      "p95_ns": 51771963,
+      "unit": "ns"
+    },
+    {
+      "items": 100000,
+      "iterations": 3,
+      "mean_ns": 29656596,
+      "median_ns": 29625122,
+      "median_ns_per_item": 296.25122,
+      "min_ns": 29569232,
+      "name": "search/find_all_100MB",
+      "p95_ns": 29775434,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 3,
+      "mean_ns": 39940479.333333336,
+      "median_ns": 39949302,
+      "median_ns_per_item": 39949302,
+      "min_ns": 39592400,
+      "name": "search/scan_100MB_no_match",
+      "p95_ns": 40279736,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 3,
+      "mean_ns": 63082214,
+      "median_ns": 63179131,
+      "median_ns_per_item": 63179131,
+      "min_ns": 62840249,
+      "name": "save/100MB",
+      "p95_ns": 63227262,
+      "unit": "ns"
+    },
+    {
+      "items": 1,
+      "iterations": 1,
+      "mean_ns": 2157711.944580078,
+      "median_ns": 2157711.944580078,
+      "median_ns_per_item": 2157711.944580078,
+      "min_ns": 2157711.944580078,
+      "name": "memory/rope/heap_bytes_per_M_units",
+      "p95_ns": 2157711.944580078,
+      "unit": "bytes"
+    },
+    {
+      "items": 1,
+      "iterations": 1,
+      "mean_ns": 2108336.0290527344,
+      "median_ns": 2108336.0290527344,
+      "median_ns_per_item": 2108336.0290527344,
+      "min_ns": 2108336.0290527344,
+      "name": "memory/rope/node_bytes_per_M_units",
+      "p95_ns": 2108336.0290527344,
+      "unit": "bytes"
+    },
+    {
+      "items": 1,
+      "iterations": 1,
+      "mean_ns": 165.168,
+      "median_ns": 165.168,
+      "median_ns_per_item": 165.168,
+      "min_ns": 165.168,
+      "name": "memory/undo/bytes_per_keystroke",
+      "p95_ns": 165.168,
+      "unit": "bytes"
+    },
+    {
+      "items": 1,
+      "iterations": 1,
+      "mean_ns": 48656,
+      "median_ns": 48656,
+      "median_ns_per_item": 48656,
+      "min_ns": 48656,
+      "name": "memory/undo/heap_change_delete_half_20M",
+      "p95_ns": 48656,
+      "unit": "bytes"
+    }
+  ]
+}
