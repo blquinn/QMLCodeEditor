@@ -112,6 +112,7 @@ struct FrameParams {
   const QList<ColoredSpan> *decorationBackgrounds = nullptr;
   const QList<ColoredSpan> *decorationUnderlines = nullptr;
   const QList<ColoredSpan> *squiggles = nullptr;
+  const QList<ColoredSpan> *hatches = nullptr; // diagonal-stripe fills, behind the text
   qreal devicePixelRatio = 1; // the squiggle texture is drawn at this scale
 
   // The gutter occupies [0, gutterWidth) and the text the rest of the viewport.
@@ -267,6 +268,34 @@ private:
     std::unordered_map<QRgb, QSGTexture *> m_textures;
     qreal m_ratio = 1;
   };
+  // Hatched fills (LineHatch decorations): a pre-rendered stripe strip per color, tiled with pooled image
+  // nodes like the squiggles. The stripes run on a global diagonal, so rows and spans line up.
+  class HatchBatch {
+  public:
+    explicit HatchBatch(QQuickWindow *window) : m_window(window), m_group(new QSGNode) {}
+    ~HatchBatch();
+    QSGNode *node() const { return m_group; }
+    void update(const QList<ColoredSpan> &spans, qreal lineHeight, qsizetype originRow, qreal ratio, qreal originX);
+
+    static constexpr int kPeriod = 8;       // logical pixels between stripes
+    static constexpr int kStripWidth = 512; // logical pixels, a whole number of periods
+
+  private:
+    struct Piece {
+      QRectF rect, source;
+      QRgb color = 0;
+      bool operator==(const Piece &) const = default;
+    };
+    QSGTexture *textureFor(QRgb color, qreal lineHeight, qreal ratio);
+    void dropTextures();
+
+    QQuickWindow *m_window;
+    QSGNode *m_group;
+    QList<QSGImageNode *> m_nodes;
+    QList<Piece> m_pieces;
+    std::unordered_map<QRgb, QSGTexture *> m_textures;
+    qreal m_ratio = 1, m_lineHeight = 0;
+  };
   void syncOverlays(const FrameParams &params);
   void syncGutter(const FrameParams &params);
 
@@ -287,6 +316,7 @@ private:
   QSGNode *m_gutterLabels = nullptr;
   std::unique_ptr<ColorBatch> m_gutterRects, m_decoBackgrounds, m_decoUnderlines;
   std::unique_ptr<SquiggleBatch> m_squiggles;
+  std::unique_ptr<HatchBatch> m_hatches;
   std::unique_ptr<ImageBatch> m_gutterImages;
   RowPool m_textPool, m_labelPool;
   quint64 m_frame = 0;

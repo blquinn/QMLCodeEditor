@@ -2073,6 +2073,8 @@ static_assert(int(CodeEditor::Background) == int(qce::DecorationKind::Background
 static_assert(int(CodeEditor::GutterIcon) == int(qce::DecorationKind::GutterIcon));
 static_assert(int(CodeEditor::EndOfLineText) == int(qce::DecorationKind::EndOfLineText));
 static_assert(int(CodeEditor::InlineText) == int(qce::DecorationKind::InlineText));
+static_assert(int(CodeEditor::LineBackground) == int(qce::DecorationKind::LineBackground));
+static_assert(int(CodeEditor::LineHatch) == int(qce::DecorationKind::LineHatch));
 
 namespace {
 qce::Gravity gravityOption(const QVariant &value, qce::Gravity fallback) {
@@ -2208,6 +2210,7 @@ void CodeEditor::buildDecorations() {
   m_decoBackgroundSpans.clear();
   m_decoUnderlineSpans.clear();
   m_squiggleSpans.clear();
+  m_hatchSpans.clear();
   using qce::DecorationKind;
   if (m_planLast < m_planFirst || m_planFirst < 0)
     return;
@@ -2243,7 +2246,8 @@ void CodeEditor::buildDecorations() {
   buildSearchMatches();
   buildIndentGuides();
   const qsizetype drawn = m_decorations.count(DecorationKind::Underline) + m_decorations.count(DecorationKind::Squiggle) +
-                          m_decorations.count(DecorationKind::Background);
+                          m_decorations.count(DecorationKind::Background) + m_decorations.count(DecorationKind::LineBackground) +
+                          m_decorations.count(DecorationKind::LineHatch);
   if (drawn == 0)
     return;
   constexpr qsizetype kMaxSpans = 20000;
@@ -2255,7 +2259,8 @@ void CodeEditor::buildDecorations() {
   QList<qce::Decoration> found = m_decorations.query(
     lowOffset, highOffset,
     qce::decorationKindBit(DecorationKind::Underline) | qce::decorationKindBit(DecorationKind::Squiggle) |
-      qce::decorationKindBit(DecorationKind::Background)
+      qce::decorationKindBit(DecorationKind::Background) | qce::decorationKindBit(DecorationKind::LineBackground) |
+      qce::decorationKindBit(DecorationKind::LineHatch)
   );
   // Lowest priority first, so higher ones paint over them.
   std::stable_sort(found.begin(), found.end(), [](const auto &a, const auto &b) { return a.priority < b.priority; });
@@ -2273,15 +2278,29 @@ void CodeEditor::buildDecorations() {
       continue; // all of it is folded away
     if (startHidden) { // the part after the fold
       const qsizetype next = m_map.folds().nextVisibleLine(start.line);
-      if (next >= lineCountNow)
-        continue;
+      if (next >= lineCountNow || d.end <= rope.lineStart(next))
+        continue; // nothing of it reaches past the fold
       start = {next, 0};
     }
     start = m_map.visiblePosition(start);
     end = m_map.visiblePosition(end);
+    const QColor color = d.color.isValid() ? d.color : m_theme->severityColor(d.severity);
+    if (d.kind == DecorationKind::LineBackground || d.kind == DecorationKind::LineHatch) {
+      // Whole lines, edge to edge. A range that ends at the start of a line stops before that line.
+      qsizetype lastLine = end.line;
+      if (d.end > d.start && end.column == 0 && lastLine > start.line)
+        --lastLine;
+      const qsizetype firstRow = qMax(m_map.firstRowOfLine(start.line), m_planFirst);
+      const qsizetype lastRow = qMin(m_map.firstRowOfLine(lastLine) + m_map.rowCountOfLine(lastLine) - 1, m_planLast);
+      QList<qce::ColoredSpan> &spans = d.kind == DecorationKind::LineHatch ? m_hatchSpans : m_decoBackgroundSpans;
+      for (qsizetype row = firstRow; row <= lastRow; ++row)
+        spans.append({row, viewLeft, viewRight, 0, -1, color});
+      if (m_decoBackgroundSpans.size() + m_decoUnderlineSpans.size() + m_squiggleSpans.size() + m_hatchSpans.size() >= kMaxSpans)
+        break;
+      continue;
+    }
     const qsizetype startRow = m_map.rowForPosition(start);
     const qsizetype endRow = m_map.rowForPosition(end);
-    const QColor color = d.color.isValid() ? d.color : m_theme->severityColor(d.severity);
     const bool empty = d.start == d.end;
     for (qsizetype row = qMax(startRow, m_planFirst); row <= qMin(endRow, m_planLast); ++row) {
       const qce::LineLayout &layout = *m_plan[row - m_planFirst].layout;
@@ -2309,7 +2328,7 @@ void CodeEditor::buildDecorations() {
         break;
       }
     }
-    if (m_decoBackgroundSpans.size() + m_decoUnderlineSpans.size() + m_squiggleSpans.size() >= kMaxSpans)
+    if (m_decoBackgroundSpans.size() + m_decoUnderlineSpans.size() + m_squiggleSpans.size() + m_hatchSpans.size() >= kMaxSpans)
       break;
   }
 }
@@ -3113,6 +3132,7 @@ QSGNode *CodeEditor::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *) {
   params.decorationBackgrounds = &m_decoBackgroundSpans;
   params.decorationUnderlines = &m_decoUnderlineSpans;
   params.squiggles = &m_squiggleSpans;
+  params.hatches = &m_hatchSpans;
   params.devicePixelRatio = window() ? window()->effectiveDevicePixelRatio() : 1.0;
   params.cursors = &m_cursorSpans;
   params.indentGuideColor = m_theme->indentGuide();

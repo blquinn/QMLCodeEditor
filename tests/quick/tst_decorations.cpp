@@ -348,6 +348,19 @@ private slots:
     QVERIFY(!hasColor(view->grabWindow(), rowRect(editor, 0), kRed));
   }
 
+  void lineBandInsideAFoldDoesNotSpillOntoTheNextLine() {
+    auto [view, editor] = showEditor();
+    editor->setText(kCode);
+    const auto &rope = editor->document()->rope();
+    // Lines 2..4, ending at the start of line 5 ("}"), which stays visible after the fold.
+    editor->addDecoration(rope.lineStart(2), rope.lineStart(5), {{"kind", int(CodeEditor::LineBackground)}, {"color", kRed}});
+    QTRY_VERIFY(hasColor(view->grabWindow(), rowRect(editor, 2), kRed));
+    QVERIFY(!hasColor(view->grabWindow(), rowRect(editor, 5), kRed));
+    QVERIFY(editor->fold(0));
+    QTRY_VERIFY(!hasColor(view->grabWindow(), rowRect(editor, 2), kRed));
+    QVERIFY(!hasColor(view->grabWindow(), rowRect(editor, 1), kRed)); // "}" is row 1 now
+  }
+
   QRect cellRect(CodeEditor *editor, int row, int column) {
     const int cell = int(editor->metrics().cellAdvance());
     return QRect(int(editor->gutterWidth()) + column * cell + 1, row * int(editor->metrics().lineHeight()), cell - 2,
@@ -609,6 +622,46 @@ private slots:
     QVERIFY(!gutterInk(1));
     editor->clearDecorations();
     QTRY_VERIFY(!gutterInk(2));
+  }
+
+  void lineBackgroundFillsWholeRowsIncludingEmptyOnes() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("alpha\n\ngamma\ndelta"));
+    const auto &rope = editor->document()->rope();
+    // Lines 0..1 (an empty line among them): a range that ends at the start of line 2 stops before it.
+    editor->addDecoration(rope.lineStart(0), rope.lineStart(2), {{"kind", int(CodeEditor::LineBackground)}, {"color", kGreen}});
+    const int lh = int(editor->metrics().lineHeight());
+    const int right = int(view->width()) - 30;
+    auto green = [&](int row, int x) { return view->grabWindow().pixelColor(x, row * lh + lh / 2) == kGreen; };
+    QTRY_VERIFY(green(0, right)); // far past the text
+    QVERIFY(green(1, right));     // the empty line
+    QVERIFY(green(1, int(editor->gutterWidth()) + 2));
+    QVERIFY(!green(2, right));
+    // The band follows edits above it.
+    editor->document()->insert(0, QStringLiteral("new\n"));
+    QTRY_VERIFY(green(1, right));
+    QVERIFY(green(2, right));
+    QVERIFY(!green(0, right));
+    QVERIFY(!green(3, right));
+  }
+
+  void lineHatchPaintsStripesOnItsRowsOnly() {
+    auto [view, editor] = showEditor();
+    editor->setText(QStringLiteral("alpha\n\ngamma"));
+    const auto &rope = editor->document()->rope();
+    editor->addDecoration(rope.lineStart(1), rope.lineStart(2), {{"kind", int(CodeEditor::LineHatch)}, {"color", kGreen}});
+    const int lh = int(editor->metrics().lineHeight());
+    const QRect text(int(editor->gutterWidth()) + 4, 0, 300, lh);
+    QTRY_VERIFY(hasColor(view->grabWindow(), text.translated(0, lh), kGreen));
+    const QImage image = view->grabWindow();
+    QVERIFY(!hasColor(image, text, kGreen));
+    QVERIFY(!hasColor(image, text.translated(0, 2 * lh), kGreen));
+    // Stripes, not a fill: the row still shows the background between them.
+    int green = 0, other = 0;
+    for (int x = text.left(); x < text.right(); ++x)
+      (image.pixelColor(x, lh + lh / 2) == kGreen ? green : other)++;
+    QVERIFY(green > 0);
+    QVERIFY(other > green);
   }
 };
 

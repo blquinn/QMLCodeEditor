@@ -423,6 +423,8 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
   - `bench_record` CMake target (not in `all`, not a test); `benchtrack_selftest` ctest covers the comparison logic. A first run is committed as the reference.
 - [ ] **PERF-06** Render-thread audit
   - Confirm no main-thread work leaks into `updatePaintNode`; check batching and overdraw with `QSG_VISUALIZE`.
+- [~] **DIAG-09** Full-width line backgrounds and hatch fills
+  - `LineBackground` and `LineHatch` decoration kinds: a solid or diagonal-striped band across the full width of every row of the lines a range touches, empty lines included (a range ending at a line start stops before that line). For hosts that mark whole lines, e.g. a diff view's added, removed and filler rows.
 - [ ] **DIAG-07** Squiggle shader material (optional)
   - A `QSGMaterial` wave shader built with `qt_add_shaders` (Qt6::ShaderTools at build time only; the compiled `.qsb` is a resource, nothing new at run time), for waves that stay crisp at any zoom. The texture strip from DIAG-02 stays as the software-backend fallback.
   - Adopt only if a GPU-backend check shows a visible gain; needs a manual check on each backend (the software one cannot draw custom materials).

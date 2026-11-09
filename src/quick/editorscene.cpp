@@ -80,8 +80,10 @@ EditorScene::EditorScene(QQuickWindow *window) : m_window(window) {
   m_chipDotBatch = std::make_unique<RectBatch>(window);
   m_cursorBatch = std::make_unique<RectBatch>(window);
   m_decoBackgrounds = std::make_unique<ColorBatch>(window);
+  m_hatches = std::make_unique<HatchBatch>(window);
   m_backdrop->appendChildNode(m_currentLineBatch->node());
   m_backdrop->appendChildNode(m_decoBackgrounds->node());
+  m_backdrop->appendChildNode(m_hatches->node());
   m_backdrop->appendChildNode(m_selectionBatch->node());
   m_backdrop->appendChildNode(m_guideBatch->node()); // over the selection, which would hide them
   m_backdrop->appendChildNode(m_activeGuideBatch->node());
@@ -128,6 +130,98 @@ void EditorScene::ColorBatch::update(const QList<GutterRect> &rects, qreal lh, q
       m_nodes[i]->setColor(rects[i].color);
     m_rects[i] = geometry[i];
     m_colors[i] = rects[i].color;
+  }
+}
+
+EditorScene::HatchBatch::~HatchBatch() { dropTextures(); }
+
+void EditorScene::HatchBatch::dropTextures() {
+  for (auto &[color, texture] : m_textures)
+    delete texture;
+  m_textures.clear();
+}
+
+// The strip for one color: one-pixel diagonals kPeriod apart, as tall as a row. Rendered at the device
+// pixel ratio so it stays crisp on high-density screens.
+QSGTexture *EditorScene::HatchBatch::textureFor(QRgb color, qreal lh, qreal ratio) {
+  if (const auto it = m_textures.find(color); it != m_textures.end())
+    return it->second;
+  const qreal height = std::ceil(lh);
+  QImage image(int(std::ceil(kStripWidth * ratio)), int(std::ceil(height * ratio)), QImage::Format_ARGB32_Premultiplied);
+  image.setDevicePixelRatio(ratio);
+  image.fill(Qt::transparent);
+  QPainter painter(&image);
+  painter.setRenderHint(QPainter::Antialiasing);
+  painter.setPen(QPen(QColor::fromRgba(color), 1.0, Qt::SolidLine, Qt::FlatCap));
+  // Lines where x + y is a multiple of the period, drawn past both edges so the strip tiles.
+  for (qreal x = 0; x <= kStripWidth + height; x += kPeriod)
+    painter.drawLine(QPointF(x, 0), QPointF(x - height, height));
+  painter.end();
+  QSGTexture *texture = m_window->createTextureFromImage(image);
+  texture->setFiltering(QSGTexture::Nearest);
+  return m_textures.emplace(color, texture).first->second;
+}
+
+void EditorScene::HatchBatch::update(
+  const QList<ColoredSpan> &spans, qreal lh, qsizetype originRow, qreal ratio, qreal originX
+) {
+  if (ratio != m_ratio || lh != m_lineHeight) { // the textures were drawn for another density or row height
+    m_ratio = ratio;
+    m_lineHeight = lh;
+    for (QSGImageNode *node : std::as_const(m_nodes))
+      node->setTexture(nullptr);
+    dropTextures();
+    m_pieces.clear();
+  }
+  constexpr qreal maxPiece = kStripWidth - kPeriod;
+  const auto wrapped = [](qreal v) {
+    const qreal m = std::fmod(v, qreal(kPeriod));
+    return m < 0 ? m + kPeriod : m;
+  };
+  QList<Piece> pieces;
+  pieces.reserve(spans.size());
+  for (const ColoredSpan &span : spans) {
+    const qreal y = double(span.row - originRow) * lh + span.y;
+    const qreal height = span.height < 0 ? lh : span.height;
+    qreal x = std::round(span.x0);
+    const qreal end = std::round(span.x1);
+    // The stripes follow x + y in content coordinates, so each row starts at its own phase.
+    const qreal rowShift = double(span.row) * lh;
+    while (x < end) {
+      const qreal width = qMin(end - x, maxPiece);
+      pieces.append({QRectF(x - originX, y, width, height),
+                     QRectF(wrapped(x + rowShift) * ratio, 0, width * ratio, qMin(height, std::ceil(lh)) * ratio),
+                     span.color.rgba()});
+      x += width;
+    }
+  }
+
+  while (m_nodes.size() > pieces.size())
+    delete m_nodes.takeLast();
+  m_pieces.resize(pieces.size());
+  for (qsizetype i = 0; i < pieces.size(); ++i) {
+    const Piece &piece = pieces[i];
+    QSGTexture *texture = textureFor(piece.color, lh, ratio);
+    if (i >= m_nodes.size()) {
+      QSGImageNode *node = m_window->createImageNode();
+      node->setTexture(texture);
+      node->setOwnsTexture(false);
+      node->setFiltering(QSGTexture::Nearest);
+      node->setSourceRect(piece.source);
+      node->setRect(piece.rect);
+      m_group->appendChildNode(node);
+      m_nodes.append(node);
+      m_pieces[i] = piece;
+      continue;
+    }
+    QSGImageNode *node = m_nodes[i];
+    if (node->texture() != texture)
+      node->setTexture(texture);
+    if (m_pieces[i].source != piece.source || node->sourceRect() != piece.source)
+      node->setSourceRect(piece.source);
+    if (m_pieces[i].rect != piece.rect || node->rect() != piece.rect)
+      node->setRect(piece.rect);
+    m_pieces[i] = piece;
   }
 }
 
@@ -344,6 +438,7 @@ void EditorScene::syncOverlays(const FrameParams &p) {
     ++m_stats.overlayUpdates;
   static const QList<ColoredSpan> none;
   m_decoBackgrounds->update(p.decorationBackgrounds ? *p.decorationBackgrounds : none, lh, m_originRow, m_originX);
+  m_hatches->update(p.hatches ? *p.hatches : none, lh, m_originRow, p.devicePixelRatio, m_originX);
   m_decoUnderlines->update(p.decorationUnderlines ? *p.decorationUnderlines : none, lh, m_originRow, m_originX);
   m_squiggles->update(p.squiggles ? *p.squiggles : none, lh, m_originRow, p.devicePixelRatio, m_originX);
   m_cursorFade->setOpacity(p.cursorVisible ? 1.0 : 0.0);

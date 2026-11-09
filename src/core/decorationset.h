@@ -22,9 +22,11 @@ enum class DecorationKind : quint8 {
   Background,    // a filled band behind the text
   GutterIcon,    // an icon in a decoration column, on the first row of the line
   EndOfLineText, // virtual text after the end of the line the range starts on
-  InlineText     // virtual text inside a line, at the start of the range (inlay hints)
+  InlineText,    // virtual text inside a line, at the start of the range (inlay hints)
+  LineBackground, // a filled band across the full width of every row of the lines the range touches
+  LineHatch      // the same, filled with diagonal stripes (a diff's "no line here" filler)
 };
-constexpr int kDecorationKindCount = 6;
+constexpr int kDecorationKindCount = 8;
 constexpr quint32 decorationKindBit(DecorationKind kind) { return 1u << unsigned(kind); }
 constexpr quint32 kAllDecorationKinds = (1u << kDecorationKindCount) - 1;
 

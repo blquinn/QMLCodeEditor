@@ -93,7 +93,9 @@ public:
   Q_ENUM(FoldCursorPolicy)
 
   // What a decoration looks like (DIAG-01); the values are those of qce::DecorationKind.
-  enum DecorationKind { Underline, Squiggle, Background, GutterIcon, EndOfLineText, InlineText };
+  enum DecorationKind {
+    Underline, Squiggle, Background, GutterIcon, EndOfLineText, InlineText, LineBackground, LineHatch
+  };
   Q_ENUM(DecorationKind)
 
   // Where a diagnostic's message is shown besides its squiggle and gutter icon.
@@ -679,7 +681,7 @@ private:
   bool m_diagnosticPopups = true;
   void onDecorationsChanged(qsizetype firstLine, qsizetype lastLine, quint32 kinds);
   QString endOfLineText(qsizetype line, QColor *color) const;
-  QList<qce::ColoredSpan> m_decoBackgroundSpans, m_decoUnderlineSpans, m_squiggleSpans;
+  QList<qce::ColoredSpan> m_decoBackgroundSpans, m_decoUnderlineSpans, m_squiggleSpans, m_hatchSpans;
   // Folding plumbing. Fold commands run through these so the view keeps its place and the cursor
   // moves off lines that just got hidden.
   void onFoldsChanged();
