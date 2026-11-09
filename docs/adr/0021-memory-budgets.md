@@ -5,7 +5,7 @@
 
 ## Context
 
-PERF-03 asked where the memory goes. The 100 MB benchmark file (`bench_core`, `memory/*`, `bench_syntax` `memory/*`, `bench_scroll` `memory/*`; recorded in `benchmarks/history/2026-10-09-ae4a0d74a3`) says:
+PERF-03 asked where the memory goes. The 100 MB benchmark file (`bench_core`, `memory/*`, `bench_syntax` `memory/*`, `bench_scroll` `memory/*`; recorded in `benchmarks/history/2026-10-09-29cdf93a6d`) says:
 
 | What | Measured | Verdict |
 |---|---|---|

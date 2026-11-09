@@ -132,7 +132,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - File dialog / command-line path / drag-and-drop in `demo/`.
 - [x] **RENDER-11** Scroll and frame-time benchmarks — done 2026-10-02 (63f0522)
   - Scripted scroll over the generated large files; results recorded in JSON.
-- [x] **RENDER-12** Text render type — done 2026-10-05 (bf9ff83)
+- [x] **RENDER-12** Text render type — done 2026-10-05 (af3d7f1)
   - `renderType` property (Qt/Native/Curve) applied to every text node; unset follows `QQuickWindow::textRenderType()`.
 
 ## M3 — Editing & input
@@ -161,10 +161,10 @@ Make it a real editor. Introduces the command/selection model that multi-cursor 
 - [x] **INPUT-10** Focus handling and cursor blink — done 2026-10-02 (b2ae309)
 - [x] **INPUT-11** Keystroke-to-frame benchmark — done 2026-10-02 (bd9e4d8)
   - `bench_typing`: typing, Enter, Backspace, paste and undo on the generated 100 MB file; event-to-frame latency median/p95/max; JSON result committed; ctest smoke variant.
-- [x] **INPUT-12** Smart tabs — done 2026-10-05 (f4aebee)
+- [x] **INPUT-12** Smart tabs — done 2026-10-05 (89befea)
   - Indentation (spaces vs tabs, width) is detected from the first lines of a document on load and `setText`; `detectIndentation` turns it off.
   - Backspace inside leading spaces deletes back to the previous indent stop; Shift+Tab outdents to the previous stop.
-- [x] **INPUT-13** Bracket auto-pairing — done 2026-10-05 (89b0f6e)
+- [x] **INPUT-13** Bracket auto-pairing — done 2026-10-05 (c9c334e)
   - Typing an opener inserts its closer (quotes only at a word boundary); typing a closer over the same closer steps past it; typing an opener over a selection wraps it.
   - Backspace between an empty pair deletes both; Enter between brackets puts the closer on the line below and the cursor on an indented line between (smart-tab unit).
   - `autoClose` (default on, every language) and `autoClosePairs` properties; works per cursor with multiple selections.
@@ -291,23 +291,23 @@ Soft wrap is a core feature, not an extra. Wrapped and unwrapped modes share one
 
 **Exit criteria (demonstrated 2026-10-05: tests tst_decorationset, tst_diagnostics, tst_decorations, tst_popup, tst_inlay, tst_wrapmap, tst_input; ADR 0016 benchmarks: 100k diagnostics (spread, dense, dense with wrap) scroll a 100 MB file at the 144 Hz display's rate with at most 1.8% dropped frames, one push takes about 130 ms; hands-on mouse use in a real window not done, scrolling with folds and diagnostics together and keystroke-to-frame with diagnostics not measured on the GPU because the display went away mid-session):** a host can push 100k diagnostics and the editor stays at 120 fps; squiggles, gutter icons and end-of-line messages render correctly with wrap and folds; hovering a diagnostic shows a QML popup.
 
-- [x] **DIAG-01** Decoration API with anchored ranges — done 2026-10-05 (7cd058e)
+- [x] **DIAG-01** Decoration API with anchored ranges — done 2026-10-05 (14071d0)
   - Kinds: underline, squiggle, background, gutter icon, end-of-line virtual text. Ranges survive edits ([ADR 0006](docs/adr/0006-anchored-decorations.md), [ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
   - Squiggle spans are built here and drawn by DIAG-02; inline virtual text is DIAG-06.
-- [x] **DIAG-02** Squiggle rendering — done 2026-10-05 (09c06f8)
+- [x] **DIAG-02** Squiggle rendering — done 2026-10-05 (476b5dc)
   - Custom `QSGMaterial`, or a tiled geometry fallback; correct across wrapped rows.
   - Done as the fallback: a pre-rendered wave strip per color in pooled image nodes, which every backend (software included) draws the same ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)); the material is DIAG-07.
-- [x] **DIAG-03** LSP-shaped diagnostic model — done 2026-10-05 (6697a5b)
+- [x] **DIAG-03** LSP-shaped diagnostic model — done 2026-10-05 (81259b2)
   - Range, severity, message, code, source, related information, tags. LSP JSON in and out; shown through the decoration set ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
-- [x] **DIAG-04** Hover and popup placement — done 2026-10-05 (7f4b5a0)
+- [x] **DIAG-04** Hover and popup placement — done 2026-10-05 (a43a30a)
   - Popups are QML delegate `Component`s positioned using `rectForPosition()`; flip to stay on screen.
   - `popupDelegate`, `hoverDelay`, `diagnosticPopups`; hover on text, gutter icon or end-of-line message; also opened by F8; the default popup's text is selectable and copyable ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)). Checked on the software and Wayland GPU backends.
-- [x] **DIAG-05** Go to next/previous diagnostic — done 2026-10-05 (df8c6c1)
+- [x] **DIAG-05** Go to next/previous diagnostic — done 2026-10-05 (ca5373f)
   - `gotoNextDiagnostic`/`gotoPreviousDiagnostic` (wrapping, minimum severity, opens folds, scrolls); F8 / Shift+F8.
-- [x] **DIAG-06** Inline virtual text and inlay hints — done 2026-10-05 (176cfa5)
+- [x] **DIAG-06** Inline virtual text and inlay hints — done 2026-10-05 (fd0b669)
   - Rendered as part of line layout so wrap and cursor movement account for them.
   - `setInlayHints` (LSP `InlayHint`) and `InlineText` decorations: injected into the row layout (a general injection list that the input-method composition now shares), widths fed to soft wrap, a pill behind each label ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
-- [x] **DIAG-08** Diagnostics benchmarks and demo — done 2026-10-05 (b0796a7)
+- [x] **DIAG-08** Diagnostics benchmarks and demo — done 2026-10-05 (ab52ffb)
   - `bench_decorations` (core: 100k diagnostics set, edits, queries, hints with wrap), `--diagnostics N` and `--dense` for `bench_scroll`, `--diagnostics N` for `bench_typing`; results in `benchmarks/results/2026-10-05-diagnostics-*.json`.
   - Demo: a Diagnostics menu (sample and 100k diagnostics, next/previous, messages, popups, icons, inlay hints), the icon column, and `--diagnostics`/`--hints` for screenshots.
   - Found by the benchmark and fixed: gutter images share one texture per image instead of uploading one per node ([ADR 0016](docs/adr/0016-decorations-and-diagnostics.md)).
@@ -318,39 +318,39 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 
 **Exit criteria (demonstrated 2026-10-07: tests tst_vim (about 380 table rows plus a key fuzzer, also clean under ASan/UBSan), tst_codeeditor (runtime switch, block cursor pixels, input-method gating, search highlight); ADR 0017 benchmarks: typical commands cost 2–80 µs on a 90 MB file, scrolling with the vim cursor or a match-everywhere highlight stays under the frame budget; hands-on use with a real input method and a real window not done):** a scripted vim test suite (keystrokes → expected buffer and cursor) passes; the vim handler can be switched on and off at runtime; dot-repeat and macros work across insert-mode edits.
 
-- [x] **VIM-01** Vim `InputHandler` and mode state machine — done 2026-10-07 (8fd6542)
+- [x] **VIM-01** Vim `InputHandler` and mode state machine — done 2026-10-07 (02a5108)
   - Normal, insert, replace, visual (char/line/block); mode-change signals for a host status bar.
   - `VimInputHandler` in `core/vim` (headless): modes Normal, Insert, Replace and the three visual modes, with OperatorPending and CommandLine as states; `mode`, `pendingKeys`, `commandLine`, `recordingRegister` and `message` feed a status bar; new `InputHandler` hooks (`activate`, `deactivate`, `cursorShape`, `cursorOffset`, `acceptsTextInput`, `commitText`); block and underline cursors; `CodeEditor.vimMode` and `vim` ([ADR 0017](docs/adr/0017-vim-input-handler.md)).
-- [x] **VIM-02** Operator-pending grammar — done 2026-10-07 (34ef643)
+- [x] **VIM-02** Operator-pending grammar — done 2026-10-07 (a797956)
   - `[count][register]operator[count]motion`, including doubled operators (`dd`, `yy`, `cc`).
   - Counts, registers and doubled operators for `d c y > < g~ gu gU`, and `x X s S D C Y p P J gJ r ~ <C-a> <C-x>`; vim's exclusive/inclusive/linewise rules, `cw` as `ce`, `dw` on the last word of a line.
-- [x] **VIM-03** Motions — done 2026-10-07 (34ef643)
+- [x] **VIM-03** Motions — done 2026-10-07 (a797956)
   - `hjkl`, `w b e W B E`, `0 ^ $`, `gg G`, `f t F T ; ,`, `% { } ( )`, `H M L`, `Ctrl-d/u/f/b`. Visual-row aware with wrap (`gj`/`gk`).
   - Also `| g_ gE g0 g^ g$ ]d [d zt zz zb zo zc zR zM`; paragraph and sentence scans are bounded (ADR 0017).
-- [x] **VIM-04** Text objects — done 2026-10-07 (34ef643)
+- [x] **VIM-04** Text objects — done 2026-10-07 (a797956)
   - `iw aw`, `is as`, `ip ap`, quotes, brackets, tags.
   - Words, WORDs, sentences, paragraphs, quotes, brackets (counts widen; the inside of a multi-line block is its lines) and tags; in visual mode an object that is already selected grows.
-- [x] **VIM-05** Registers — done 2026-10-07 (34ef643)
+- [x] **VIM-05** Registers — done 2026-10-07 (a797956)
   - Unnamed, named `a–z` (append with `A–Z`), `0`, `1–9`, `+`/`*` mapped to the system clipboard.
   - Also `-`, `_` and the read-only `. : /`; one piece per cursor, distributed on paste.
-- [x] **VIM-06** Dot-repeat — done 2026-10-07 (34ef643)
+- [x] **VIM-06** Dot-repeat — done 2026-10-07 (a797956)
   - Replays the keys of the last change, insert-mode text and input-method commits included; a new count replaces the old one; visual changes repeat over a region of the same size; `"1p` steps through the numbered registers.
-- [x] **VIM-07** Marks and jump list — done 2026-10-07 (34ef643)
+- [x] **VIM-07** Marks and jump list — done 2026-10-07 (a797956)
   - Marks are anchors (`a-z A-Z ' . ^ < > [ ]`), the jump list holds 100 anchors, `<C-o>` and `<C-i>`.
-- [x] **VIM-08** Macros (`q`, `@`) — done 2026-10-07 (34ef643)
+- [x] **VIM-08** Macros (`q`, `@`) — done 2026-10-07 (a797956)
   - A register holds the macro as notation text (`"ap` shows it, `@a` runs a yanked line); `@@`, counts, `:normal`; a macro or `.` is one undo step.
-- [x] **VIM-09** Search — done 2026-10-07 (8fd6542)
+- [x] **VIM-09** Search — done 2026-10-07 (02a5108)
   - `/ ? n N * #` with highlight of matches; shares the regex engine with find/replace (API-04).
   - The regex engine is `vim::compilePattern` (vim syntax to `QRegularExpression`) with `search::findRegex` and `findAllRegex` in `core/textsearch`, for API-04 to build on; plain-text patterns take a chunked fast path. `CodeEditor` marks matches in the frame plan (`searchMatch` theme color); `:noh`, `:set ic scs hls`.
-- [x] **VIM-10** Visual block via multi-cursor — done 2026-10-07 (34ef643)
+- [x] **VIM-10** Visual block via multi-cursor — done 2026-10-07 (a797956)
   - Block selection maps onto `SelectionSet`; `I`/`A`/`c` in block mode edit all rows.
   - `<C-v>` is one `SelectionSet` entry per line over a display-column range (tabs expanded, `$` to each line end); `I A c d y r ~ u U >` apply to every row in one undo step and leave the cursor at the block's top-left.
-- [x] **VIM-11** Ex command subset — done 2026-10-07 (34ef643)
+- [x] **VIM-11** Ex command subset — done 2026-10-07 (a797956)
   - `:s`, `:g`, `:d`, `:N`, `:noh`; `:w`/`:q`/`:wq` emitted as signals to the host.
   - Ranges with marks, patterns and offsets; `:s` (`\1`, `\r`, `\U`, flags `g i I n`), `:g`, `:g!`, `:v`, `:d`, `:y`, `:normal`, `:>`, `:<`, `:N`, `:k`, `:noh`, `:set`; `:w :q :wq :x` and ZZ/ZQ as signals; unknown commands go out as `exCommand`.
-- [x] **VIM-12** Multi-cursor interaction defined and tested — done 2026-10-07 (34ef643)
+- [x] **VIM-12** Multi-cursor interaction defined and tested — done 2026-10-07 (a797956)
   - Every motion and operator applies per cursor; insert, `.`, macros and `p` work on the whole set; `<Esc>` in normal mode keeps the primary. Decided in ADR 0017, tested in `tst_vim` (`multi`).
-- [x] **VIM-13** Vim test harness — done 2026-10-07 (34ef643)
+- [x] **VIM-13** Vim test harness — done 2026-10-07 (a797956)
   - Table-driven tests: initial text, keystrokes, expected text and selection.
   - `tests/core/tst_vim.cpp`: rows of initial text with markup (`|` cursor, `‹ ›` selection), keys in vim notation and the expected markup, run through `VimInputHandler` with a fake host; plus mode, signal, clipboard, highlight, key-event and fuzz tests.
 
@@ -363,14 +363,14 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **API-02** Completion popup hooks
   - Host supplies items; editor owns placement, filtering UI and key handling.
 - [ ] **API-03** Hover and signature-help popup hooks
-- [x] **API-04** Find/replace — done 2026-10-07 (f62b7d2)
+- [x] **API-04** Find/replace — done 2026-10-07 (b47affa)
   - Incremental search with regex, match highlighting, replace all as one transaction; runs on rope snapshots in a worker thread.
   - `editor.find` (`core/findreplace`): plain text or `QRegularExpression`, case, whole word; match count and `currentIndex` from a cancellable worker search on a snapshot (capped at 100k), binary-search `next()`/`previous()` with a live-rope fallback, `replace()`, `replaceAll()` (edits built on a snapshot, one undo step, `$1 $& $$ \n \t`), `selectAllMatches()`, `useSelection()`. Decided in ADR 0019.
   - Shares its engine with vim search: `search::Pattern`, `find`/`findAll`, `forEachLineMatch` in `core/textsearch` (vim's `/`, `*` and `:s` run on them; no change in `bench_vim`). Matches in view are marked by the same per-row loop as `hlsearch`.
   - `FindBar.qml` is an opt-in default UI (Ctrl+F / Ctrl+H in the demo); the editor draws none and hosts can build their own on `editor.find`.
   - Benchmark: `bench_find` on 90 MB / 2M lines: literal count 37 ms, regex 0.97 s (worker thread), 2000-edit replace-all 43 ms on the GUI thread, 10 us to compile a query.
 - [ ] **API-05** Go-to-definition and find-references request signals
-- [x] **API-06** Matching bracket highlight (auto-pairing is INPUT-13) — done 2026-10-06 (8f0656d)
+- [x] **API-06** Matching bracket highlight (auto-pairing is INPUT-13) — done 2026-10-06 (066d244)
   - `matchBrackets` property (default on); the bracket next to each visible cursor and its partner get a background (`bracketMatch` theme color), with soft wrap and folds.
   - Raw-text match over the `autoClosePairs` that differ at both ends, scan bounded so a stray bracket in a huge file stays cheap; strings and comments are not recognised (API-10).
   - Benchmark: worst-case scan, typing and scroll with the highlight on and off.
@@ -381,7 +381,7 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **API-09** Code actions and quick-fix hooks
 - [ ] **API-10** Bracket matching that skips strings and comments
   - Ask the tree-sitter tree for the bracket's partner (sibling bracket nodes under the same parent) instead of scanning, without moving the parse window; fall back to the raw scan outside the parsed range.
-- [x] **API-11** Indent guides — done 2026-10-06 (67ce533)
+- [x] **API-11** Indent guides — done 2026-10-06 (00cb82e)
   - `showIndentGuides` property (default on); a faint vertical line at every indent step (`indentWidth` columns, `tabWidth` when indenting with tabs) inside a line's leading whitespace, theme colors `indentGuide` and `indentGuideActive`. Blank lines continue the guides of the lines around them; with soft wrap only the hanging indent shows them; folded lines take theirs with them.
   - The guide of the block around the primary cursor is drawn in the active color: the pair of the bracket next to the cursor (the one API-06 highlights), else the innermost enclosing pair (bounded raw scan, cached until the next edit).
   - Guides of neighbouring rows are merged into one rectangle per column to keep the node count down.
@@ -390,12 +390,12 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [~] **API-15** Indent guides: blank stretches resolved in one pass
   - `effectiveIndents` searched outward from every blank line on its own, so a viewport of blank lines rescanned the same stretch once per line (up to the search limit each way, every frame): scrolling a mostly blank file, such as the filler side of a diff, took tens of milliseconds per frame. Two sweeps now give every blank line its nearest text lines above and below, with the same `maxSearch` reach.
   - Tests: agreement with the per-line search across viewports, search limits and irregular blank runs; a long blank stretch.
-- [x] **API-12** Language registration — done 2026-10-07 (e8cb87a)
+- [x] **API-12** Language registration — done 2026-10-07 (e1caf56)
   - `LanguageRegistry::registerLanguage(LanguageInfo)` (startup, GUI thread): hosts add or replace a language (built-ins can be overridden, not removed); queries as resource/file paths or inline strings; found by `find`/`detect`/`compiled` and as an injection target; lazy compile kept. A `SyntaxHighlighter` picks it up on its next `language`/`fileName` change ([ADR 0018](docs/adr/0018-host-extensions.md)).
   - Tests in `tst_languageregistry` (register, detect, highlight, replace, override, rejects, `compiled()` from several threads) and `tst_editorsyntax` (registered after the editor exists, Markdown fence injection).
-- [x] **API-13** Host-defined token styles — done 2026-10-07 (e8cb87a)
+- [x] **API-13** Host-defined token styles — done 2026-10-07 (e1caf56)
   - `registerTokenStyle(name)` (192 slots), capture names map to them, `Theme.tokenStyles` entries (and `Theme.setTokenStyle`) take `color`, `background`, `bold`, `italic`; backgrounds are drawn behind the text by the editor.
-- [x] **API-14** Highlight overlays — done 2026-10-07 (e8cb87a)
+- [x] **API-14** Highlight overlays — done 2026-10-07 (e1caf56)
   - `CodeEditor.overlays`: any `Highlighter` painted over the main one, merged by the editor (`overlaySpans`), invalidating only the lines it names; several coexist, typed for qmlcachegen. Replaces wrapping a highlighter (Repose's `VariableHighlighter`).
   - Bracket match and search highlight stay per-frame rectangles (ADR 0018). Benchmarks: `bench_decorations` (merge), `bench_scroll --overlay`.
 
@@ -403,13 +403,13 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 
 **Exit criteria:** all performance targets above are met and enforced by benchmark thresholds in CI; a measured decision on the glyph-atlas renderer is recorded in an ADR.
 
-- [x] **PERF-01** Very long lines — done 2026-10-09 (2541797)
+- [x] **PERF-01** Very long lines — done 2026-10-09 (eaa6fd2)
   - Shape and render only the visible horizontal window of lines longer than a threshold.
   - Lines over 8192 units with wrap off are laid out as a window of whole index chunks (viewport plus one on each side); `core/LongLineIndex` answers column ↔ x for everything outside it and follows edits in O(chunks); `Highlighter::highlightRange` styles only the window (tree-sitter queries just that stretch and centres its windowed parse on it); the scene works relative to an origin x so far-right glyphs, selections and squiggles stay pixel-exact. Decided in ADR 0020.
   - 5 MB single line, wrap off: first frame 7.1 s → 41 ms, a typed character 4.1 s → 7 ms frame interval (0.13 ms sync, 0.17 ms render). `bench_wrap --filter giant_nowrap`, `benchmarks/results/2026-10-09-long-lines{-before,}.json`; `bench_syntax` `longline/*`.
 - [ ] **PERF-02** Multi-GB files
   - Lazy chunk loading; memory-mapped backing for untouched regions.
-- [x] **PERF-03** Memory profiling and trimming — done 2026-10-09 (af9e6a3)
+- [x] **PERF-03** Memory profiling and trimming — done 2026-10-09 (9a5948f)
   - Rope overhead, layout cache sizing, tree-sitter tree memory.
   - Measured (`bench_core` / `bench_syntax` / `bench_scroll` `memory/*`, now in the tracked history): rope 8% over the text, parse trees 33–146 bytes per unit (far the largest), undo 165 bytes per keystroke, layouts about 4 KB each. Trimmed: `parseMemoryBudget` (default 512 MiB) limits whole-document parses by a per-language bytes-per-unit estimate; typing and deleting runs merge into one undo record (165 → 6 bytes per keystroke); the layout cache has a 32 MB cap beside its count. Rope node trimming measured at 1.2% and dropped. Decided in ADR 0021.
 - [ ] **PERF-04** Evaluate a custom glyph-atlas monospace renderer vs. `QSGTextNode`
@@ -417,7 +417,7 @@ Solid core, not full Vim compatibility. Implemented as a second `InputHandler` o
 - [ ] **PERF-05** Benchmark regression thresholds
   - Fail CI when a tracked benchmark regresses beyond a set tolerance.
   - Builds on PERF-07: the gate is the recorded-history comparison plus a failing exit code, using the tolerances in `benchmarks/tracked.json`. Not enforced yet.
-- [x] **PERF-07** Benchmark tracking and history — done 2026-10-08 (281bb6e)
+- [x] **PERF-07** Benchmark tracking and history — done 2026-10-08 (bbf3d0c)
   - `benchmarks/tracked.json` lists the tracked suites; `tools/benchtrack.py record` runs them and stores results under `benchmarks/history/<date>-<hash>/` with git metadata.
   - `benchtrack.py compare` / `history` / `list` show changes between recorded runs and per-case trends; informational only, never fails.
   - `bench_record` CMake target (not in `all`, not a test); `benchtrack_selftest` ctest covers the comparison logic. A first run is committed as the reference.
