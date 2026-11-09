@@ -4,6 +4,8 @@
 
 #include <QtCore/QString>
 
+#include <algorithm>
+
 namespace qce {
 namespace {
 
@@ -58,29 +60,56 @@ QList<int> effectiveIndents(
     result.append(lineIndent(rope, line, tabWidth));
   // Blank lines are resolved against the lines' own indents, so these read `raw`, not `result`.
   const QList<int> raw = result;
+  if (std::none_of(raw.cbegin(), raw.cend(), [](int indent) { return indent < 0; }))
+    return result;
 
-  // Indent of the nearest text line before / after `line`, looking in `raw` and then outside it.
-  auto above = [&](qsizetype line) {
-    for (qsizetype l = line - 1, n = 0; l >= 0 && n < maxSearch; --l, ++n) {
-      const int indent = l >= firstLine ? raw[l - firstLine] : lineIndent(rope, l, tabWidth);
-      if (indent >= 0)
-        return indent;
+  // Each blank line takes the indent of the nearest text line above and below it, at most `maxSearch` lines
+  // away (0 where there is none). Looking that up line by line rescans a blank stretch once per line in it, which
+  // is quadratic in the stretch (a view of a mostly blank file); two sweeps find every answer in one visit. Each
+  // sweep starts from the nearest text line outside the range, looked for once.
+  const qsizetype count = lastLine - firstLine + 1;
+  QList<int> above(count, 0);
+  {
+    qsizetype textLine = -1; // the nearest text line seen so far, or -1
+    int textIndent = 0;
+    for (qsizetype l = firstLine - 1, n = 0; l >= 0 && n < maxSearch; --l, ++n) {
+      if (const int indent = lineIndent(rope, l, tabWidth); indent >= 0) {
+        textLine = l;
+        textIndent = indent;
+        break;
+      }
     }
-    return 0;
-  };
-  auto below = [&](qsizetype line) {
-    for (qsizetype l = line + 1, n = 0; l < lineCount && n < maxSearch; ++l, ++n) {
-      const int indent = l <= lastLine ? raw[l - firstLine] : lineIndent(rope, l, tabWidth);
-      if (indent >= 0)
-        return indent;
+    for (qsizetype line = firstLine; line <= lastLine; ++line) {
+      const int indent = raw[line - firstLine];
+      if (indent >= 0) {
+        textLine = line;
+        textIndent = indent;
+      } else if (textLine >= 0 && line - textLine <= maxSearch) {
+        above[line - firstLine] = textIndent;
+      }
     }
-    return 0;
-  };
-  for (qsizetype line = firstLine; line <= lastLine; ++line) {
-    if (raw[line - firstLine] >= 0)
-      continue;
-    const int a = above(line), b = below(line);
-    result[line - firstLine] = a == b ? a : qMin(qMin(a, b) + unit, qMax(a, b));
+  }
+  {
+    qsizetype textLine = -1;
+    int textIndent = 0;
+    for (qsizetype l = lastLine + 1, n = 0; l < lineCount && n < maxSearch; ++l, ++n) {
+      if (const int indent = lineIndent(rope, l, tabWidth); indent >= 0) {
+        textLine = l;
+        textIndent = indent;
+        break;
+      }
+    }
+    for (qsizetype line = lastLine; line >= firstLine; --line) {
+      const int indent = raw[line - firstLine];
+      if (indent >= 0) {
+        textLine = line;
+        textIndent = indent;
+        continue;
+      }
+      const int a = above[line - firstLine];
+      const int b = textLine >= 0 && textLine - line <= maxSearch ? textIndent : 0;
+      result[line - firstLine] = a == b ? a : qMin(qMin(a, b) + unit, qMax(a, b));
+    }
   }
   return result;
 }
