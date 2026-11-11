@@ -134,7 +134,7 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
   - Scripted scroll over the generated large files; results recorded in JSON.
 - [x] **RENDER-12** Text render type — done 2026-10-05 (af3d7f1)
   - `renderType` property (Qt/Native/Curve) applied to every text node; unset follows `QQuickWindow::textRenderType()`.
-- [~] **RENDER-13** Visible whitespace marks only a line's indentation
+- [x] **RENDER-13** Visible whitespace marks only a line's indentation — done 2026-11-10 (f8b8472)
   - With `showWhitespace`, only spaces and tabs before a line's first other character get marks, in the theme's whitespace color, even where a token's range covers them (markdown's list markers and block continuations do).
   - Whitespace after the first other character, inside strings and comments included, draws as plain space. Wrapped rows and long-line windows after that character get no marks.
 
