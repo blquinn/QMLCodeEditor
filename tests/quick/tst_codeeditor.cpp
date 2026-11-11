@@ -511,6 +511,15 @@ private slots:
     }
   }
 
+  // The brightest red channel in the cells [column0, column1) of the first row.
+  static int brightestIn(const QImage &image, qreal adv, int column0, int column1, int rowHeight) {
+    int brightest = 0;
+    for (int y = 0; y < rowHeight; ++y)
+      for (int x = int(column0 * adv) + 1; x < int(column1 * adv) - 1; ++x)
+        brightest = qMax(brightest, image.pixelColor(x, y).red());
+    return brightest;
+  }
+
   void whitespaceMarksAreOptionalAndDim() {
     QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
@@ -518,20 +527,16 @@ private slots:
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
     editor->setCursorBlinkInterval(0);
-    editor->setText(QStringLiteral("M M"));
+    editor->setText(QStringLiteral(" M"));
     editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
     const int lh = int(editor->metrics().lineHeight());
     const qreal adv = editor->metrics().cellAdvance();
     QVERIFY(!editor->showWhitespace());
-    QTRY_VERIFY(!inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
+    QTRY_VERIFY(!inkInColumns(view.grabWindow(), 1, adv - 1, lh));
     editor->setShowWhitespace(true);
-    QTRY_VERIFY(inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
+    QTRY_VERIFY(inkInColumns(view.grabWindow(), 1, adv - 1, lh));
     // The mark uses the whitespace color, much dimmer than the text.
-    const QImage image = view.grabWindow();
-    int brightest = 0;
-    for (int y = 0; y < lh; ++y)
-      for (int x = int(adv) + 1; x < int(2 * adv) - 1; ++x)
-        brightest = qMax(brightest, image.pixelColor(x, y).red());
+    const int brightest = brightestIn(view.grabWindow(), adv, 0, 1, lh);
     QVERIFY2(brightest <= 0x60, qPrintable(QString::number(brightest)));
     // Tabs get a mark across their span.
     editor->setText(QStringLiteral("\tM"));
@@ -539,16 +544,20 @@ private slots:
     QTRY_VERIFY(inkInColumns(view.grabWindow(), 1, 4 * adv - 1, lh));
     editor->setShowWhitespace(false);
     QTRY_VERIFY(!inkInColumns(view.grabWindow(), 1, 4 * adv - 1, lh));
-    editor->setText(QStringLiteral("M M"));
+    editor->setText(QStringLiteral(" M"));
     editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
-    QTRY_VERIFY(!inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
+    QTRY_VERIFY(!inkInColumns(view.grabWindow(), 1, adv - 1, lh));
   }
 
-  void whitespaceInsideATokenKeepsItsColor() {
+  void whitespaceMarksOnlyIndentation() {
+    // Covers the whole line, indentation included, as markdown's block continuations do.
     struct WholeLineComment : qce::Highlighter {
       QList<QList<qce::HighlightSpan>>
-      highlightLines(const qce::TextSnapshot &, qsizetype firstLine, qsizetype lastLine) override {
-        return QList<QList<qce::HighlightSpan>>(lastLine - firstLine + 1, {{0, 5, qce::TokenStyle::Comment}});
+      highlightLines(const qce::TextSnapshot &snapshot, qsizetype firstLine, qsizetype lastLine) override {
+        QList<QList<qce::HighlightSpan>> lines;
+        for (qsizetype line = firstLine; line <= lastLine; ++line)
+          lines.append({{0, snapshot.rope().lineLength(line), qce::TokenStyle::Comment}});
+        return lines;
       }
     } comment;
     QQuickView view(&m_engine, nullptr);
@@ -559,21 +568,26 @@ private slots:
     editor->setCursorBlinkInterval(0);
     editor->setHighlighter(&comment);
     editor->setShowWhitespace(true);
-    editor->setText(QStringLiteral("M M M"));
-    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
+    editor->setText(QStringLiteral("  M M\tM  "));
+    editor->setCursorPosition(0); // the cursor bar sits at the left edge, away from the cells checked
     const int lh = int(editor->metrics().lineHeight());
     const qreal adv = editor->metrics().cellAdvance();
-    // Every space in the comment, not only the first, is a mark in the comment's (green) color.
-    auto greenInk = [&](int column) {
-      const QImage image = view.grabWindow();
-      for (int y = 0; y < lh; ++y)
-        for (int x = int(column * adv) + 1; x < int((column + 1) * adv) - 1; ++x)
-          if (const QColor c = image.pixelColor(x, y); c.green() - c.red() > 0x20)
-            return true;
-      return false;
-    };
-    QTRY_VERIFY(greenInk(1));
-    QVERIFY(greenInk(3));
+    // The indentation is marked, dim, though the comment covers it.
+    QTRY_VERIFY(inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
+    const QImage image = view.grabWindow();
+    const int brightest = brightestIn(image, adv, 1, 2, lh);
+    QVERIFY2(brightest <= 0x60, qPrintable(QString::number(brightest)));
+    // Nothing after the first other character is: a space, a tab, trailing spaces.
+    QVERIFY(!inkInColumns(image, 3 * adv + 1, 4 * adv - 1, lh));
+    QVERIFY(!inkInColumns(image, 5 * adv + 1, 8 * adv - 1, lh));
+    QVERIFY(!inkInColumns(image, 9 * adv + 1, 10 * adv - 1, lh));
+    // The comment's (green) color still reaches the text after the indentation.
+    bool green = false;
+    for (int y = 0; y < lh; ++y)
+      for (int x = int(2 * adv); x < int(3 * adv); ++x)
+        if (const QColor c = image.pixelColor(x, y); c.green() - c.red() > 0x20)
+          green = true;
+    QVERIFY(green);
     editor->setHighlighter(nullptr);
   }
 

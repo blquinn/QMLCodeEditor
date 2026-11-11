@@ -49,6 +49,7 @@ struct LineLayout {
   qsizetype startColumn = 0; // column of the row's first unit in its buffer line
   qreal indentX = 0;         // hanging indent: where the text starts
   bool endsLine = true;      // the last (or only) row of its buffer line
+  qsizetype indentation = 0; // units of the line's indentation at the start of the row, drawn as marks
   // Text injected into the row, ordered by column and, at one column, by placement. The laid-out
   // text is `text` with these put in, so it is longer than `text`; the two index spaces are
   // converted with layoutIndex() and columnForLayoutIndex().

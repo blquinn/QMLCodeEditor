@@ -196,7 +196,8 @@ public:
   // Tab stops every `tabWidth` cells (default 4).
   int tabWidth() const { return m_metrics.tabWidth(); }
   void setTabWidth(int columns);
-  // Draws tabs and spaces as visible marks in the theme's whitespace color.
+  // Draws the tabs and spaces of each line's indentation (those before its first other character) as
+  // visible marks in the theme's whitespace color. Whitespace after that stays blank.
   bool showWhitespace() const { return m_showWhitespace; }
   void setShowWhitespace(bool show);
 

@@ -1545,13 +1545,14 @@ void CodeEditor::buildTabMarks() {
   for (const qce::FramePlanRow &planRow : std::as_const(m_plan)) {
     const qce::LineLayout &layout = *planRow.layout;
     const QString &text = layout.text;
-    if (!text.contains(u'\t'))
+    const qsizetype indentation = qMin(layout.indentation, text.size());
+    if (!QStringView(text).first(indentation).contains(u'\t'))
       continue;
     if (!layout.injections.isEmpty())
       continue; // tab marks are placed by column; injected text shifts them
     const bool simple = !layout.isWindow() && m_metrics.isSimple(text);
     qsizetype cell = 0;
-    for (qsizetype i = 0; i < text.size(); ++i) {
+    for (qsizetype i = 0; i < indentation; ++i) {
       const bool tab = text[i] == u'\t';
       const qsizetype nextCell = cell + (tab ? m_metrics.tabWidth() - cell % m_metrics.tabWidth() : 1);
       if (tab) {
@@ -2612,48 +2613,43 @@ void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
 
 namespace {
 
-// Adds a `color` format to every run of spaces and tabs that the highlighter's ranges (sorted,
-// non-overlapping) don't already style, so indentation and gaps read as dim marks while
-// whitespace inside strings or comments keeps its token color.
+// Units at the start of a row that belong to its line's indentation: the spaces and tabs before the
+// line's first other character. A row that starts inside the line (a wrapped row, a long-line window)
+// has some only when everything before it is whitespace too; reading that stops at the first other unit.
+qsizetype indentationInRow(const qce::Rope &rope, qsizetype lineStart, qsizetype rowStart, const QString &text) {
+  auto blank = [](QChar ch) { return ch == u' ' || ch == u'\t'; };
+  constexpr qsizetype kChunk = 256;
+  for (qsizetype start = lineStart; start < lineStart + rowStart;) {
+    const QString piece = rope.toString(start, qMin(lineStart + rowStart, start + kChunk));
+    if (!std::all_of(piece.begin(), piece.end(), blank))
+      return 0;
+    start += piece.size();
+  }
+  return std::find_if_not(text.begin(), text.end(), blank) - text.begin();
+}
+
+// Gives the first `indent` units of a row the `color` format, so a line's indentation reads as dim
+// marks even where a token covers it (markdown's list markers and block continuations take their
+// spaces). The highlighter's ranges (sorted, non-overlapping) are cut back to start after it.
 QList<QTextLayout::FormatRange>
-withWhitespaceFormats(const QString &text, QList<QTextLayout::FormatRange> ranges, const QColor &color) {
+withIndentationFormat(qsizetype indent, QList<QTextLayout::FormatRange> ranges, const QColor &color) {
+  if (indent <= 0)
+    return ranges;
   QTextCharFormat format;
   format.setForeground(color);
   QList<QTextLayout::FormatRange> result;
-  result.reserve(ranges.size() + 4);
-  qsizetype next = 0;    // first range not yet passed
-  qsizetype covered = 0; // end of the passed ranges: a run before it is inside a styled token
-  qsizetype i = 0;
-  const qsizetype n = text.size();
-  while (i < n) {
-    const QChar c = text[i];
-    if (c != u' ' && c != u'\t') {
-      ++i;
+  result.reserve(ranges.size() + 1);
+  result.append({0, int(indent), format});
+  for (QTextLayout::FormatRange &r : ranges) {
+    const int end = r.start + r.length;
+    if (end <= indent)
       continue;
+    if (r.start < indent) {
+      r.start = int(indent);
+      r.length = end - r.start;
     }
-    qsizetype j = i;
-    while (j < n && (text[j] == u' ' || text[j] == u'\t'))
-      ++j;
-    // Copy over styled ranges that start before this run ends, then add the uncovered pieces.
-    qsizetype pos = qMax(i, covered);
-    while (next < ranges.size() && ranges[next].start < j) {
-      const auto &r = ranges[next];
-      if (r.start + r.length > i) {
-        if (r.start > pos)
-          result.append({int(pos), int(r.start - pos), format});
-        pos = qMax<qsizetype>(pos, r.start + r.length);
-      }
-      covered = qMax<qsizetype>(covered, r.start + r.length);
-      result.append(r);
-      ++next;
-    }
-    if (pos < j)
-      result.append({int(pos), int(j - pos), format});
-    i = j;
+    result.append(std::move(r));
   }
-  while (next < ranges.size())
-    result.append(ranges[next++]);
-  std::sort(result.begin(), result.end(), [](const auto &a, const auto &b) { return a.start < b.start; });
   return result;
 }
 
@@ -2808,11 +2804,14 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
     return cached;
   const bool windowAtEnd = row.endColumn >= fullRow.endColumn;
   const QString text = rope.toString(lineStart + row.startColumn, lineStart + row.endColumn);
-  // Visible spaces are drawn as middle dots: the text node doesn't render QTextOption's own marks.
-  // Dot and space share a column in a monospace font, so offsets and positions stay the same.
+  // Visible indentation: its spaces are drawn as middle dots (the text node doesn't render QTextOption's
+  // own marks) and its tabs get marks in buildTabMarks(). Dot and space share a column in a monospace
+  // font, so offsets and positions stay the same.
+  const qsizetype indent = m_showWhitespace ? indentationInRow(rope, lineStart, row.startColumn, text) : 0;
   QString display = text;
-  if (m_showWhitespace)
-    display.replace(u' ', u'\u00b7');
+  for (qsizetype i = 0; i < indent; ++i)
+    if (display[i] == u' ')
+      display[i] = u'\u00b7';
   auto layout = std::make_unique<QTextLayout>(display, m_metrics.layoutFont());
   QTextOption option;
   option.setWrapMode(QTextOption::NoWrap);
@@ -2871,8 +2870,7 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
         styleBackgrounds.append({from, to, color});
     }
   }
-  if (m_showWhitespace)
-    formats = withWhitespaceFormats(text, std::move(formats), m_theme->whitespace());
+  formats = withIndentationFormat(indent, std::move(formats), m_theme->whitespace());
   // Text that is shown in the row without being in the document: inline decorations (inlay hints) and
   // an input-method composition. Each is put into the laid-out text before the unit at its column.
   struct Pending {
@@ -2995,6 +2993,7 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
   result->startColumn = row.startColumn;
   result->indentX = row.indent;
   result->endsLine = row.isLast();
+  result->indentation = indent;
   if (longIndex) {
     result->longIndex = longIndex;
     result->rope = rope;
