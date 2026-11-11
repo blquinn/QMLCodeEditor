@@ -2621,7 +2621,8 @@ withWhitespaceFormats(const QString &text, QList<QTextLayout::FormatRange> range
   format.setForeground(color);
   QList<QTextLayout::FormatRange> result;
   result.reserve(ranges.size() + 4);
-  qsizetype next = 0; // first range not yet passed
+  qsizetype next = 0;    // first range not yet passed
+  qsizetype covered = 0; // end of the passed ranges: a run before it is inside a styled token
   qsizetype i = 0;
   const qsizetype n = text.size();
   while (i < n) {
@@ -2634,7 +2635,7 @@ withWhitespaceFormats(const QString &text, QList<QTextLayout::FormatRange> range
     while (j < n && (text[j] == u' ' || text[j] == u'\t'))
       ++j;
     // Copy over styled ranges that start before this run ends, then add the uncovered pieces.
-    qsizetype pos = i;
+    qsizetype pos = qMax(i, covered);
     while (next < ranges.size() && ranges[next].start < j) {
       const auto &r = ranges[next];
       if (r.start + r.length > i) {
@@ -2642,6 +2643,7 @@ withWhitespaceFormats(const QString &text, QList<QTextLayout::FormatRange> range
           result.append({int(pos), int(r.start - pos), format});
         pos = qMax<qsizetype>(pos, r.start + r.length);
       }
+      covered = qMax<qsizetype>(covered, r.start + r.length);
       result.append(r);
       ++next;
     }

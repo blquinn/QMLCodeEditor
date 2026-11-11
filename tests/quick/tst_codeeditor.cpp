@@ -544,6 +544,39 @@ private slots:
     QTRY_VERIFY(!inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
   }
 
+  void whitespaceInsideATokenKeepsItsColor() {
+    struct WholeLineComment : qce::Highlighter {
+      QList<QList<qce::HighlightSpan>>
+      highlightLines(const qce::TextSnapshot &, qsizetype firstLine, qsizetype lastLine) override {
+        return QList<QList<qce::HighlightSpan>>(lastLine - firstLine + 1, {{0, 5, qce::TokenStyle::Comment}});
+      }
+    } comment;
+    QQuickView view(&m_engine, nullptr);
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setCursorBlinkInterval(0);
+    editor->setHighlighter(&comment);
+    editor->setShowWhitespace(true);
+    editor->setText(QStringLiteral("M M M"));
+    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
+    const int lh = int(editor->metrics().lineHeight());
+    const qreal adv = editor->metrics().cellAdvance();
+    // Every space in the comment, not only the first, is a mark in the comment's (green) color.
+    auto greenInk = [&](int column) {
+      const QImage image = view.grabWindow();
+      for (int y = 0; y < lh; ++y)
+        for (int x = int(column * adv) + 1; x < int((column + 1) * adv) - 1; ++x)
+          if (const QColor c = image.pixelColor(x, y); c.green() - c.red() > 0x20)
+            return true;
+      return false;
+    };
+    QTRY_VERIFY(greenInk(1));
+    QVERIFY(greenInk(3));
+    editor->setHighlighter(nullptr);
+  }
+
   void fontSizeChangeMovesRows() {
     QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
