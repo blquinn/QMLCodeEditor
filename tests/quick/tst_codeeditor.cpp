@@ -520,75 +520,145 @@ private slots:
     return brightest;
   }
 
-  void whitespaceMarksAreOptionalAndDim() {
-    QQuickView view(&m_engine, nullptr);
-    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
-    view.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&view));
-    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
-    editor->setCursorBlinkInterval(0);
-    editor->setText(QStringLiteral(" M"));
-    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
-    const int lh = int(editor->metrics().lineHeight());
-    const qreal adv = editor->metrics().cellAdvance();
-    QVERIFY(!editor->showWhitespace());
-    QTRY_VERIFY(!inkInColumns(view.grabWindow(), 1, adv - 1, lh));
-    editor->setShowWhitespace(true);
-    QTRY_VERIFY(inkInColumns(view.grabWindow(), 1, adv - 1, lh));
-    // The mark uses the whitespace color, much dimmer than the text.
-    const int brightest = brightestIn(view.grabWindow(), adv, 0, 1, lh);
-    QVERIFY2(brightest <= 0x60, qPrintable(QString::number(brightest)));
-    // Tabs get a mark across their span.
-    editor->setText(QStringLiteral("\tM"));
-    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
-    QTRY_VERIFY(inkInColumns(view.grabWindow(), 1, 4 * adv - 1, lh));
-    editor->setShowWhitespace(false);
-    QTRY_VERIFY(!inkInColumns(view.grabWindow(), 1, 4 * adv - 1, lh));
-    editor->setText(QStringLiteral(" M"));
-    editor->setCursorPosition(editor->document()->length()); // keep the cursor bar out of the columns checked
-    QTRY_VERIFY(!inkInColumns(view.grabWindow(), 1, adv - 1, lh));
+  // Is there a whitespace mark in cell `column` of the first row? The selection's own color is not one.
+  static bool markInCell(const QImage &image, int column, qreal adv, int rowHeight) {
+    const QColor bg(0x1e, 0x1e, 0x1e), currentLine(0x2a, 0x2d, 0x2e), selection(0x26, 0x4f, 0x78);
+    for (int y = 0; y < rowHeight; ++y)
+      for (int x = int(column * adv) + 1; x < int((column + 1) * adv) - 1; ++x)
+        if (const QColor c = image.pixelColor(x, y); c != bg && c != currentLine && c != selection)
+          return true;
+    return false;
   }
 
-  void whitespaceMarksOnlyIndentation() {
-    // Covers the whole line, indentation included, as markdown's block continuations do.
-    struct WholeLineComment : qce::Highlighter {
-      QList<QList<qce::HighlightSpan>>
-      highlightLines(const qce::TextSnapshot &snapshot, qsizetype firstLine, qsizetype lastLine) override {
-        QList<QList<qce::HighlightSpan>> lines;
-        for (qsizetype line = firstLine; line <= lastLine; ++line)
-          lines.append({{0, snapshot.rope().lineLength(line), qce::TokenStyle::Comment}});
-        return lines;
-      }
-    } comment;
+  // The columns of the first row's spaces (one cell each) that have a mark; the text's own ink is not looked at.
+  static QList<int> markedCells(const QImage &image, const QString &text, qreal adv, int rowHeight) {
+    QList<int> cells;
+    for (int column = 0; column < text.size(); ++column)
+      if (text[column] == u' ' && markInCell(image, column, adv, rowHeight))
+        cells.append(column);
+    return cells;
+  }
+
+  void whitespaceModes_data() {
+    QTest::addColumn<CodeEditor::WhitespaceMode>("mode");
+    QTest::addColumn<int>("selectFrom"); // -1: nothing selected
+    QTest::addColumn<int>("selectTo");
+    QTest::addColumn<QList<int>>("marked");
+    // " M M  ": spaces in columns 0 (leading), 2 (single, between words), 4 and 5 (trailing).
+    QTest::newRow("none") << CodeEditor::NoWhitespace << -1 << -1 << QList<int>{};
+    QTest::newRow("none selected") << CodeEditor::NoWhitespace << 0 << 6 << QList<int>{};
+    QTest::newRow("all") << CodeEditor::AllWhitespace << -1 << -1 << QList<int>{0, 2, 4, 5};
+    QTest::newRow("boundary") << CodeEditor::BoundaryWhitespace << -1 << -1 << QList<int>{0, 4, 5};
+    QTest::newRow("trailing") << CodeEditor::TrailingWhitespace << -1 << -1 << QList<int>{4, 5};
+    QTest::newRow("selection nothing selected") << CodeEditor::SelectionWhitespace << -1 << -1 << QList<int>{};
+    QTest::newRow("selection part") << CodeEditor::SelectionWhitespace << 1 << 3 << QList<int>{2};
+    QTest::newRow("selection backwards") << CodeEditor::SelectionWhitespace << 5 << 3 << QList<int>{4};
+    QTest::newRow("selection all") << CodeEditor::SelectionWhitespace << 0 << 6 << QList<int>{0, 2, 4, 5};
+  }
+
+  void whitespaceModes() {
+    QFETCH(CodeEditor::WhitespaceMode, mode);
+    QFETCH(int, selectFrom);
+    QFETCH(int, selectTo);
+    QFETCH(QList<int>, marked);
     QQuickView view(&m_engine, nullptr);
     view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
     editor->setCursorBlinkInterval(0);
-    editor->setHighlighter(&comment);
-    editor->setShowWhitespace(true);
-    editor->setText(QStringLiteral("  M M\tM  "));
-    editor->setCursorPosition(0); // the cursor bar sits at the left edge, away from the cells checked
+    editor->setShowIndentGuides(false);
+    QCOMPARE(editor->renderWhitespace(), CodeEditor::NoWhitespace);
+    editor->setText(QStringLiteral(" M M  "));
+    editor->setRenderWhitespace(mode);
+    if (selectFrom >= 0)
+      editor->select(selectFrom, selectTo);
+    else
+      editor->setCursorPosition(6); // the bar sits past the cells checked
     const int lh = int(editor->metrics().lineHeight());
     const qreal adv = editor->metrics().cellAdvance();
-    // The indentation is marked, dim, though the comment covers it.
-    QTRY_VERIFY(inkInColumns(view.grabWindow(), adv + 1, 2 * adv - 1, lh));
-    const QImage image = view.grabWindow();
-    const int brightest = brightestIn(image, adv, 1, 2, lh);
-    QVERIFY2(brightest <= 0x60, qPrintable(QString::number(brightest)));
-    // Nothing after the first other character is: a space, a tab, trailing spaces.
-    QVERIFY(!inkInColumns(image, 3 * adv + 1, 4 * adv - 1, lh));
-    QVERIFY(!inkInColumns(image, 5 * adv + 1, 8 * adv - 1, lh));
-    QVERIFY(!inkInColumns(image, 9 * adv + 1, 10 * adv - 1, lh));
-    // The comment's (green) color still reaches the text after the indentation.
-    bool green = false;
-    for (int y = 0; y < lh; ++y)
-      for (int x = int(2 * adv); x < int(3 * adv); ++x)
-        if (const QColor c = image.pixelColor(x, y); c.green() - c.red() > 0x20)
-          green = true;
-    QVERIFY(green);
-    editor->setHighlighter(nullptr);
+    QTRY_COMPARE(markedCells(view.grabWindow(), QStringLiteral(" M M  "), adv, lh), marked);
+    // The mark is dim, like the theme's whitespace color, not the text's.
+    if (!marked.isEmpty()) {
+      const int brightest = brightestIn(view.grabWindow(), adv, marked.first(), marked.first() + 1, lh);
+      QVERIFY2(brightest <= 0x60, qPrintable(QString::number(brightest)));
+    }
+  }
+
+  void whitespaceTabsAndBlankLines() {
+    QQuickView view(&m_engine, nullptr);
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setCursorBlinkInterval(0);
+    editor->setShowIndentGuides(false); // a guide inside the tab would be a mark too
+    const int lh = int(editor->metrics().lineHeight());
+    const qreal adv = editor->metrics().cellAdvance();
+    // A tab between words is never skipped, even by boundary: it spans its stop.
+    editor->setText(QStringLiteral("M\tM"));
+    editor->setCursorPosition(editor->document()->length());
+    editor->setRenderWhitespace(CodeEditor::BoundaryWhitespace);
+    QTRY_VERIFY(markInCell(view.grabWindow(), 1, adv, lh));
+    editor->setRenderWhitespace(CodeEditor::TrailingWhitespace);
+    QTRY_VERIFY(!markInCell(view.grabWindow(), 1, adv, lh));
+    // A line of only whitespace is all trailing.
+    editor->setText(QStringLiteral("  \nM"));
+    editor->setCursorPosition(editor->document()->length());
+    QTRY_COMPARE(markedCells(view.grabWindow(), QStringLiteral("  "), adv, lh), (QList<int>{0, 1}));
+  }
+
+  void whitespaceMarksDoNotLayOutAgain() {
+    QQuickView view(&m_engine, nullptr);
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setCursorBlinkInterval(0);
+    editor->setText(QStringLiteral("a b c d e"));
+    editor->setRenderWhitespace(CodeEditor::SelectionWhitespace);
+    editor->select(0, 3);
+    const int lh = int(editor->metrics().lineHeight());
+    const qreal adv = editor->metrics().cellAdvance();
+    const QString text = QStringLiteral("a b c d e");
+    QTRY_COMPARE(markedCells(view.grabWindow(), text, adv, lh), (QList<int>{1}));
+    const quint64 created = editor->renderStats().layoutsCreated;
+    // Moving the selection and changing the mode only move the marks.
+    editor->select(2, 7);
+    QTRY_COMPARE(markedCells(view.grabWindow(), text, adv, lh), (QList<int>{3, 5}));
+    editor->setRenderWhitespace(CodeEditor::AllWhitespace);
+    QTRY_COMPARE(markedCells(view.grabWindow(), text, adv, lh), (QList<int>{1, 3, 5, 7}));
+    QCOMPARE(editor->renderStats().layoutsCreated, created);
+  }
+
+  void whitespaceMarksOnWrappedRows() {
+    QQuickView view(&m_engine, nullptr);
+    view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("editor.qml")));
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto *editor = qobject_cast<CodeEditor *>(view.rootObject());
+    editor->setCursorBlinkInterval(0);
+    editor->setWrapMode(CodeEditor::WrapAtColumn);
+    editor->setWrapColumn(4);
+    editor->setWordWrap(false);
+    // "MMMM" fills the first row; the second starts with a single space between words, so boundary
+    // looks across the break and leaves it unmarked, while all marks it.
+    editor->setText(QStringLiteral("MMMM MMM"));
+    editor->setCursorPosition(0);
+    editor->setRenderWhitespace(CodeEditor::BoundaryWhitespace);
+    const int lh = int(editor->metrics().lineHeight());
+    const qreal adv = editor->metrics().cellAdvance();
+    auto secondRowHasMark = [&] {
+      const QImage image = view.grabWindow();
+      for (int y = lh; y < 2 * lh; ++y)
+        for (int x = 1; x < int(adv) - 1; ++x)
+          if (const QColor c = image.pixelColor(x, y); c != QColor(0x1e, 0x1e, 0x1e) && c != QColor(0x2a, 0x2d, 0x2e))
+            return true;
+      return false;
+    };
+    QTRY_VERIFY(!secondRowHasMark());
+    editor->setRenderWhitespace(CodeEditor::AllWhitespace);
+    QTRY_VERIFY(secondRowHasMark());
   }
 
   void fontSizeChangeMovesRows() {

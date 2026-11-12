@@ -137,6 +137,9 @@ A fast read-only-ish editor item on the scene graph. See [ADR 0001](docs/adr/000
 - [x] **RENDER-13** Visible whitespace marks only a line's indentation — done 2026-11-10 (f8b8472)
   - With `showWhitespace`, only spaces and tabs before a line's first other character get marks, in the theme's whitespace color, even where a token's range covers them (markdown's list markers and block continuations do).
   - Whitespace after the first other character, inside strings and comments included, draws as plain space. Wrapped rows and long-line windows after that character get no marks.
+- [x] **RENDER-14** Whitespace render modes — done 2026-11-11 (af62ba4)
+  - `renderWhitespace` replaces the `showWhitespace` bool with VS Code's choices: none, boundary (all but a single space between words), selection (everything selected), trailing, all. Replaces RENDER-13's indentation-only marks.
+  - Marks are overlays (a line per tab, a dot per space) built from the rows in the plan, so a moving selection or a new mode lays nothing out again. `LineLayout::indentation` and the dotted stand-in text are gone.
 
 ## M3 — Editing & input
 

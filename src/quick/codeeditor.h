@@ -85,6 +85,16 @@ public:
   };
   Q_ENUM(WrapMode)
 
+  // Which spaces and tabs are drawn as marks (RENDER-14); the choices of VS Code's `renderWhitespace`.
+  enum WhitespaceMode {
+    NoWhitespace,        // none
+    BoundaryWhitespace,  // every tab, and every space except a single one between two other characters
+    SelectionWhitespace, // everything inside a selection
+    TrailingWhitespace,  // what follows a line's last other character
+    AllWhitespace        // everything
+  };
+  Q_ENUM(WhitespaceMode)
+
   // What cursor movement does at a folded region (M7).
   enum FoldCursorPolicy {
     SkipFolds,    // movement steps over folded lines; the fold stays closed
@@ -150,7 +160,7 @@ public:
   Q_PROPERTY(bool cursorVisible READ cursorVisible NOTIFY cursorVisibleChanged FINAL)
   Q_PROPERTY(int tabWidth READ tabWidth WRITE setTabWidth NOTIFY tabWidthChanged FINAL)
   Q_PROPERTY(
-    bool showWhitespace READ showWhitespace WRITE setShowWhitespace NOTIFY showWhitespaceChanged FINAL
+    WhitespaceMode renderWhitespace READ renderWhitespace WRITE setRenderWhitespace NOTIFY renderWhitespaceChanged FINAL
   )
   Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged FINAL)
   Q_PROPERTY(RenderType renderType READ renderType WRITE setRenderType RESET resetRenderType NOTIFY renderTypeChanged FINAL)
@@ -196,10 +206,10 @@ public:
   // Tab stops every `tabWidth` cells (default 4).
   int tabWidth() const { return m_metrics.tabWidth(); }
   void setTabWidth(int columns);
-  // Draws the tabs and spaces of each line's indentation (those before its first other character) as
-  // visible marks in the theme's whitespace color. Whitespace after that stays blank.
-  bool showWhitespace() const { return m_showWhitespace; }
-  void setShowWhitespace(bool show);
+  // Draws tabs (a line across their span) and spaces (a dot) as marks in the theme's whitespace color, as
+  // far as the mode says. The marks are overlays, so changing the mode or the selection never lays text out again.
+  WhitespaceMode renderWhitespace() const { return m_renderWhitespace; }
+  void setRenderWhitespace(WhitespaceMode mode);
 
   // How text is drawn. Unset, it follows QQuickWindow::textRenderType() like Text does; reading it
   // then returns that default. The window default is process-wide and read when a frame is built.
@@ -509,7 +519,7 @@ signals:
   void fontChanged();
   void tabWidthChanged();
   void renderTypeChanged();
-  void showWhitespaceChanged();
+  void renderWhitespaceChanged();
   void selectionChanged();
   void cursorBlinkIntervalChanged();
   void cursorVisibleChanged();
@@ -717,7 +727,7 @@ private:
   qce::SceneStats m_sceneStats; // copied from the scene on the render thread during sync
   void updateContentSize();
   void buildOverlays();
-  void buildTabMarks();
+  void buildWhitespaceMarks();
   void applyDetectedIndentation();
   void restartBlink();
   // `column` is a column of the buffer line; the layout is one row of it.
@@ -779,7 +789,7 @@ private:
   bool m_canUndo = false;
   bool m_canRedo = false;
   void onSelectionsChanged();
-  bool m_showWhitespace = false;
+  WhitespaceMode m_renderWhitespace = NoWhitespace;
   std::optional<RenderType> m_renderType; // unset: follow the window default
   QTimer m_blinkTimer;
   static constexpr int kBlinkTimeoutMs = 10000;

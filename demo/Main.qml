@@ -204,10 +204,25 @@ ApplicationWindow {
                     editor.theme.applyPreset(checked ? "dark" : "light")
                 }
             }
-            MenuItem {
-                text: qsTr("Show whitespace")
-                checkable: true
-                onToggled: editor.showWhitespace = checked
+            Menu {
+                title: qsTr("Render whitespace")
+                Repeater {
+                    model: [
+                        { text: qsTr("None"), mode: CodeEditor.NoWhitespace },
+                        { text: qsTr("Boundary"), mode: CodeEditor.BoundaryWhitespace },
+                        { text: qsTr("Selection"), mode: CodeEditor.SelectionWhitespace },
+                        { text: qsTr("Trailing"), mode: CodeEditor.TrailingWhitespace },
+                        { text: qsTr("All"), mode: CodeEditor.AllWhitespace }
+                    ]
+                    delegate: MenuItem {
+                        required property var modelData
+                        text: modelData.text
+                        checkable: true
+                        autoExclusive: true
+                        checked: editor.renderWhitespace === modelData.mode
+                        onTriggered: editor.renderWhitespace = modelData.mode
+                    }
+                }
             }
             MenuItem {
                 text: qsTr("Read-only")

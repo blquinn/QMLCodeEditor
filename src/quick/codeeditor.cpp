@@ -338,12 +338,12 @@ void CodeEditor::setTabWidth(int columns) {
   emit tabWidthChanged();
 }
 
-void CodeEditor::setShowWhitespace(bool show) {
-  if (show == m_showWhitespace)
+void CodeEditor::setRenderWhitespace(WhitespaceMode mode) {
+  if (mode == m_renderWhitespace)
     return;
-  m_showWhitespace = show;
-  invalidateLayouts();
-  emit showWhitespaceChanged();
+  m_renderWhitespace = mode;
+  invalidatePlan(); // the marks are overlays; the layouts stay as they are
+  emit renderWhitespaceChanged();
 }
 
 QSGTextNode::RenderType CodeEditor::toNodeRenderType(RenderType type) {
@@ -1537,34 +1537,132 @@ qreal CodeEditor::xForColumn(const qce::LineLayout &layout, qsizetype column) co
   return layout.indentX + layout.layout->lineAt(0).cursorToX(layout.layoutIndex(int(column)));
 }
 
-// A thin line across each tab's span on the baseline, for the rows being drawn. Capped so a
-// minified file full of tabs can't make a frame expensive.
-void CodeEditor::buildTabMarks() {
-  constexpr qsizetype kMaxMarks = 4000;
+// Marks for the spaces and tabs of the rows being drawn, as far as renderWhitespace says: a thin line across
+// each tab's span and a small dot in each space's cell, at the height of the baseline's middle. They are
+// overlays, so a selection that moves only rebuilds these. Marks off screen are not made, and the total is
+// capped so a minified file full of spaces can't make a frame expensive.
+void CodeEditor::buildWhitespaceMarks() {
+  constexpr qsizetype kMaxMarks = 20000;
   const qreal markY = qFloor(m_metrics.ascent() * 0.6);
+  const qreal viewLeft = m_contentX - m_metrics.cellAdvance();
+  const qreal viewRight = m_contentX + textViewportWidth() + m_metrics.cellAdvance();
+  const qce::Rope &rope = m_document.rope();
+  const WhitespaceMode mode = m_renderWhitespace;
+  auto blank = [](QChar ch) { return ch == u' ' || ch == u'\t'; };
+
+  // The selections that cover something, for the rows' range of the document (they are sorted).
+  struct Interval {
+    qsizetype start, end;
+  };
+  QList<Interval> selected;
+  if (mode == SelectionWhitespace && !m_plan.isEmpty()) {
+    const qsizetype afterLine = m_map.folds().nextVisibleLine(m_plan.last().display.line);
+    const qsizetype low = rope.lineStart(m_plan.first().display.line);
+    const qsizetype high = afterLine < rope.lineCount() ? rope.lineStart(afterLine) : rope.length();
+    for (int i = m_selections.lowerBound(low); i < m_selections.count(); ++i) {
+      const qce::Selection sel = m_selections.at(i);
+      if (sel.start() > high)
+        break;
+      if (!sel.isEmpty())
+        selected.append({sel.start(), sel.end()});
+    }
+    if (selected.isEmpty())
+      return;
+  }
+
+  // Where a line's trailing whitespace starts, found from its end; wrapped rows of a line share it.
+  qsizetype trailingLine = -1, trailingColumn = 0;
+  auto trailingStart = [&](qsizetype line) {
+    if (line != trailingLine) {
+      constexpr qsizetype kChunk = 256;
+      const qsizetype lineStart = rope.lineStart(line);
+      qsizetype end = rope.lineLength(line);
+      for (bool done = false; end > 0 && !done;) {
+        const qsizetype from = qMax<qsizetype>(0, end - kChunk);
+        const QString piece = rope.toString(lineStart + from, lineStart + end);
+        for (qsizetype i = piece.size(); i > 0; --i) {
+          if (!blank(piece[i - 1])) {
+            done = true;
+            break;
+          }
+          --end;
+        }
+        if (!done)
+          end = from;
+      }
+      trailingLine = line;
+      trailingColumn = end;
+    }
+    return trailingColumn;
+  };
+
   for (const qce::FramePlanRow &planRow : std::as_const(m_plan)) {
     const qce::LineLayout &layout = *planRow.layout;
     const QString &text = layout.text;
-    const qsizetype indentation = qMin(layout.indentation, text.size());
-    if (!QStringView(text).first(indentation).contains(u'\t'))
-      continue;
-    if (!layout.injections.isEmpty())
-      continue; // tab marks are placed by column; injected text shifts them
-    const bool simple = !layout.isWindow() && m_metrics.isSimple(text);
-    qsizetype cell = 0;
-    for (qsizetype i = 0; i < indentation; ++i) {
+    const qsizetype line = planRow.display.line, lineStart = rope.lineStart(line);
+    const qsizetype first = layout.startColumn, last = first + text.size();
+    // A single space is between words when the units around it are not blank; at the edge of a row
+    // that unit is in the neighbouring row, or window, of the same line.
+    auto blankAt = [&](qsizetype column) {
+      if (column < 0 || column >= rope.lineLength(line))
+        return true; // the line's start and end count as blank
+      if (column >= first && column < last)
+        return blank(text[column - first]);
+      return blank(rope.toString(lineStart + column, lineStart + column + 1).at(0));
+    };
+    qsizetype trailing = 0;
+    if (mode == TrailingWhitespace)
+      trailing = trailingStart(line);
+    qsizetype interval = 0;
+    if (mode == SelectionWhitespace) {
+      const qsizetype rowEnd = lineStart + last;
+      interval = std::lower_bound(selected.begin(), selected.end(), lineStart + first, [](const Interval &a, qsizetype at) {
+                   return a.end <= at;
+                 }) - selected.begin();
+      if (interval == selected.size() || selected[interval].start >= rowEnd)
+        continue;
+    }
+    for (qsizetype i = 0; i < text.size(); ++i) {
       const bool tab = text[i] == u'\t';
-      const qsizetype nextCell = cell + (tab ? m_metrics.tabWidth() - cell % m_metrics.tabWidth() : 1);
+      if (!tab && text[i] != u' ')
+        continue;
+      const qsizetype column = first + i;
+      switch (mode) {
+      case TrailingWhitespace:
+        if (column < trailing)
+          continue;
+        break;
+      case BoundaryWhitespace:
+        if (!tab && !blankAt(column - 1) && !blankAt(column + 1))
+          continue;
+        break;
+      case SelectionWhitespace: {
+        const qsizetype offset = lineStart + column;
+        while (interval < selected.size() && selected[interval].end <= offset)
+          ++interval;
+        if (interval == selected.size()) {
+          i = text.size(); // nothing selected from here on
+          continue;
+        }
+        if (selected[interval].start > offset)
+          continue;
+        break;
+      }
+      default:
+        break;
+      }
+      const qreal x0 = xForColumn(layout, column), x1 = xForColumn(layout, column + 1);
+      if (x1 < viewLeft || x0 > viewRight)
+        continue;
       if (tab) {
-        const qreal x0 = layout.indentX + (simple ? cell * m_metrics.cellAdvance() : layout.layout->lineAt(0).cursorToX(int(i)));
-        const qreal x1 =
-          layout.indentX + (simple ? nextCell * m_metrics.cellAdvance() : layout.layout->lineAt(0).cursorToX(int(i) + 1));
         if (x1 - x0 > 4)
           m_markSpans.append({planRow.row, x0 + 2, x1 - 2, markY, 1});
-        if (m_markSpans.size() >= kMaxMarks)
-          return;
+      } else {
+        const qreal middle = (x0 + x1) / 2;
+        m_markSpans.append({planRow.row, middle - 1, middle + 1, markY - 1, 2});
       }
-      cell = nextCell;
+      if (m_markSpans.size() >= kMaxMarks)
+        return;
     }
   }
 }
@@ -1575,8 +1673,8 @@ void CodeEditor::buildOverlays() {
   m_currentLineSpans.clear();
   m_selectionSpans.clear();
   m_markSpans.clear();
-  if (m_showWhitespace)
-    buildTabMarks();
+  if (m_renderWhitespace != NoWhitespace)
+    buildWhitespaceMarks();
   m_cursorSpans.clear();
   buildFoldChips();
   const qce::Rope &rope = m_document.rope();
@@ -2613,46 +2711,6 @@ void CodeEditor::onDocumentChanged(const qce::TextChange &change) {
 
 namespace {
 
-// Units at the start of a row that belong to its line's indentation: the spaces and tabs before the
-// line's first other character. A row that starts inside the line (a wrapped row, a long-line window)
-// has some only when everything before it is whitespace too; reading that stops at the first other unit.
-qsizetype indentationInRow(const qce::Rope &rope, qsizetype lineStart, qsizetype rowStart, const QString &text) {
-  auto blank = [](QChar ch) { return ch == u' ' || ch == u'\t'; };
-  constexpr qsizetype kChunk = 256;
-  for (qsizetype start = lineStart; start < lineStart + rowStart;) {
-    const QString piece = rope.toString(start, qMin(lineStart + rowStart, start + kChunk));
-    if (!std::all_of(piece.begin(), piece.end(), blank))
-      return 0;
-    start += piece.size();
-  }
-  return std::find_if_not(text.begin(), text.end(), blank) - text.begin();
-}
-
-// Gives the first `indent` units of a row the `color` format, so a line's indentation reads as dim
-// marks even where a token covers it (markdown's list markers and block continuations take their
-// spaces). The highlighter's ranges (sorted, non-overlapping) are cut back to start after it.
-QList<QTextLayout::FormatRange>
-withIndentationFormat(qsizetype indent, QList<QTextLayout::FormatRange> ranges, const QColor &color) {
-  if (indent <= 0)
-    return ranges;
-  QTextCharFormat format;
-  format.setForeground(color);
-  QList<QTextLayout::FormatRange> result;
-  result.reserve(ranges.size() + 1);
-  result.append({0, int(indent), format});
-  for (QTextLayout::FormatRange &r : ranges) {
-    const int end = r.start + r.length;
-    if (end <= indent)
-      continue;
-    if (r.start < indent) {
-      r.start = int(indent);
-      r.length = end - r.start;
-    }
-    result.append(std::move(r));
-  }
-  return result;
-}
-
 // Makes room for injected text: format ranges after an injection move right by its length, one that
 // straddles an injection is split around it, and the injections' own formats (positions already in
 // the laid-out text) are added.
@@ -2804,15 +2862,7 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
     return cached;
   const bool windowAtEnd = row.endColumn >= fullRow.endColumn;
   const QString text = rope.toString(lineStart + row.startColumn, lineStart + row.endColumn);
-  // Visible indentation: its spaces are drawn as middle dots (the text node doesn't render QTextOption's
-  // own marks) and its tabs get marks in buildTabMarks(). Dot and space share a column in a monospace
-  // font, so offsets and positions stay the same.
-  const qsizetype indent = m_showWhitespace ? indentationInRow(rope, lineStart, row.startColumn, text) : 0;
-  QString display = text;
-  for (qsizetype i = 0; i < indent; ++i)
-    if (display[i] == u' ')
-      display[i] = u'\u00b7';
-  auto layout = std::make_unique<QTextLayout>(display, m_metrics.layoutFont());
+  auto layout = std::make_unique<QTextLayout>(text, m_metrics.layoutFont());
   QTextOption option;
   option.setWrapMode(QTextOption::NoWrap);
   const qreal tabDistance = m_metrics.tabWidth() * m_metrics.cellAdvance();
@@ -2870,7 +2920,6 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
         styleBackgrounds.append({from, to, color});
     }
   }
-  formats = withIndentationFormat(indent, std::move(formats), m_theme->whitespace());
   // Text that is shown in the row without being in the document: inline decorations (inlay hints) and
   // an input-method composition. Each is put into the laid-out text before the unit at its column.
   struct Pending {
@@ -2927,7 +2976,7 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
     QList<QTextLayout::FormatRange> injectedFormats;
     int taken = 0; // units of `display` copied so far
     for (Pending &item : pending) {
-      full += display.mid(taken, item.injection.column - taken);
+      full += text.mid(taken, item.injection.column - taken);
       taken = item.injection.column;
       item.injection.start = int(full.size());
       item.injection.length = int(item.text.size());
@@ -2938,7 +2987,7 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
       }
       injections.append(item.injection);
     }
-    full += display.mid(taken);
+    full += text.mid(taken);
     layout->setText(full);
     formats = withInjections(std::move(formats), injections, injectedFormats);
   }
@@ -2993,7 +3042,6 @@ CodeEditor::layoutForRow(const qce::DisplayRow &fullRow, const qce::TextSnapshot
   result->startColumn = row.startColumn;
   result->indentX = row.indent;
   result->endsLine = row.isLast();
-  result->indentation = indent;
   if (longIndex) {
     result->longIndex = longIndex;
     result->rope = rope;

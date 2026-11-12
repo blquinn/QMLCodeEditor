@@ -355,6 +355,7 @@ int main(int argc, char **argv) {
      QStringLiteral("n"), QStringLiteral("0")}
   );
   parser.addOption({QStringLiteral("vim"), QStringLiteral("Use the vim input handler (a block cursor).")});
+  parser.addOption({QStringLiteral("whitespace-all"), QStringLiteral("Draw marks for every space and tab.")});
   parser.addOption(
     {QStringLiteral("search"), QStringLiteral("Highlight the matches of this regular expression in view."),
      QStringLiteral("regex")}
@@ -464,6 +465,10 @@ int main(int argc, char **argv) {
     variant += QStringLiteral("cursors%1/").arg(cursors);
   if (folds)
     variant += QStringLiteral("folds/");
+  if (parser.isSet(QStringLiteral("whitespace-all"))) {
+    editor->setRenderWhitespace(CodeEditor::AllWhitespace);
+    variant += QStringLiteral("whitespace/");
+  }
   if (parser.isSet(QStringLiteral("wrap"))) {
     editor->setWrapMode(CodeEditor::WrapAtViewport);
     variant += QStringLiteral("wrap/");
